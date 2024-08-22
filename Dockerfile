@@ -8,7 +8,13 @@ COPY . .
 RUN npm run build
 
 # Stage 2: Serve
-FROM nginx:alpine
-COPY --from=build /app/build /usr/share/nginx/html
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+FROM node:20
+
+WORKDIR /app
+COPY --from=build /app/.next /app/.next
+COPY --from=build /app/public /app/public
+COPY --from=build /app/package*.json /app/
+COPY --from=build /app/node_modules /app/node_modules
+
+EXPOSE 3000
+CMD ["npm", "start"]
