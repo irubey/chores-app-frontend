@@ -2,19 +2,34 @@
 FROM node:20 AS build
 
 WORKDIR /app
+
+# Copy package.json and package-lock.json (if available)
 COPY package*.json ./
-RUN npm install
+
+# Install dependencies
+RUN npm ci
+
+# Copy the rest of the application code
 COPY . .
+
+# Build the Next.js application
 RUN npm run build
 
-# Stage 2: Serve
-FROM node:20
+# Stage 2: Run
+FROM node:20 AS runtime
 
 WORKDIR /app
-COPY --from=build /app/.next /app/.next
-COPY --from=build /app/public /app/public
-COPY --from=build /app/package*.json /app/
-COPY --from=build /app/node_modules /app/node_modules
 
+# Copy built assets from the build stage
+COPY --from=build /app/.next ./.next
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/package-lock.json ./package-lock.json
+COPY --from=build /app/public ./public
+COPY --from=build /app/next.config.mjs ./next.config.mjs
+
+# Expose the port Next.js runs on
 EXPOSE 3000
-CMD ["npm", "start"]
+
+# Run the Next.js application
+CMD ["npx", "next", "start"]
