@@ -1,12 +1,13 @@
 import React from 'react';
-import { Inter } from 'next/font/google';
-import Header from '@/components/common/Header';
-import Footer from '@/components/common/Footer';
+import { Lato, Playfair_Display } from 'next/font/google';
+import { ThemeProvider } from '@/contexts/ThemeContext';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { HouseholdProvider } from '@/contexts/HouseholdContext';
+import ThemedBody from '@/components/layouts/ThemedBody';
 import "../styles/globals.css";
 
-const inter = Inter({ subsets: ['latin'] });
+const lato = Lato({ subsets: ['latin'], weight: ['400', '700'], variable: '--font-lato' });
+const playfair = Playfair_Display({ subsets: ['latin'], weight: ['400', '600', '700'], variable: '--font-playfair' });
 
 export const metadata = {
   title: 'ChoresApp',
@@ -20,17 +21,15 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${inter.className} flex flex-col min-h-screen`}>
+      <ThemeProvider>
         <AuthProvider>
           <HouseholdProvider>
-            <Header />
-            <main className="flex-grow">
+            <ThemedBody lato={lato.variable} playfair={playfair.variable}>
               {children}
-            </main>
-            <Footer />
+            </ThemedBody>
           </HouseholdProvider>
         </AuthProvider>
-      </body>
+      </ThemeProvider>
     </html>
   );
 }

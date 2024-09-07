@@ -1,7 +1,8 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { useAuth } from './AuthContext';
+import { useAuth } from '../hooks/useAuth';
+import { householdApi } from '../utils/api';
 
 interface Household {
   id: string;
@@ -9,6 +10,7 @@ interface Household {
   members: { id: string; name: string; role: string }[];
 }
 
+// Add removeMember to the HouseholdContextType interface
 interface HouseholdContextType {
   households: Household[];
   currentHousehold: Household | null;
@@ -17,9 +19,10 @@ interface HouseholdContextType {
   createHousehold: (name: string) => Promise<void>;
   inviteMember: (householdId: string, email: string, role: string) => Promise<void>;
   isLoading: boolean;
+  removeMember: (householdId: string, userId: string) => Promise<void>;
 }
 
-const HouseholdContext = createContext<HouseholdContextType | undefined>(undefined);
+export const HouseholdContext = createContext<HouseholdContextType | undefined>(undefined);
 
 export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [households, setHouseholds] = useState<Household[]>([]);
@@ -93,6 +96,16 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
+  const removeMember = async (householdId: string, userId: string) => {
+    try {
+      await householdApi.removeMember(householdId, userId);
+      await fetchHouseholds(); // Refresh the household data
+    } catch (error) {
+      console.error('Remove member error:', error);
+      throw error;
+    }
+  };
+
   return (
     <HouseholdContext.Provider
       value={{
@@ -103,6 +116,7 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         createHousehold,
         inviteMember,
         isLoading,
+        removeMember,
       }}
     >
       {children}
@@ -110,10 +124,3 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   );
 };
 
-export const useHousehold = () => {
-  const context = useContext(HouseholdContext);
-  if (context === undefined) {
-    throw new Error('useHousehold must be used within a HouseholdProvider');
-  }
-  return context;
-};

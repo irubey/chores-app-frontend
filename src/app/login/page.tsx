@@ -1,25 +1,36 @@
-import React from 'react';
-import Link from 'next/link';
-import OAuthButtons from '@/components/auth/OAuthButtons';
+'use client';
 
+import React from 'react';
+import OAuthButtons from '@/components/auth/OAuthButtons';
+import { useTheme } from '@/contexts/ThemeContext';
+import TestConnection from '@/components/tests/TestConnection';
 export default function LoginPage() {
+  const { primaryColor, backgroundColor, textColor } = useTheme();
+
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col justify-center">
-      <main className="flex-grow flex items-center justify-center">
-        <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-          <h1 className="text-3xl font-bold text-center mb-6">Welcome to ChoresApp</h1>
-          <p className="text-center text-gray-600 mb-6">
-            Simplify household chore management and collaboration
-          </p>
+    <div className={`min-h-screen flex flex-col items-center justify-center bg-${backgroundColor} p-4`}>
+      <TestConnection />
+      <div className="w-full max-w-md">
+        <h1 className={`font-heading text-4xl font-bold text-center text-${primaryColor} mb-6`}>
+          ChoresApp
+        </h1>
+        <p className={`text-center text-${textColor} mb-8 text-lg`}>
+          Simplify household chore management and collaboration
+        </p>
+        <div className="card mb-8">
           <OAuthButtons />
-          <div className="mt-6 text-center">
-            <p className="text-gray-600">New to ChoresApp?</p>
-            <Link href="/create-household" className="text-blue-500 hover:underline">
-              Create a new household
-            </Link>
-          </div>
         </div>
-      </main>
+        <p className={`text-center text-${textColor} text-sm`}>
+          By logging in, you agree to our{' '}
+          <a href="/terms" className={`text-${primaryColor} hover:underline`}>
+            Terms of Service
+          </a>{' '}
+          and{' '}
+          <a href="/privacy" className={`text-${primaryColor} hover:underline`}>
+            Privacy Policy
+          </a>
+        </p>
+      </div>
     </div>
   );
 }

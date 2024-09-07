@@ -1,33 +1,71 @@
+@import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;700&family=Playfair+Display:wght@400;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
+  --color-primary: #219EBC;
+  --color-primary-light: #8ECAE6;
+  --color-primary-dark: #023047;
+  --color-secondary: #95D5B2;
+  --color-secondary-light: #B8E0D2;
+  --color-secondary-dark: #74C69D;
+  --color-accent: #EEB62B;
+  --color-accent-light: #FFD166;
+  --color-accent-dark: #CB9D06;
+  --font-sans: 'Lato', sans-serif;
+  --font-heading: 'Playfair Display', serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
+@layer base {
+  /* Remove or comment out the body styles */
+  /* body {
+    @apply font-sans text-neutral-800 bg-neutral-100;
+    background-image: linear-gradient(to bottom, rgba(142, 202, 230, 0.1), rgba(255, 209, 102, 0.1));
+  } */
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading font-semibold;
+  }
+
+  h1 { @apply text-4xl mb-6 text-primary-dark; }
+  h2 { @apply text-3xl mb-5 text-primary-dark; }
+  h3 { @apply text-2xl mb-4 text-primary; }
+  h4 { @apply text-xl mb-3 text-primary; }
+  h5 { @apply text-lg mb-2 text-secondary-dark; }
+  h6 { @apply text-base mb-2 text-secondary-dark; }
+}
+
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded-md font-semibold transition-colors duration-200 shadow-sm;
+  }
+
+  .btn-primary {
+    @apply btn bg-primary text-white hover:bg-primary-dark;
+  }
+
+  .btn-secondary {
+    @apply btn bg-secondary text-primary-dark hover:bg-secondary-dark;
+  }
+
+  .btn-accent {
+    @apply btn bg-accent text-primary-dark hover:bg-accent-dark;
+  }
+
+  .input {
+    @apply px-3 py-2 border border-neutral-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-white;
+  }
+
+  .card {
+    @apply bg-white rounded-lg shadow-md p-6 border border-neutral-200;
   }
 }
 
-body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
-}
-
+/* Accessibility */
 @layer utilities {
-  .text-balance {
-    text-wrap: balance;
+  .sr-only {
+    @apply absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0;
   }
 }

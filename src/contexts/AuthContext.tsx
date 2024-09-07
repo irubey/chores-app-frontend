@@ -2,21 +2,13 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { User, AuthContextType } from '../hooks/useAuth';
+import { api } from '../utils/api';
 
-interface User {
-  id: string;
-  name: string;
-  email: string;
-}
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
-interface AuthContextType {
-  user: User | null;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
-  isLoading: boolean;
-}
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -24,42 +16,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const router = useRouter();
 
   useEffect(() => {
-    // Check if user is logged in on initial load
     checkUserLoggedIn();
   }, []);
 
   const checkUserLoggedIn = async () => {
     try {
-      const response = await fetch('/api/auth/user', {
-        credentials: 'include',
-      });
-      if (response.ok) {
-        const userData = await response.json();
-        setUser(userData);
-      }
+      const userData = await api.get('/api/auth/user');
+      setUser(userData);
     } catch (error) {
       console.error('Failed to fetch user data:', error);
+      setUser(null);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const login = async (email: string, password: string) => {
+  const login = async (provider: 'GOOGLE' | 'FACEBOOK' | 'APPLE', idToken: string) => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-        credentials: 'include',
-      });
-      if (response.ok) {
-        const userData = await response.json();
-        setUser(userData);
-        router.push('/dashboard');
-      } else {
-        throw new Error('Login failed');
-      }
+      const userData = await api.post('/api/auth/login', { provider, idToken });
+      setUser(userData.user);
+      localStorage.setItem('token', userData.token);
+      router.push('/dashboard');
     } catch (error) {
       console.error('Login error:', error);
       throw error;
@@ -69,15 +47,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
+    setIsLoading(true);
     try {
-      await fetch('/api/auth/logout', {
-        method: 'POST',
-        credentials: 'include',
-      });
+      await api.post('/api/auth/logout', {});
       setUser(null);
+      localStorage.removeItem('token');
       router.push('/login');
     } catch (error) {
       console.error('Logout error:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -86,12 +65,4 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       {children}
     </AuthContext.Provider>
   );
-};
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
 };
