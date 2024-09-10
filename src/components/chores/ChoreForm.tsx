@@ -1,21 +1,35 @@
 import React, { useState } from 'react';
+import ChoreTemplateList from '../templates/ChoreTemplateList';
+
 
 interface ChoreFormProps {
-  onSubmit: (choreData: any) => void;
+  onSubmit: (data: any) => void;
+  isTemplate?: boolean;
+  initialData?: any;
 }
 
-const ChoreForm: React.FC<ChoreFormProps> = ({ onSubmit }) => {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [timeEstimate, setTimeEstimate] = useState('');
-  const [frequency, setFrequency] = useState('DAILY');
+const ChoreForm: React.FC<ChoreFormProps> = ({ onSubmit, isTemplate = false, initialData = null }) => {
+  const [title, setTitle] = useState(initialData?.title || '');
+  const [description, setDescription] = useState(initialData?.description || '');
+  const [timeEstimate, setTimeEstimate] = useState(initialData?.timeEstimate?.toString() || '');
+  const [frequency, setFrequency] = useState(initialData?.frequency || 'DAILY');
+
+  const [useTemplate, setUseTemplate] = useState(false);
+
+  const handleTemplateSelect = (template: any) => {
+    setTitle(template.title);
+    setDescription(template.description);
+    setTimeEstimate(template.timeEstimate.toString());
+    setFrequency(template.frequency);
+    setUseTemplate(false);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit({
       title,
       description,
-      timeEstimate: parseInt(timeEstimate, 10),
+      time_estimate: parseInt(timeEstimate, 10),
       frequency,
     });
   };
@@ -69,7 +83,7 @@ const ChoreForm: React.FC<ChoreFormProps> = ({ onSubmit }) => {
         </select>
       </div>
       <button type="submit" className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
-        Create Chore
+        {isTemplate ? 'Create Chore Template' : 'Create Chore'}
       </button>
     </form>
   );

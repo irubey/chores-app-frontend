@@ -229,3 +229,11 @@ export const badgeApi = {
   award: (userId: string, badgeId: string) => 
     api.post('/api/badges/award', { user_id: userId, badge_id: badgeId }),
 };
+
+export const fetchPresetTemplates = async () => {
+  const response = await fetch('/api/chore-templates/preset');
+  if (!response.ok) {
+    throw new Error('Failed to fetch preset templates');
+  }
+  return response.json();
+};

@@ -3,33 +3,34 @@ FROM node:20 AS build
 
 WORKDIR /app
 
-# Copy package.json and package-lock.json (if available)
-COPY package*.json ./
+COPY package*.json tsconfig.json ./
+COPY src ./src
 
-# Install dependencies
-RUN npm ci
+RUN npm install
 
-# Copy the rest of the application code
+RUN npm install -g prisma
+
 COPY . .
 
-# Build the Next.js application
-RUN npm run build
+RUN npx prisma generate
 
-# Stage 2: Run
+RUN npm run build && ls -la dist
+
+# Stage 2: Serve
 FROM node:20 AS runtime
 
 WORKDIR /app
 
-# Copy built assets from the build stage
-COPY --from=build /app/.next ./.next
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/package.json ./package.json
-COPY --from=build /app/package-lock.json ./package-lock.json
-COPY --from=build /app/public ./public
-COPY --from=build /app/next.config.mjs ./next.config.mjs
+COPY --from=build /app/dist /app/dist
 
-# Expose the port Next.js runs on
+COPY --from=build /app/node_modules /app/node_modules
+
+COPY --from=build /app/node_modules/@prisma /app/node_modules/@prisma
+
+COPY --from=build /app/prisma /app/prisma
+
+
+
 EXPOSE 3000
 
-# Run the Next.js application
-CMD ["npx", "next", "start"]
+CMD ["npm", "start"]

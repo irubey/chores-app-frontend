@@ -4,9 +4,11 @@ import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useHousehold } from '@/hooks/useHousehold';
 
 const Header: React.FC = () => {
   const { theme, primaryColor, textColor } = useTheme();
+  const { currentHousehold } = useHousehold();
 
   return (
     <header className={`bg-${primaryColor} shadow-md`}>
@@ -17,9 +19,11 @@ const Header: React.FC = () => {
         <nav>
           <ul className="flex space-x-4">
             <li>
-              <Link href="/household" className={`text-${textColor} hover:text-accent-light transition-colors duration-200`}>
-                {/* <Image src={`/icons/household-${theme}.svg`} alt="Household" width={24} height={24} /> */}
-                Household
+              <Link 
+                href={currentHousehold ? `/household/${currentHousehold.id}` : "/household/create"} 
+                className={`text-${textColor} hover:text-accent-light transition-colors duration-200`}
+              >
+                {currentHousehold ? 'Manage Household' : 'Create Household'}
               </Link>
             </li>
             <li>

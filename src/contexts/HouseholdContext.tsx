@@ -20,6 +20,10 @@ interface HouseholdContextType {
   inviteMember: (householdId: string, email: string, role: string) => Promise<void>;
   isLoading: boolean;
   removeMember: (householdId: string, userId: string) => Promise<void>;
+  joinHousehold: (householdId: string) => Promise<void>;
+  fetchHouseholdById: (householdId: string) => Promise<Household | null>;
+  error: string | null;
+  setError: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
 export const HouseholdContext = createContext<HouseholdContextType | undefined>(undefined);
@@ -29,6 +33,7 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [currentHousehold, setCurrentHousehold] = useState<Household | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { user } = useAuth();
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -82,6 +87,32 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
+  const joinHousehold = async (householdId: string) => {
+    try {
+      const joinedHousehold = await api.post(`/api/households/${householdId}/join`, { userId: user?.id });
+      setHouseholds([...households, joinedHousehold]);
+      setCurrentHousehold(joinedHousehold);
+    } catch (error) {
+      console.error('Join household error:', error);
+      throw error;
+    }
+  };
+
+  const fetchHouseholdById = async (householdId: string) => {
+    setIsLoading(true);
+    try {
+      const household = await api.get(`/api/households/${householdId}`);
+      setError(null);
+      return household;
+    } catch (error) {
+      console.error('Failed to fetch household:', error);
+      setError('Failed to fetch household');
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <HouseholdContext.Provider
       value={{
@@ -93,6 +124,10 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         inviteMember,
         isLoading,
         removeMember,
+        joinHousehold,
+        fetchHouseholdById,
+        error,
+        setError,
       }}
     >
       {children}
