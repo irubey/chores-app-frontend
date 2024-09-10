@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { householdApi } from '../utils/api';
+import { api } from '../utils/api';
 
 interface Household {
   id: string;
@@ -39,15 +39,10 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const fetchHouseholds = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/households', {
-        credentials: 'include',
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setHouseholds(data);
-        if (data.length > 0 && !currentHousehold) {
-          setCurrentHousehold(data[0]);
-        }
+      const data = await api.get('/api/households');
+      setHouseholds(data);
+      if (data.length > 0 && !currentHousehold) {
+        setCurrentHousehold(data[0]);
       }
     } catch (error) {
       console.error('Failed to fetch households:', error);
@@ -58,19 +53,9 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const createHousehold = async (name: string) => {
     try {
-      const response = await fetch('/api/households', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
-        credentials: 'include',
-      });
-      if (response.ok) {
-        const newHousehold = await response.json();
-        setHouseholds([...households, newHousehold]);
-        setCurrentHousehold(newHousehold);
-      } else {
-        throw new Error('Failed to create household');
-      }
+      const newHousehold = await api.post('/api/households', { name });
+      setHouseholds([...households, newHousehold]);
+      setCurrentHousehold(newHousehold);
     } catch (error) {
       console.error('Create household error:', error);
       throw error;
@@ -79,17 +64,8 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const inviteMember = async (householdId: string, email: string, role: string) => {
     try {
-      const response = await fetch(`/api/households/${householdId}/members`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, role }),
-        credentials: 'include',
-      });
-      if (response.ok) {
-        await fetchHouseholds(); // Refresh the household data
-      } else {
-        throw new Error('Failed to invite member');
-      }
+      await api.post(`/api/households/${householdId}/members`, { email, role });
+      await fetchHouseholds(); // Refresh the household data
     } catch (error) {
       console.error('Invite member error:', error);
       throw error;
@@ -98,7 +74,7 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const removeMember = async (householdId: string, userId: string) => {
     try {
-      await householdApi.removeMember(householdId, userId);
+      await api.delete(`/api/households/${householdId}/members/${userId}`);
       await fetchHouseholds(); // Refresh the household data
     } catch (error) {
       console.error('Remove member error:', error);

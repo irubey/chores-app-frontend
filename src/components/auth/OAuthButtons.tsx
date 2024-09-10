@@ -6,7 +6,11 @@ import { useRouter } from 'next/navigation';
 import { useTheme } from '@/contexts/ThemeContext';
 import { api } from '@/utils/api';
 
-type OAuthProvider = 'GOOGLE' | 'FACEBOOK' | 'APPLE';
+
+
+type OAuthProvider = 'GOOGLE' | 'FACEBOOK' | 'APPLE' | 'DEV';
+
+const IS_DEVELOPMENT = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
 
 const OAuthButtons: React.FC = () => {
   const router = useRouter();
@@ -14,8 +18,24 @@ const OAuthButtons: React.FC = () => {
 
   const handleOAuthLogin = async (provider: OAuthProvider) => {
     try {
-      const data = await api.post('/api/auth/login', { provider });
-      router.push(data.redirect_url);
+      if (provider === 'DEV' && IS_DEVELOPMENT) {
+        const response = await api.post('/api/auth/dev-login', {});
+        if (response.token) {
+          localStorage.setItem('token', response.token);
+          // Update user state in your AuthContext
+          // authContext.setUser(response.user);
+          router.push('/dashboard');
+        } else {
+          console.error('No token provided for dev login');
+        }
+      } else {
+        const response = await api.post('/api/auth/login', { provider: provider.toLowerCase() });
+        if (response.redirect_url) {
+          window.location.href = response.redirect_url;
+        } else {
+          console.error('No redirect URL provided');
+        }
+      }
     } catch (error) {
       console.error('OAuth initiation failed:', error);
       // Handle error (e.g., show an error message to the user)
@@ -45,6 +65,14 @@ const OAuthButtons: React.FC = () => {
         <Image src="/icons/apple-icon.png" alt="Apple" width={20} height={20} className="mr-2" />
         <span>Continue with Apple</span>
       </button>
+      {IS_DEVELOPMENT && (
+        <button 
+          onClick={() => handleOAuthLogin('DEV')}
+          className={`btn flex items-center justify-center bg-gray-500 text-white hover:bg-gray-600`}
+        >
+          <span>Dev Login</span>
+        </button>
+      )}
     </div>
   );
 };

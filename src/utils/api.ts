@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
 // Define types for request and response data
 interface LoginRequest {
@@ -7,12 +7,15 @@ interface LoginRequest {
 
 interface ChoreData {
   title: string;
-  description?: string;
-  timeEstimate: number;
+  description?: string | null;
+  timeEstimate?: number | null;
   frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'CUSTOM';
-  assignedTo?: string;
+  assignedTo?: string | null;
   priority: 'LOW' | 'MEDIUM' | 'HIGH';
-  dueDate?: Date;
+  dueDate?: Date | null;
+  status?: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
+  templateId?: string | null;
+  householdId: string;
 }
 
 interface HouseholdMemberData {
@@ -41,39 +44,52 @@ interface CalendarIntegrationData {
   expiresAt: Date;
 }
 
+const IS_DEVELOPMENT = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
+
+const getHeaders = () => {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (!IS_DEVELOPMENT) {
+    const token = localStorage.getItem('token');
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+  }
+  return headers;
+};
+
 // Update the API calls with specific types and include credentials
 export const api = {
-  post: async (endpoint: string, data: any) => {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify(data),
-      credentials: 'include',
-    });
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'API request failed');
-    }
-    return response.json();
-  },
-
-  get: async (endpoint: string) => {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+  get: async (url: string) => {
+    const response = await fetch(`${API_BASE_URL}${url}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
       },
       credentials: 'include',
     });
+
     if (!response.ok) {
-      throw new Error('API request failed');
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
+
+    return response.json();
+  },
+  post: async (url: string, body: any) => {
+    const response = await fetch(`${API_BASE_URL}${url}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
     return response.json();
   },
 
@@ -135,8 +151,8 @@ export const householdApi = {
 
 // Chore Management API
 export const choreApi = {
-  create: (householdId: string, choreData: ChoreData) => 
-    api.post(`/api/households/${householdId}/chores`, choreData),
+  create: (householdId: string, choreData: Omit<ChoreData, 'householdId' | 'status'>) => 
+    api.post(`/api/households/${householdId}/chores`, { ...choreData, householdId }),
   
   getAll: (householdId: string) => 
     api.get(`/api/households/${householdId}/chores`),

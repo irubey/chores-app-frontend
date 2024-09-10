@@ -6,8 +6,19 @@ import { HouseholdProvider } from '@/contexts/HouseholdContext';
 import ThemedBody from '@/components/layouts/ThemedBody';
 import "../styles/globals.css";
 
-const lato = Lato({ subsets: ['latin'], weight: ['400', '700'], variable: '--font-lato' });
-const playfair = Playfair_Display({ subsets: ['latin'], weight: ['400', '600', '700'], variable: '--font-playfair' });
+const lato = Lato({
+  subsets: ['latin'],
+  weight: ['400', '700'],
+  variable: '--font-lato',
+  display: 'swap',
+});
+
+const playfair = Playfair_Display({
+  subsets: ['latin'],
+  weight: ['400', '600', '700'],
+  variable: '--font-playfair',
+  display: 'swap',
+});
 
 export const metadata = {
   title: 'ChoresApp',

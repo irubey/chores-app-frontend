@@ -6,7 +6,7 @@ import { User, AuthContextType } from '../hooks/useAuth';
 import { api } from '../utils/api';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-
+const IS_DEVELOPMENT = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -20,6 +20,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const checkUserLoggedIn = async () => {
+    if (IS_DEVELOPMENT) {
+      console.warn('Development mode: Using mock user data');
+      setUser({
+        id: 'dev-user-id',
+        name: 'Dev User',
+        email: 'dev@example.com',
+      });
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const userData = await api.get('/api/auth/user');
       setUser(userData);
@@ -31,12 +42,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const login = async (provider: 'GOOGLE' | 'FACEBOOK' | 'APPLE', idToken: string) => {
+  const login = async (provider: 'GOOGLE' | 'FACEBOOK' | 'APPLE' | 'DEV', idToken?: string) => {
+    if (IS_DEVELOPMENT && provider === 'DEV') {
+      console.warn('Development mode: Using dev login');
+      try {
+        const response = await api.post('/api/auth/dev-login', {});
+        const { user, token } = response.data;
+        localStorage.setItem('token', token);
+        setUser(user);
+        router.push('/dashboard');
+      } catch (error) {
+        console.error('Dev login error:', error);
+        throw error;
+      }
+      return;
+    }
+
     setIsLoading(true);
     try {
-      const userData = await api.post('/api/auth/login', { provider, idToken });
-      setUser(userData.user);
-      localStorage.setItem('token', userData.token);
+      const response = await api.post('/api/auth/login', { provider, idToken });
+      const { token, user } = response.data;
+      localStorage.setItem('token', token);
+      setUser(user);
       router.push('/dashboard');
     } catch (error) {
       console.error('Login error:', error);
@@ -47,6 +74,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
+    if (IS_DEVELOPMENT) {
+      console.warn('Development mode: Simulating logout');
+      setUser(null);
+      router.push('/login');
+      return;
+    }
+
     setIsLoading(true);
     try {
       await api.post('/api/auth/logout', {});

@@ -4,14 +4,19 @@ import { choreApi } from '../utils/api';
 
 export interface Chore {
   id: string;
+  householdId: string;
   title: string;
-  description?: string;
-  timeEstimate: number;
+  description?: string | null;
+  timeEstimate?: number | null;
   frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'CUSTOM';
-  assignedTo?: string;
+  assignedTo?: string | null;
   status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
   priority: 'LOW' | 'MEDIUM' | 'HIGH';
-  dueDate?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+  dueDate?: Date | null;
+  lastCompleted?: Date | null;
+  templateId?: string | null;
 }
 
 export const useChores = () => {
@@ -41,7 +46,7 @@ export const useChores = () => {
     }
   };
 
-  const createChore = async (choreData: Omit<Chore, 'id' | 'status'>) => {
+  const createChore = async (choreData: Omit<Chore, 'id' | 'status' | 'createdAt' | 'updatedAt'>) => {
     if (!currentHousehold) return;
     setIsLoading(true);
     try {
