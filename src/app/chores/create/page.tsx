@@ -37,7 +37,7 @@ export default function CreateChorePage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <h2 className="text-xl font-semibold mb-2">Create from Scratch</h2>
-          <ChoreForm onSubmit={handleCreateChore} initialData={selectedTemplate} />
+          <ChoreForm onSubmit={handleCreateChore} onCancel={() => router.push('/chores')} initialData={selectedTemplate} />
         </div>
         <div>
           <h2 className="text-xl font-semibold mb-2">Use a Template</h2>

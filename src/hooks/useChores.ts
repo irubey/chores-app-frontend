@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useHousehold } from './useHousehold';
 import { choreApi } from '../utils/api';
 
@@ -25,17 +25,11 @@ export const useChores = () => {
   const [error, setError] = useState<string | null>(null);
   const { currentHousehold } = useHousehold();
 
-  useEffect(() => {
-    if (currentHousehold) {
-      fetchChores();
-    }
-  }, [currentHousehold]);
-
-  const fetchChores = async () => {
-    if (!currentHousehold) return;
+  const fetchChores = useCallback(async (householdId: string) => {
+    if (!householdId) return;
     setIsLoading(true);
     try {
-      const fetchedChores = await choreApi.getAll(currentHousehold.id);
+      const fetchedChores = await choreApi.getAll(householdId);
       setChores(fetchedChores);
       setError(null);
     } catch (err) {
@@ -44,7 +38,13 @@ export const useChores = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (currentHousehold) {
+      fetchChores(currentHousehold.id);
+    }
+  }, [currentHousehold, fetchChores]);
 
   const createChore = async (choreData: Omit<Chore, 'id' | 'status' | 'createdAt' | 'updatedAt'>) => {
     if (!currentHousehold) return;

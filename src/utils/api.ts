@@ -140,7 +140,7 @@ export const authApi = {
 export const householdApi = {
   create: (name: string) => api.post('/api/households', { name }),
   
-  getAll: () => api.get('/api/households'),
+  getAll: (householdId: string) => api.get(`/api/households/${householdId}`),
   
   addMember: (householdId: string, data: HouseholdMemberData) => 
     api.post(`/api/households/${householdId}/members`, data),

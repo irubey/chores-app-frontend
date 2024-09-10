@@ -12,17 +12,17 @@ export default function HomePage() {
   const router = useRouter();
   const { primaryColor, backgroundColor, textColor } = useTheme();
 
-  // React.useEffect(() => {
-  //   if (!isLoading && user) {
-  //     router.push('/dashboard');
-  //   }
-  // }, [user, isLoading, router]);
+  React.useEffect(() => {
+    if (!isLoading && user) {
+      router.push('/dashboard');
+    }
+  }, [user, isLoading, router]);
 
   if (isLoading) {
     return <LoadingSpinner />;
   }
 
-  // if (!user) {
+  if (!user) {
     return (
       <div className={`min-h-screen flex flex-col items-center justify-center bg-${backgroundColor} p-4`}>
         <h1 className={`font-heading text-4xl font-bold text-center text-${primaryColor} mb-6`}>
@@ -44,6 +44,6 @@ export default function HomePage() {
     );
   }
 
-  // return null;
-// }
+  return null;
+}
 

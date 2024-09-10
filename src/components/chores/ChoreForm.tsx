@@ -4,11 +4,12 @@ import ChoreTemplateList from '../templates/ChoreTemplateList';
 
 interface ChoreFormProps {
   onSubmit: (data: any) => void;
+  onCancel: () => void;
   isTemplate?: boolean;
   initialData?: any;
 }
 
-const ChoreForm: React.FC<ChoreFormProps> = ({ onSubmit, isTemplate = false, initialData = null }) => {
+const ChoreForm: React.FC<ChoreFormProps> = ({ onSubmit, onCancel, isTemplate = false, initialData = null }) => {
   const [title, setTitle] = useState(initialData?.title || '');
   const [description, setDescription] = useState(initialData?.description || '');
   const [timeEstimate, setTimeEstimate] = useState(initialData?.timeEstimate?.toString() || '');
@@ -82,9 +83,14 @@ const ChoreForm: React.FC<ChoreFormProps> = ({ onSubmit, isTemplate = false, ini
           <option value="CUSTOM">Custom</option>
         </select>
       </div>
-      <button type="submit" className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
-        {isTemplate ? 'Create Chore Template' : 'Create Chore'}
-      </button>
+      <div className="flex justify-between">
+        <button type="submit" className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+          {isTemplate ? 'Create Chore Template' : 'Create Chore'}
+        </button>
+        <button type="button" onClick={onCancel} className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400">
+          Cancel
+        </button>
+      </div>
     </form>
   );
 };
