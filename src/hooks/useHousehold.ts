@@ -15,6 +15,7 @@ export interface HouseholdContextType {
   createHousehold: (name: string) => Promise<void>;
   inviteMember: (householdId: string, email: string, role: string) => Promise<void>;
   isLoading: boolean;
+  error: string | null;
   removeMember: (householdId: string, userId: string) => Promise<void>;
   joinHousehold: (householdId: string) => Promise<void>;
   fetchHouseholdById: (householdId: string) => Promise<Household | null>;

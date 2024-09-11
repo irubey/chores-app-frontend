@@ -33,9 +33,9 @@ const Header: React.FC = () => {
               </Link>
             </li>
             <li>
-              <Link href="/preferences" className={`text-${textColor} hover:text-accent-light transition-colors duration-200`}>
-                {/* <Image src={`/icons/preferences-${theme}.svg`} alt="Preferences" width={24} height={24} /> */}
-                Preferences
+              <Link href="/profile" className={`text-${textColor} hover:text-accent-light transition-colors duration-200`}>
+                {/* <Image src={`/icons/profile-${theme}.svg`} alt="Profile" width={24} height={24} /> */}
+                Profile
               </Link>
             </li>
           </ul>

@@ -26,6 +26,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         id: 'dev-user-id',
         name: 'Dev User',
         email: 'dev@example.com',
+        oauth_provider: 'GOOGLE',
+        role: 'MEMBER',
+        created_at: new Date(),
+        updated_at: new Date(),
       });
       setIsLoading(false);
       return;
@@ -94,8 +98,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const updateUserProfile = async (data: { name: string }) => {
+    try {
+      const updatedUser = await api.put('/api/users/profile', data);
+      setUser(updatedUser);
+    } catch (error) {
+      console.error('Update user profile error:', error);
+      throw error;
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, login, logout, isLoading, updateUserProfile }}>
       {children}
     </AuthContext.Provider>
   );

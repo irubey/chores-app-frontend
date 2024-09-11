@@ -29,12 +29,12 @@
     @apply font-heading font-semibold;
   }
 
-  h1 { @apply text-4xl mb-6 text-primary-dark; }
-  h2 { @apply text-3xl mb-5 text-primary-dark; }
-  h3 { @apply text-2xl mb-4 text-primary; }
-  h4 { @apply text-xl mb-3 text-primary; }
-  h5 { @apply text-lg mb-2 text-secondary-dark; }
-  h6 { @apply text-base mb-2 text-secondary-dark; }
+  h1 { @apply text-4xl mb-6 text-primary-dark dark:text-primary-light; }
+  h2 { @apply text-3xl mb-5 text-primary-dark dark:text-primary-light; }
+  h3 { @apply text-2xl mb-4 text-primary dark:text-primary-light; }
+  h4 { @apply text-xl mb-3 text-primary dark:text-primary-light; }
+  h5 { @apply text-lg mb-2 text-secondary-dark dark:text-secondary-light; }
+  h6 { @apply text-base mb-2 text-secondary-dark dark:text-secondary-light; }
 }
 
 @layer components {

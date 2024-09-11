@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { api } from '../utils/api';
 
@@ -55,6 +55,7 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setIsLoading(false);
     }
   };
+
 
   const createHousehold = async (name: string) => {
     try {
