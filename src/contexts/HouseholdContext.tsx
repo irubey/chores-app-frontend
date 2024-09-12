@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { api } from '../utils/api';
+import { useRouter } from 'next/navigation';
 
 interface Household {
   id: string;
@@ -10,8 +11,8 @@ interface Household {
   members: { id: string; name: string; role: string }[];
 }
 
-// Add removeMember to the HouseholdContextType interface
-interface HouseholdContextType {
+
+export interface HouseholdContextType {
   households: Household[];
   currentHousehold: Household | null;
   setCurrentHousehold: (household: Household | null) => void;
@@ -24,19 +25,23 @@ interface HouseholdContextType {
   fetchHouseholdById: (householdId: string) => Promise<Household | null>;
   error: string | null;
   setError: React.Dispatch<React.SetStateAction<string | null>>;
+  deleteHousehold: (householdId: string) => Promise<void>;
+  leaveHousehold: (householdId: string) => Promise<void>;
 }
 
 export const HouseholdContext = createContext<HouseholdContextType | undefined>(undefined);
 
 export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const router = useRouter();
   const [households, setHouseholds] = useState<Household[]>([]);
   const [currentHousehold, setCurrentHousehold] = useState<Household | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { user } = useAuth();
   const [error, setError] = useState<string | null>(null);
+  const [householdCache, setHouseholdCache] = useState<Record<string, Household>>({});
 
   useEffect(() => {
-    if (user) {
+    if (user && households.length === 0) {
       fetchHouseholds();
     }
   }, [user]);
@@ -51,11 +56,11 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
     } catch (error) {
       console.error('Failed to fetch households:', error);
+      setError('Failed to fetch households');
     } finally {
       setIsLoading(false);
     }
   };
-
 
   const createHousehold = async (name: string) => {
     try {
@@ -77,7 +82,6 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       throw error;
     }
   };
-
   const removeMember = async (householdId: string, userId: string) => {
     try {
       await api.delete(`/api/households/${householdId}/members/${userId}`);
@@ -100,17 +104,76 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const fetchHouseholdById = async (householdId: string) => {
+    if (householdCache[householdId]) {
+      return householdCache[householdId];
+    }
+
     setIsLoading(true);
     try {
       const household = await api.get(`/api/households/${householdId}`);
+      setHouseholdCache(prev => ({ ...prev, [householdId]: household }));
       setError(null);
       return household;
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Failed to fetch household:', error);
-      setError('Failed to fetch household');
+      if (error instanceof Error) {
+        if (error.message === 'Not Found') {
+          setHouseholds(prevHouseholds => prevHouseholds.filter(h => h.id !== householdId));
+          setCurrentHousehold(null);
+          setError('Household not found');
+        } else {
+          setError(error.message);
+        }
+      } else {
+        setError('An unknown error occurred');
+      }
       return null;
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const deleteHousehold = async (householdId: string) => {
+    try {
+      await api.delete(`/api/households/${householdId}`);
+      setHouseholds(prevHouseholds => prevHouseholds.filter(h => h.id !== householdId));
+      if (currentHousehold?.id === householdId) {
+        setCurrentHousehold(null);
+      }
+      // Force a re-fetch of households to ensure the context is up-to-date
+      await fetchHouseholds();
+      if (households.length === 1) {
+        router.push('/dashboard');
+      }
+    } catch (error) {
+      console.error('Delete household error:', error);
+      if (error instanceof Error) {
+        if (error.message === 'Not Found') {
+          // Remove the non-existent household from the local state
+          setHouseholds(prevHouseholds => prevHouseholds.filter(h => h.id !== householdId));
+          setCurrentHousehold(null);
+        }
+        throw error;
+      } else {
+        throw new Error('An unknown error occurred');
+      }
+    }
+  };
+
+  const leaveHousehold = async (householdId: string) => {
+    try {
+      await api.post(`/api/households/${householdId}/leave`, {});
+      setHouseholds(households.filter(h => h.id !== householdId));
+      if (currentHousehold?.id === householdId) {
+        setCurrentHousehold(null);
+      }
+      if (households.length === 1) {
+        // This was the last household
+        router.push('/dashboard');
+      }
+    } catch (error) {
+      console.error('Leave household error:', error);
+      throw error;
     }
   };
 
@@ -129,6 +192,8 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         fetchHouseholdById,
         error,
         setError,
+        deleteHousehold,
+        leaveHousehold,
       }}
     >
       {children}

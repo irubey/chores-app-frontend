@@ -26,10 +26,10 @@ export default function HomePage() {
     return (
       <div className={`min-h-screen flex flex-col items-center justify-center bg-${backgroundColor} p-4`}>
         <h1 className={`font-heading text-4xl font-bold text-center text-${primaryColor} mb-6`}>
-          Welcome to ChoresApp
+          Welcome to roomies
         </h1>
         <p className={`text-center text-${textColor} mb-8 max-w-2xl`}>
-          Simplify your household chore management and collaboration. ChoresApp helps you and your roommates fairly distribute tasks, track progress, and maintain a harmonious living environment.
+          Simplify your household chore management and collaboration. roomies helps you and your roommates fairly distribute tasks, track progress, and maintain a harmonious living environment.
         </p>
         <ul className={`text-${textColor} mb-8 max-w-xl`}>
           <li className="mb-2">✅ Collaborative household setup</li>

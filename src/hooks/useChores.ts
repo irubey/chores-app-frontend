@@ -33,8 +33,13 @@ export const useChores = () => {
       setChores(fetchedChores);
       setError(null);
     } catch (err) {
-      setError('Failed to fetch chores');
-      console.error('Error fetching chores:', err);
+      if (err instanceof Error && err.message.includes('You are not a member of this household')) {
+        setChores([]);
+        setError('Household not found or you are no longer a member');
+      } else {
+        setError('Failed to fetch chores');
+        console.error('Error fetching chores:', err);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -43,6 +48,10 @@ export const useChores = () => {
   useEffect(() => {
     if (currentHousehold) {
       fetchChores(currentHousehold.id);
+    } else {
+      setChores([]);
+      setError(null);
+      setIsLoading(false);
     }
   }, [currentHousehold, fetchChores]);
 

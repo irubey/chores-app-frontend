@@ -15,9 +15,9 @@ export default function ProfilePage() {
   const { user, isLoading: authLoading } = useAuth();
   const { isLoading: householdLoading } = useHousehold();
   const [preferences, setPreferences] = useState(null);
-  const [badges, setBadges] = useState([]);
-  const [calendarIntegration, setCalendarIntegration] = useState(null);
-  const [accountStats, setAccountStats] = useState(null);
+  // const [badges, setBadges] = useState([]);
+  // const [calendarIntegration, setCalendarIntegration] = useState(null);
+  // const [accountStats, setAccountStats] = useState(null);
 
   if (authLoading || householdLoading) {
     return <LoadingSpinner />;

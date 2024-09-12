@@ -16,7 +16,7 @@ const HouseholdSection: React.FC = () => {
   return (
     <div className="bg-white shadow rounded-lg p-6 mb-6">
       <h2 className="text-2xl font-bold mb-4">Your Households</h2>
-      {households.length === 0 ? (
+      {!households || households.length === 0 ? (
         <p>You are not a member of any households yet.</p>
       ) : (
         <ul className="space-y-4">
@@ -26,7 +26,7 @@ const HouseholdSection: React.FC = () => {
                 {household.name}
               </Link>
               <p className="text-sm text-gray-600">
-                Members: {household.members.length}
+                Members: {household.members?.length || 0}
               </p>
             </li>
           ))}
