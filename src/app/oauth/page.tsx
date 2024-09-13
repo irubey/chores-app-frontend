@@ -19,7 +19,7 @@ const AuthCallback = () => {
     } else {
       router.push('/login');
     }
-  }, []);
+  }, [login, router]);
 
   return <div>Processing authentication...</div>;
 };

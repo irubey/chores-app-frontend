@@ -32,15 +32,15 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <ThemeProvider>
-        <AuthProvider>
+      <AuthProvider>
+        <ThemeProvider>
           <HouseholdProvider>
             <ThemedBody lato={lato.variable} playfair={playfair.variable}>
               {children}
             </ThemedBody>
           </HouseholdProvider>
-        </AuthProvider>
-      </ThemeProvider>
+        </ThemeProvider>
+      </AuthProvider>
     </html>
   );
 }

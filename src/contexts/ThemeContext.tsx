@@ -1,7 +1,8 @@
 'use client'
 
 import React, { createContext, useState, useContext, ReactNode, useEffect, useMemo } from 'react';
-import { api } from '@/utils/api';
+import { api, UserPreferences } from '@/utils/api';
+import { useAuth } from '@/hooks/useAuth';
 
 export type Theme = 'light' | 'dark';
 
@@ -20,6 +21,7 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [theme, setTheme] = useState<Theme>('light');
+  const { user } = useAuth();
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') as Theme | null;
@@ -30,18 +32,25 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   useEffect(() => {
     const fetchUserPreferences = async () => {
-      try {
-        const preferences = await api.get('/api/users/preferences');
-        if (preferences.theme && (preferences.theme === 'light' || preferences.theme === 'dark')) {
-          setTheme(preferences.theme);
+      if (user) {
+        try {
+          const preferences = await api.get<UserPreferences>('/api/users/preferences');
+          if (preferences.theme && (preferences.theme === 'light' || preferences.theme === 'dark')) {
+            setTheme(preferences.theme);
+          }
+        } catch (error) {
+          console.error('Failed to fetch user preferences:', error);
+          // If the endpoint is not found, we'll use the default theme or the one from localStorage
+          const savedTheme = localStorage.getItem('theme') as Theme | null;
+          if (savedTheme) {
+            setTheme(savedTheme);
+          }
         }
-      } catch (error) {
-        console.error('Failed to fetch user preferences:', error);
       }
     };
 
     fetchUserPreferences();
-  }, []);
+  }, [user]);
 
   const toggleTheme = () => {
     setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');

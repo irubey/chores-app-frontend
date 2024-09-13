@@ -6,13 +6,12 @@ import { useHousehold } from '../../hooks/useHousehold';
 import ChoreList from '../../components/chores/ChoreList';
 import ChoreForm from '../../components/chores/ChoreForm';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import Link from 'next/link';
 
 export default function ChoresPage() {
-  const { chores, isLoading, error, fetchChores, createChore, updateChore, deleteChore, completeChore } = useChores();
+  const { chores, isLoading, error, fetchChores, updateChore, deleteChore, completeChore } = useChores();
   const { currentHousehold } = useHousehold();
-  const [isAddingChore, setIsAddingChore] = useState(false);
   const [editingChore, setEditingChore] = useState<Chore | null>(null);
-
 
   useEffect(() => {
     if (currentHousehold) {
@@ -20,12 +19,7 @@ export default function ChoresPage() {
     }
   }, [currentHousehold, fetchChores]);
 
-  const handleAddChore = async (choreData: Omit<Chore, 'id' | 'status' | 'createdAt' | 'updatedAt'>) => {
-    await createChore(choreData);
-    setIsAddingChore(false);
-  };
-
-  const handleEditChore = async (choreData: Partial<Chore>) => {
+   const handleEditChore = async (choreData: Partial<Chore>) => {
     if (editingChore) {
       await updateChore(editingChore.id, choreData);
       setEditingChore(null);
@@ -46,20 +40,15 @@ export default function ChoresPage() {
   return (
     <div className="container mx-auto p-4">
       <h1 className="text-2xl font-bold mb-4">Household Chores</h1>
-      <button
-        className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mb-4"
-        onClick={() => setIsAddingChore(true)}
-      >
+      <Link href="/chores/create" className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mb-4 inline-block">
         Add New Chore
-      </button>
-      {isAddingChore && (
-        <ChoreForm onSubmit={handleAddChore} onCancel={() => setIsAddingChore(false)} />
-      )}
-      {editingChore && (
+      </Link>
+      {editingChore && currentHousehold && (
         <ChoreForm
           onSubmit={handleEditChore}
           onCancel={() => setEditingChore(null)}
           initialData={editingChore}
+          householdMembers={currentHousehold.members}
         />
       )}
       <ChoreList

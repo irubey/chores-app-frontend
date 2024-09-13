@@ -1,22 +1,22 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
-// Define types for request and response data
-interface LoginRequest {
-  provider: 'GOOGLE' | 'FACEBOOK' | 'APPLE';
-}
-
-interface ChoreData {
+export interface Chore {
+  id?: string;
+  householdId: string;
   title: string;
   description?: string | null;
   timeEstimate?: number | null;
   frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'CUSTOM';
-  assignedTo?: string | null;
+  assignedTo: string[] | null;
+  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
   priority: 'LOW' | 'MEDIUM' | 'HIGH';
   dueDate?: Date | null;
-  status?: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
+  lastCompleted?: Date | null;
   templateId?: string | null;
-  householdId: string;
 }
+
+export type CreateChoreData = Omit<Chore, 'id' | 'status' | 'lastCompleted'>;
+export type UpdateChoreData = Partial<Omit<Chore, 'id' | 'householdId'>>;
 
 interface HouseholdMemberData {
   email: string;
@@ -27,7 +27,7 @@ interface UserProfileData {
   name: string;
 }
 
-interface UserPreferences {
+export interface UserPreferences {
   notificationPreferences: {
     [key: string]: boolean;
   };
@@ -43,6 +43,11 @@ interface CalendarIntegrationData {
   refreshToken: string;
   expiresAt: Date;
 }
+
+interface LoginRequest {
+  provider: 'GOOGLE' | 'FACEBOOK' | 'APPLE';
+}
+
 
 const IS_DEVELOPMENT = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
 
@@ -61,22 +66,35 @@ const getHeaders = () => {
 
 // Update the API calls with specific types and include credentials
 export const api = {
-  get: async (url: string) => {
-    const response = await fetch(`${API_BASE_URL}${url}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-    });
+  get: async <T>(url: string): Promise<T> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}${url}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      if (!response.ok) {
+        if (response.status === 404 && url === '/api/users/preferences') {
+          // Return a default preferences object if the endpoint is not found
+          return {
+            theme: 'light',
+            notificationPreferences: {},
+            chorePreferences: {},
+          } as T;
+        }
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return response.json();
+    } catch (error) {
+      console.error(`Error fetching ${url}:`, error);
+      throw error;
     }
-
-    return response.json();
   },
-  post: async (url: string, body: any) => {
+  post: async <T>(url: string, body: any): Promise<T> => {
     const response = await fetch(`${API_BASE_URL}${url}`, {
       method: 'POST',
       headers: {
@@ -93,7 +111,7 @@ export const api = {
     return response.json();
   },
 
-  put: async (endpoint: string, data: any) => {
+  put: async <T>(endpoint: string, data: any): Promise<T> => {
     const token = localStorage.getItem('token');
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'PUT',
@@ -110,7 +128,7 @@ export const api = {
     return response.json();
   },
 
-  delete: async (endpoint: string) => {
+  delete: async <T>(endpoint: string): Promise<T> => {
     const token = localStorage.getItem('token');
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'DELETE',
@@ -151,20 +169,23 @@ export const householdApi = {
 
 // Chore Management API
 export const choreApi = {
-  create: (householdId: string, choreData: Omit<ChoreData, 'householdId' | 'status'>) => 
-    api.post(`/api/households/${householdId}/chores`, { ...choreData, householdId }),
+  create: (householdId: string, choreData: CreateChoreData) => 
+    api.post<Chore>(`/api/households/${householdId}/chores`, choreData),
   
   getAll: (householdId: string) => 
-    api.get(`/api/households/${householdId}/chores`),
+    api.get<Chore[]>(`/api/households/${householdId}/chores`),
   
-  getOne: (choreId: string) => api.get(`/api/chores/${choreId}`),
+  getOne: (choreId: string) => 
+    api.get<Chore>(`/api/chores/${choreId}`),
   
-  update: (choreId: string, choreData: Partial<ChoreData>) => 
-    api.put(`/api/chores/${choreId}`, choreData),
+  update: (choreId: string, choreData: UpdateChoreData) => 
+    api.put<Chore>(`/api/chores/${choreId}`, choreData),
   
-  delete: (choreId: string) => api.delete(`/api/chores/${choreId}`),
+  delete: (choreId: string) => 
+    api.delete<void>(`/api/chores/${choreId}`),
   
-  complete: (choreId: string) => api.post(`/api/chores/${choreId}/complete`, {}),
+  complete: (choreId: string) => 
+    api.post<Chore>(`/api/chores/${choreId}/complete`, {}),
 };
 
 // Notifications API
@@ -183,13 +204,13 @@ export const notificationApi = {
 
 // Chore Templates API
 export const choreTemplateApi = {
-  create: (templateData: ChoreData) => api.post('/api/chore-templates', templateData),
+  create: (templateData: Chore) => api.post('/api/chore-templates', templateData),
   
   getAll: () => api.get('/api/chore-templates'),
   
   getOne: (templateId: string) => api.get(`/api/chore-templates/${templateId}`),
   
-  update: (templateId: string, templateData: ChoreData) => 
+  update: (templateId: string, templateData: Chore) => 
     api.put(`/api/chore-templates/${templateId}`, templateData),
   
   delete: (templateId: string) => api.delete(`/api/chore-templates/${templateId}`),

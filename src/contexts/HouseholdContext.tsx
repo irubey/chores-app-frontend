@@ -39,32 +39,35 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const { user } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [householdCache, setHouseholdCache] = useState<Record<string, Household>>({});
+  const [hasFetchedHouseholds, setHasFetchedHouseholds] = useState(false);
 
-  useEffect(() => {
-    if (user && households.length === 0) {
-      fetchHouseholds();
-    }
-  }, [user]);
-
-  const fetchHouseholds = async () => {
+  const fetchHouseholds = useCallback(async () => {
+    if (hasFetchedHouseholds) return;
     setIsLoading(true);
     try {
-      const data = await api.get('/api/households');
+      const data: Household[] = await api.get('/api/households');
       setHouseholds(data);
       if (data.length > 0 && !currentHousehold) {
         setCurrentHousehold(data[0]);
       }
+      setHasFetchedHouseholds(true);
     } catch (error) {
       console.error('Failed to fetch households:', error);
       setError('Failed to fetch households');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [currentHousehold, hasFetchedHouseholds]);
+
+  useEffect(() => {
+    if (user && !hasFetchedHouseholds) {
+      fetchHouseholds();
+    }
+  }, [user, fetchHouseholds, hasFetchedHouseholds]);
 
   const createHousehold = async (name: string) => {
     try {
-      const newHousehold = await api.post('/api/households', { name });
+      const newHousehold: Household = await api.post('/api/households', { name });
       setHouseholds([...households, newHousehold]);
       setCurrentHousehold(newHousehold);
     } catch (error) {
@@ -94,7 +97,7 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const joinHousehold = async (householdId: string) => {
     try {
-      const joinedHousehold = await api.post(`/api/households/${householdId}/join`, { userId: user?.id });
+      const joinedHousehold: Household = await api.post(`/api/households/${householdId}/join`, { userId: user?.id });
       setHouseholds([...households, joinedHousehold]);
       setCurrentHousehold(joinedHousehold);
     } catch (error) {
@@ -110,7 +113,7 @@ export const HouseholdProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     setIsLoading(true);
     try {
-      const household = await api.get(`/api/households/${householdId}`);
+      const household: Household = await api.get(`/api/households/${householdId}`);
       setHouseholdCache(prev => ({ ...prev, [householdId]: household }));
       setError(null);
       return household;

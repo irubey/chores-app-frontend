@@ -26,24 +26,28 @@ export default function HouseholdDetailsPage() {
 
   const loadHousehold = useCallback(async () => {
     if (id && (!currentHousehold || currentHousehold.id !== id)) {
-      try {
-        const fetchedHousehold = await fetchHouseholdById(id as string);
-        if (fetchedHousehold) {
-          setCurrentHousehold(fetchedHousehold);
-        } else {
-          // User is not associated with this household
-          if (households.length > 0) {
-            // Redirect to the first household they are a member of
-            router.push(`/household/${households[0].id}`);
+      const existingHousehold = households.find(h => h.id === id);
+      if (existingHousehold) {
+        setCurrentHousehold(existingHousehold);
+      } else {
+        try {
+          const fetchedHousehold = await fetchHouseholdById(id as string);
+          if (fetchedHousehold) {
+            setCurrentHousehold(fetchedHousehold);
           } else {
-            // User is not a member of any household
-            router.push('/household/create');
+            // User is not associated with this household
+            if (households.length > 0) {
+              // Redirect to the first household they are a member of
+              router.push(`/household/${households[0].id}`);
+            } else {
+              // User is not a member of any household
+              router.push('/household/create');
+            }
           }
+        } catch (error) {
+          console.error('Error fetching household:', error);
+          // Handle the error (e.g., show an error message)
         }
-      } catch (error) {
-        console.error('Error fetching household:', error);
-        // Handle the error (e.g., show an error message)
-
       }
     }
   }, [id, currentHousehold, fetchHouseholdById, setCurrentHousehold, households, router]);

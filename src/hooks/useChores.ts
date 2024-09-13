@@ -1,23 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useHousehold } from './useHousehold';
-import { choreApi } from '../utils/api';
-
-export interface Chore {
-  id: string;
-  householdId: string;
-  title: string;
-  description?: string | null;
-  timeEstimate?: number | null;
-  frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'CUSTOM';
-  assignedTo?: string | null;
-  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
-  priority: 'LOW' | 'MEDIUM' | 'HIGH';
-  createdAt: Date;
-  updatedAt: Date;
-  dueDate?: Date | null;
-  lastCompleted?: Date | null;
-  templateId?: string | null;
-}
+import { choreApi, Chore, CreateChoreData, UpdateChoreData } from '../utils/api';
 
 export const useChores = () => {
   const [chores, setChores] = useState<Chore[]>([]);
@@ -55,22 +38,25 @@ export const useChores = () => {
     }
   }, [currentHousehold, fetchChores]);
 
-  const createChore = async (choreData: Omit<Chore, 'id' | 'status' | 'createdAt' | 'updatedAt'>) => {
+  const createChore = async (choreData: CreateChoreData) => {
     if (!currentHousehold) return;
     setIsLoading(true);
     try {
+      console.log('Frontend - Sending chore data to API:', choreData);
       const newChore = await choreApi.create(currentHousehold.id, choreData);
+      console.log('Frontend - Received new chore from API:', newChore);
       setChores([...chores, newChore]);
       setError(null);
     } catch (err) {
       setError('Failed to create chore');
       console.error('Error creating chore:', err);
+      throw err;
     } finally {
       setIsLoading(false);
     }
   };
 
-  const updateChore = async (choreId: string, choreData: Partial<Chore>) => {
+  const updateChore = async (choreId: string, choreData: UpdateChoreData) => {
     setIsLoading(true);
     try {
       const updatedChore = await choreApi.update(choreId, choreData);

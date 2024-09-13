@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Chore } from '../../hooks/useChores';
+import ChoreItem from './ChoreItem';
+import { useAuth } from '@/hooks/useAuth';
 
 interface ChoreListProps {
   chores: Chore[];
@@ -9,52 +11,57 @@ interface ChoreListProps {
 }
 
 const ChoreList: React.FC<ChoreListProps> = ({ chores, onEdit, onDelete, onComplete }) => {
-  const isChoreOverdue = (chore: Chore) => {
-    if (!chore.dueDate) return false;
-    const dueDate = new Date(chore.dueDate);
-    const today = new Date();
-    return dueDate < today;
+  const { user } = useAuth();
+
+  const sortChores = (choreList: Chore[]) => {
+    return choreList.sort((a, b) => {
+      if (a.status === 'COMPLETED' && b.status !== 'COMPLETED') return 1;
+      if (a.status !== 'COMPLETED' && b.status === 'COMPLETED') return -1;
+      if (a.dueDate && b.dueDate) return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+      return 0;
+    });
   };
 
+  const { userChores, householdChores } = useMemo(() => {
+    const userChores: Chore[] = [];
+    const householdChores: Chore[] = [];
+
+    chores.forEach(chore => {
+      if (chore.assignedTo === user?.id) {
+        userChores.push(chore);
+      } else {
+        householdChores.push(chore);
+      }
+    });
+
+    return {
+      userChores: sortChores(userChores),
+      householdChores: sortChores(householdChores)
+    };
+  }, [chores, user]);
+
+  const renderChoreSection = (sectionChores: Chore[], title: string) => (
+    <div className="mb-8">
+      <h2 className="text-xl font-semibold mb-4">{title}</h2>
+      <ul className="space-y-4">
+        {sectionChores.map((chore) => (
+          <ChoreItem
+            key={chore.id}
+            chore={chore}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            onComplete={onComplete}
+          />
+        ))}
+      </ul>
+    </div>
+  );
+
   return (
-    <ul className="space-y-4">
-      {chores.map((chore) => (
-        <li key={chore.id} className="border p-4 rounded-lg">
-          <div className="flex justify-between items-center">
-            <div>
-              <h3 className="text-lg font-semibold">{chore.title}</h3>
-              <p className="text-gray-600">{chore.description}</p>
-              <p className="text-sm">
-                Frequency: {chore.frequency}, Time Estimate: {chore.timeEstimate} minutes
-              </p>
-              <p className={`text-sm ${isChoreOverdue(chore) ? 'text-red-500' : 'text-green-500'}`}>
-                Due: {chore.dueDate ? new Date(chore.dueDate).toLocaleDateString() : 'Not set'}
-              </p>
-            </div>
-            <div className="space-x-2">
-              <button
-                onClick={() => onEdit(chore)}
-                className="bg-yellow-500 hover:bg-yellow-700 text-white font-bold py-1 px-2 rounded"
-              >
-                Edit
-              </button>
-              <button
-                onClick={() => onDelete(chore.id)}
-                className="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded"
-              >
-                Delete
-              </button>
-              <button
-                onClick={() => onComplete(chore.id)}
-                className="bg-green-500 hover:bg-green-700 text-white font-bold py-1 px-2 rounded"
-              >
-                Complete
-              </button>
-            </div>
-          </div>
-        </li>
-      ))}
-    </ul>
+    <div>
+      {renderChoreSection(userChores, "Your Chores")}
+      {renderChoreSection(householdChores, "Household Chores")}
+    </div>
   );
 };
 
