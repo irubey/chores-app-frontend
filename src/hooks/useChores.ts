@@ -39,16 +39,23 @@ export const useChores = () => {
   }, [currentHousehold, fetchChores]);
 
   const createChore = async (choreData: CreateChoreData) => {
-    if (!currentHousehold) return;
     setIsLoading(true);
     try {
+      if (!currentHousehold) throw new Error('No household selected');
       console.log('Frontend - Sending chore data to API:', choreData);
-      const newChore = await choreApi.create(currentHousehold.id, choreData);
+      const newChore = await choreApi.create(currentHousehold.id, {
+        ...choreData,
+        assignedTo: choreData.assignedTo || [],  // Ensure assignedTo is always an array
+      });
       console.log('Frontend - Received new chore from API:', newChore);
       setChores([...chores, newChore]);
       setError(null);
     } catch (err) {
-      setError('Failed to create chore');
+      if (err instanceof Error) {
+        setError(err.message); // Display specific error messages
+      } else {
+        setError('Failed to create chore');
+      }
       console.error('Error creating chore:', err);
       throw err;
     } finally {

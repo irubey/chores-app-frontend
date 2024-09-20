@@ -6,7 +6,11 @@ import { useRouter } from 'next/navigation';
 import { useTheme } from '@/contexts/ThemeContext';
 import { api } from '@/utils/api';
 
-
+// Add this interface to define the expected response structure
+interface DevLoginResponse {
+  token: string;
+  user: any; // You might want to define a more specific user type
+}
 
 type OAuthProvider = 'GOOGLE' | 'FACEBOOK' | 'APPLE' | 'DEV';
 
@@ -19,7 +23,7 @@ const OAuthButtons: React.FC = () => {
   const handleOAuthLogin = async (provider: OAuthProvider) => {
     try {
       if (provider === 'DEV' && IS_DEVELOPMENT) {
-        const response = await api.post('/api/auth/dev-login', {});
+        const response = await api.post<DevLoginResponse>('/api/auth/dev-login', {});
         if (response.token) {
           localStorage.setItem('token', response.token);
           // Update user state in your AuthContext
@@ -29,7 +33,7 @@ const OAuthButtons: React.FC = () => {
           console.error('No token provided for dev login');
         }
       } else {
-        const response = await api.post('/api/auth/login', { provider: provider.toLowerCase() });
+        const response: { redirect_url: string } = await api.post('/api/auth/login', { provider: provider.toLowerCase() });
         if (response.redirect_url) {
           window.location.href = response.redirect_url;
         } else {

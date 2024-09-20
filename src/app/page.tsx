@@ -13,6 +13,7 @@ export default function HomePage() {
   const { primaryColor, backgroundColor, textColor } = useTheme();
 
   React.useEffect(() => {
+    // Redirect only if not loading and user is authenticated
     if (!isLoading && user) {
       router.push('/dashboard');
     }
@@ -25,6 +26,7 @@ export default function HomePage() {
   if (!user) {
     return (
       <div className={`min-h-screen flex flex-col items-center justify-center bg-${backgroundColor} p-4`}>
+        {/* Your landing page content */}
         <h1 className={`font-heading text-4xl font-bold text-center text-${primaryColor} mb-6`}>
           Welcome to roomies
         </h1>

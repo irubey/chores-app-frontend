@@ -1,6 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import ChoreTemplateList from '../templates/ChoreTemplateList';
-
 
 interface ChoreFormProps {
   onSubmit: (data: any) => void;
@@ -10,30 +8,34 @@ interface ChoreFormProps {
   householdMembers: any[];
 }
 
-const ChoreForm: React.FC<ChoreFormProps> = ({ onSubmit, onCancel, isTemplate = false, initialData = null, householdMembers }) => {
-  const [title, setTitle] = useState(initialData?.title || '');
-  const [description, setDescription] = useState(initialData?.description || '');
-  const [timeEstimate, setTimeEstimate] = useState(initialData?.timeEstimate?.toString() || '');
-  const [frequency, setFrequency] = useState(initialData?.frequency || 'DAILY');
-  const [assignedTo, setAssignedTo] = useState<string[]>(initialData?.assignedTo || []);
+const ChoreForm: React.FC<ChoreFormProps> = ({ onSubmit, onCancel, isTemplate = false, initialData = null, householdMembers = [] }) => {
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    timeEstimate: '',
+    frequency: 'DAILY',
+    assignedTo: [] as string[],
+  });
   const [errors, setErrors] = useState<{[key: string]: string}>({});
 
   useEffect(() => {
     if (initialData) {
-      setTitle(initialData.title || '');
-      setDescription(initialData.description || '');
-      setTimeEstimate(initialData.timeEstimate?.toString() || '');
-      setFrequency(initialData.frequency || 'DAILY');
-      setAssignedTo(initialData.assigned_to || []);
+      setFormData({
+        title: initialData.title || '',
+        description: initialData.description || '',
+        timeEstimate: initialData.timeEstimate?.toString() || '',
+        frequency: initialData.frequency || 'DAILY',
+        assignedTo: initialData.assigned_to || [],
+      });
     }
   }, [initialData]);
 
   const validateForm = () => {
     const newErrors: {[key: string]: string} = {};
-    if (title.trim().length < 3) {
+    if (formData.title.trim().length < 3) {
       newErrors.title = 'Title must be at least 3 characters long';
     }
-    if (timeEstimate && (isNaN(Number(timeEstimate)) || Number(timeEstimate) <= 0)) {
+    if (formData.timeEstimate && (isNaN(Number(formData.timeEstimate)) || Number(formData.timeEstimate) <= 0)) {
       newErrors.timeEstimate = 'Time estimate must be a positive number';
     }
     setErrors(newErrors);
@@ -44,18 +46,21 @@ const ChoreForm: React.FC<ChoreFormProps> = ({ onSubmit, onCancel, isTemplate = 
     e.preventDefault();
     if (validateForm()) {
       onSubmit({
-        title,
-        description,
-        time_estimate: timeEstimate ? parseInt(timeEstimate, 10) : null,
-        frequency,
-        assignedTo: assignedTo.length > 0 ? assignedTo : null,
+        ...formData,
+        timeEstimate: formData.timeEstimate ? parseInt(formData.timeEstimate, 10) : null,
+        assignedTo: formData.assignedTo.length > 0 ? formData.assignedTo : [],
       });
     }
   };
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
   const handleAssignedToChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedOptions = Array.from(e.target.selectedOptions, option => option.value);
-    setAssignedTo(selectedOptions.includes('all') ? [] : selectedOptions);
+    setFormData(prev => ({ ...prev, assignedTo: selectedOptions.includes('all') ? [] : selectedOptions }));
   };
 
   return (
@@ -65,8 +70,9 @@ const ChoreForm: React.FC<ChoreFormProps> = ({ onSubmit, onCancel, isTemplate = 
         <input
           type="text"
           id="title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          name="title"
+          value={formData.title}
+          onChange={handleInputChange}
           required
           minLength={3}
           className="w-full px-3 py-2 border rounded"
@@ -77,8 +83,9 @@ const ChoreForm: React.FC<ChoreFormProps> = ({ onSubmit, onCancel, isTemplate = 
         <label htmlFor="description" className="block mb-1">Description</label>
         <textarea
           id="description"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
+          name="description"
+          value={formData.description}
+          onChange={handleInputChange}
           className="w-full px-3 py-2 border rounded"
         />
       </div>
@@ -87,8 +94,9 @@ const ChoreForm: React.FC<ChoreFormProps> = ({ onSubmit, onCancel, isTemplate = 
         <input
           type="number"
           id="timeEstimate"
-          value={timeEstimate}
-          onChange={(e) => setTimeEstimate(e.target.value)}
+          name="timeEstimate"
+          value={formData.timeEstimate}
+          onChange={handleInputChange}
           min="1"
           className="w-full px-3 py-2 border rounded"
         />
@@ -98,8 +106,9 @@ const ChoreForm: React.FC<ChoreFormProps> = ({ onSubmit, onCancel, isTemplate = 
         <label htmlFor="frequency" className="block mb-1">Frequency</label>
         <select
           id="frequency"
-          value={frequency}
-          onChange={(e) => setFrequency(e.target.value)}
+          name="frequency"
+          value={formData.frequency}
+          onChange={handleInputChange}
           required
           className="w-full px-3 py-2 border rounded"
         >
@@ -110,16 +119,17 @@ const ChoreForm: React.FC<ChoreFormProps> = ({ onSubmit, onCancel, isTemplate = 
         </select>
       </div>
       <div>
-        <label htmlFor="assignedTo" className="block mb-1">Who's responsible for this chore?</label>
+        <label htmlFor="assignedTo" className="block mb-1">Who&apos;s responsible for this chore?</label>
         <select
           id="assignedTo"
+          name="assignedTo"
           multiple
-          value={assignedTo.length > 0 ? assignedTo : ['all']}
+          value={formData.assignedTo.length > 0 ? formData.assignedTo : ['all']}
           onChange={handleAssignedToChange}
           className="w-full px-3 py-2 border rounded"
         >
           <option value="all">Everyone</option>
-          {householdMembers.map(member => (
+          {Array.isArray(householdMembers) && householdMembers.map((member) => (
             <option key={member.id} value={member.id}>{member.name}</option>
           ))}
         </select>

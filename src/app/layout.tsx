@@ -2,7 +2,7 @@ import React from 'react';
 import { Lato, Playfair_Display } from 'next/font/google';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { AuthProvider } from '@/contexts/AuthContext';
-import { HouseholdProvider } from '@/contexts/HouseholdContext';
+import { HouseholdProvider } from '@/contexts/SocketContext';
 import ThemedBody from '@/components/layouts/ThemedBody';
 import "../styles/globals.css";
 

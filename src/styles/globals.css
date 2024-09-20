@@ -5,36 +5,69 @@
 @tailwind utilities;
 
 :root {
+  /* Primary Colors */
   --color-primary: #219EBC;
   --color-primary-light: #8ECAE6;
   --color-primary-dark: #023047;
+
+  /* Secondary Colors */
   --color-secondary: #95D5B2;
   --color-secondary-light: #B8E0D2;
   --color-secondary-dark: #74C69D;
+
+  /* Accent Colors */
   --color-accent: #EEB62B;
   --color-accent-light: #FFD166;
   --color-accent-dark: #CB9D06;
+
+  /* Neutral Colors */
+  --color-background-light: #F8F9FA;
+  --color-background-dark: #212529;
+  --color-text-primary: #343A40;
+  --color-text-secondary: #6C757D;
+
+  /* Fonts */
   --font-sans: 'Lato', sans-serif;
   --font-heading: 'Playfair Display', serif;
+
+  /* Spacing Scale */
+  --spacing-1: 4px;
+  --spacing-2: 8px;
+  --spacing-3: 12px;
+  --spacing-4: 16px;
+  --spacing-5: 20px;
+  --spacing-6: 24px;
+  --spacing-8: 32px;
+  --spacing-10: 40px;
+  --spacing-12: 48px;
 }
 
 @layer base {
-  /* Remove or comment out the body styles */
-  /* body {
-    @apply font-sans text-neutral-800 bg-neutral-100;
-    background-image: linear-gradient(to bottom, rgba(142, 202, 230, 0.1), rgba(255, 209, 102, 0.1));
-  } */
+  body {
+    @apply font-sans text-text-primary bg-background-light;
+    background-image: var(--tw-gradient-to-bottom);
+  }
 
   h1, h2, h3, h4, h5, h6 {
     @apply font-heading font-semibold;
   }
 
-  h1 { @apply text-4xl mb-6 text-primary-dark dark:text-primary-light; }
-  h2 { @apply text-3xl mb-5 text-primary-dark dark:text-primary-light; }
-  h3 { @apply text-2xl mb-4 text-primary dark:text-primary-light; }
-  h4 { @apply text-xl mb-3 text-primary dark:text-primary-light; }
-  h5 { @apply text-lg mb-2 text-secondary-dark dark:text-secondary-light; }
-  h6 { @apply text-base mb-2 text-secondary-dark dark:text-secondary-light; }
+  h1 { @apply text-h1 mb-6 text-primary-dark dark:text-primary-light; }
+  h2 { @apply text-h2 mb-5 text-primary-dark dark:text-primary-light; }
+  h3 { @apply text-h3 mb-4 text-primary dark:text-primary-light; }
+  h4 { @apply text-h4 mb-3 text-primary dark:text-primary-light; }
+  h5 { @apply text-h5 mb-2 text-secondary-dark dark:text-secondary-light; }
+  h6 { @apply text-h6 mb-2 text-secondary-dark dark:text-secondary-light; }
+
+  /* Body Text */
+  p {
+    @apply text-body text-text-primary;
+  }
+
+  /* Links */
+  a {
+    @apply text-primary hover:underline;
+  }
 }
 
 @layer components {
@@ -47,11 +80,11 @@
   }
 
   .btn-secondary {
-    @apply btn bg-secondary text-primary-dark hover:bg-secondary-dark;
+    @apply btn bg-secondary text-text-primary hover:bg-secondary-dark;
   }
 
   .btn-accent {
-    @apply btn bg-accent text-primary-dark hover:bg-accent-dark;
+    @apply btn bg-accent text-text-primary hover:bg-accent-dark;
   }
 
   .input {
@@ -63,9 +96,18 @@
   }
 }
 
-/* Accessibility */
 @layer utilities {
   .sr-only {
     @apply absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0;
+  }
+
+  /* Custom Utilities */
+  .container-custom {
+    @apply mx-auto px-4;
+  }
+
+  /* Gradient Utility */
+  .gradient-to-bottom {
+    background-image: linear-gradient(to bottom, rgba(142, 202, 230, 0.1), rgba(255, 209, 102, 0.1));
   }
 }

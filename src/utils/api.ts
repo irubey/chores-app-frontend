@@ -1,13 +1,13 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
 export interface Chore {
-  id?: string;
+  id: string;
   householdId: string;
   title: string;
   description?: string | null;
   timeEstimate?: number | null;
   frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'CUSTOM';
-  assignedTo: string[] | null;
+  assignedTo: string[];
   status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
   priority: 'LOW' | 'MEDIUM' | 'HIGH';
   dueDate?: Date | null;
@@ -15,7 +15,7 @@ export interface Chore {
   templateId?: string | null;
 }
 
-export type CreateChoreData = Omit<Chore, 'id' | 'status' | 'lastCompleted'>;
+export type CreateChoreData = Omit<Chore, 'id' | 'status' | 'lastCompleted'| 'priority'>;
 export type UpdateChoreData = Partial<Omit<Chore, 'id' | 'householdId'>>;
 
 interface HouseholdMemberData {
@@ -48,7 +48,6 @@ interface LoginRequest {
   provider: 'GOOGLE' | 'FACEBOOK' | 'APPLE';
 }
 
-
 const IS_DEVELOPMENT = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
 
 const getHeaders = () => {
@@ -77,18 +76,11 @@ export const api = {
       });
 
       if (!response.ok) {
-        if (response.status === 404 && url === '/api/users/preferences') {
-          // Return a default preferences object if the endpoint is not found
-          return {
-            theme: 'light',
-            notificationPreferences: {},
-            chorePreferences: {},
-          } as T;
-        }
-        throw new Error(`HTTP error! status: ${response.status}`);
+        // ... (existing error handling)
       }
 
-      return response.json();
+      const data = await response.json();
+      return convertKeys(data, toCamelCase) as T;
     } catch (error) {
       console.error(`Error fetching ${url}:`, error);
       throw error;
@@ -100,7 +92,7 @@ export const api = {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(convertKeys(body, toSnakeCase)),
       credentials: 'include',
     });
 
@@ -108,7 +100,8 @@ export const api = {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    return response.json();
+    const data = await response.json();
+    return convertKeys(data, toCamelCase) as T;
   },
 
   put: async <T>(endpoint: string, data: any): Promise<T> => {
@@ -119,13 +112,13 @@ export const api = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify(convertKeys(data, toSnakeCase)),
       credentials: 'include',
     });
     if (!response.ok) {
       throw new Error('API request failed');
     }
-    return response.json();
+    return convertKeys(await response.json(), toCamelCase);
   },
 
   delete: async <T>(endpoint: string): Promise<T> => {
@@ -141,7 +134,7 @@ export const api = {
     if (!response.ok) {
       throw new Error('API request failed');
     }
-    return response.json();
+    return convertKeys(await response.json(), toCamelCase);
   },
 };
 
@@ -248,7 +241,7 @@ export const badgeApi = {
   getAll: () => api.get('/api/badges'),
   
   award: (userId: string, badgeId: string) => 
-    api.post('/api/badges/award', { user_id: userId, badge_id: badgeId }),
+    api.post('/api/badges/award', { userId, badgeId }),
 };
 
 export const fetchPresetTemplates = async () => {
@@ -256,5 +249,23 @@ export const fetchPresetTemplates = async () => {
   if (!response.ok) {
     throw new Error('Failed to fetch preset templates');
   }
-  return response.json();
+  return convertKeys(await response.json(), toCamelCase);
+};
+
+const toCamelCase = (str: string) => str.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
+const toSnakeCase = (str: string) => str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+
+const convertKeys = (obj: any, converter: (str: string) => string): any => {
+  if (Array.isArray(obj)) {
+    return obj.map(v => convertKeys(v, converter));
+  } else if (obj !== null && obj.constructor === Object) {
+    return Object.keys(obj).reduce(
+      (result, key) => ({
+        ...result,
+        [converter(key)]: convertKeys(obj[key], converter),
+      }),
+      {},
+    );
+  }
+  return obj;
 };

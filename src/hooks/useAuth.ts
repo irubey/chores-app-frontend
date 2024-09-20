@@ -1,4 +1,4 @@
-import { useContext } from 'react';
+import { useContext, useMemo, useCallback } from 'react';
 import { AuthContext } from '../contexts/AuthContext';
 
 export interface User {
@@ -14,11 +14,19 @@ export interface User {
 export type OAuthProvider = 'GOOGLE' | 'FACEBOOK' | 'APPLE';
 export type UserRole = 'MEMBER' | 'ADMIN';
 
+// Define specific error types if applicable
+export interface AuthError {
+  message: string;
+  code: string;
+}
+
+// Update AuthContextType to handle errors
 export interface AuthContextType {
   user: User | null;
-  login: (provider: 'GOOGLE' | 'FACEBOOK' | 'APPLE', idToken: string) => Promise<void>;
+  login: (provider: OAuthProvider, idToken: string) => Promise<void>;
   logout: () => Promise<void>;
   isLoading: boolean;
+  error: AuthError | null;
   updateUserProfile: (data: { name: string }) => Promise<void>;
 }
 
@@ -27,5 +35,20 @@ export const useAuth = (): AuthContextType => {
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
-  return context;
+
+  const memoizedLogin = useCallback(context.login, [context.login]);
+  const memoizedLogout = useCallback(context.logout, [context.logout]);
+  const memoizedUpdateUserProfile = useCallback(context.updateUserProfile, [context.updateUserProfile]);
+
+  return useMemo(
+    () => ({
+      user: context.user,
+      login: memoizedLogin,
+      logout: memoizedLogout,
+      isLoading: context.isLoading,
+      error: context.error,
+      updateUserProfile: memoizedUpdateUserProfile,
+    }),
+    [context, memoizedLogin, memoizedLogout, memoizedUpdateUserProfile]
+  );
 };

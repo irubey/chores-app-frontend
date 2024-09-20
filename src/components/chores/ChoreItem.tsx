@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Chore } from '../../hooks/useChores';
+import { Chore } from '../../utils/api';
 import { useTheme } from '@/contexts/ThemeContext';
 import { FaCheckCircle, FaEllipsisV } from 'react-icons/fa';
 import Link from 'next/link';

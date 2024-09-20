@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Chore } from '../../hooks/useChores';
+import { Chore } from '../../utils/api';
 import ChoreItem from './ChoreItem';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -27,7 +27,7 @@ const ChoreList: React.FC<ChoreListProps> = ({ chores, onEdit, onDelete, onCompl
     const householdChores: Chore[] = [];
 
     chores.forEach(chore => {
-      if (chore.assignedTo === user?.id) {
+      if (chore.assignedTo.includes(user?.id || '')) {
         userChores.push(chore);
       } else {
         householdChores.push(chore);

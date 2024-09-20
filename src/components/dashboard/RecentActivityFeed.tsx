@@ -1,8 +1,9 @@
 'use client'
 
 import React from 'react';
-import { useChores, Chore } from '../../hooks/useChores';
+import { useChores } from '../../hooks/useChores';
 import { useHousehold } from '../../hooks/useHousehold';
+import { Chore } from '../../utils/api';
 
 const RecentActivityFeed: React.FC = () => {
   const { chores } = useChores();
@@ -30,7 +31,7 @@ const RecentActivityFeed: React.FC = () => {
               <div className="flex-grow">
                 <p className="text-sm font-medium text-gray-900">{chore.title}</p>
                 <p className="text-sm text-gray-500">
-                  Completed by {currentHousehold?.members.find(member => member.id === chore.assignedTo)?.name || 'Unknown'}
+                  Completed by {currentHousehold?.members.find(member => member.id in chore.assignedTo)?.name || 'Unknown'}
                 </p>
               </div>
               <div className="flex-shrink-0 text-sm text-gray-500">

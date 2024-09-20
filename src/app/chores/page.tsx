@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { useChores, Chore } from '../../hooks/useChores';
+import { Chore } from '../../utils/api';
+import { useChores } from '../../hooks/useChores';
 import { useHousehold } from '../../hooks/useHousehold';
 import ChoreList from '../../components/chores/ChoreList';
 import ChoreForm from '../../components/chores/ChoreForm';
@@ -20,7 +21,7 @@ export default function ChoresPage() {
   }, [currentHousehold, fetchChores]);
 
    const handleEditChore = async (choreData: Partial<Chore>) => {
-    if (editingChore) {
+    if (editingChore && editingChore.id) {
       await updateChore(editingChore.id, choreData);
       setEditingChore(null);
     }
