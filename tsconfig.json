@@ -4,8 +4,14 @@
     "types": ["node"], // Add "node" to include Node.js type definitions
     "typeRoots": ["./node_modules/@types"], // Ensure TypeScript looks for types here
     "lib": ["dom", "dom.iterable", "esnext"], // Include DOM libraries if not already present
+    "esModuleInterop": true, // Allows default imports from modules with no default export
+    "jsx": "react", // Enables JSX syntax
+    "baseUrl": ".", // Sets the base directory for resolving non-relative module names
+    "paths": {
+      "@/*": ["src/*"] // Defines path aliases
+    }
     // ... other options ...
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", "src/types/global.d.ts"],
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
   "exclude": ["node_modules"]
 }
