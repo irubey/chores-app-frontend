@@ -22,7 +22,11 @@ export interface ApiResponse<T> {
 /**
  * Response structure for login requests.
  */
-export interface LoginResponse extends ApiResponse<{ accessToken: string; refreshToken: string }> {}
+export interface LoginResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: User;
+}
 
 /**
  * Response structure for registration requests.
@@ -58,6 +62,35 @@ export interface CreateExpenseSplitResponse extends ApiResponse<ExpenseSplit> {}
  * Response structure for transactions.
  */
 export interface TransactionResponse extends ApiResponse<Transaction> {}
+
+/**
+ * Response structure for fetching household events.
+ */
+export interface GetHouseholdEventsResponse extends ApiResponse<Event[]> {}
+
+/**
+ * Response structure for creating an event.
+ */
+export interface CreateEventResponse extends ApiResponse<Event> {}
+
+/**
+ * Response structure for updating an event.
+ */
+export interface UpdateEventResponse extends ApiResponse<Event> {}
+
+/**
+ * No response structure needed for deleteEvent as it returns void.
+ */
+
+/**
+ * Response structure for fetching notifications.
+ */
+export interface GetNotificationsResponse extends ApiResponse<Notification[]> {}
+
+/**
+ * Response structure for marking a notification as read.
+ */
+export interface MarkAsReadResponse extends ApiResponse<null> {}
 
 /**
  * Additional API response interfaces as needed

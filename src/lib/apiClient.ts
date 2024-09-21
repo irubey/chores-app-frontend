@@ -8,6 +8,9 @@ import {
   GetHouseholdsResponse, 
   SyncCalendarResponse,
   InviteMemberResponse,
+  GetHouseholdEventsResponse,
+  CreateEventResponse,
+  UpdateEventResponse,
 } from '../types/api'; // Define and import your API response types
 import { User } from '../types/user';
 import { Household, HouseholdMember } from '../types/household';
@@ -15,9 +18,9 @@ import { OAuthIntegration } from '../types/oauth';
 import { Attachment } from '../types/attachment';
 import { UploadResponse } from '../types/upload';
 import { Event } from '../types/event';
-import { Message, CreateMessageDTO } from '../types/message';
-import { Chore, CreateChoreDTO } from '../types/chore';
-import { Expense, CreateExpenseDTO } from '../types/expense';
+import { Message, CreateMessageDTO, UpdateMessageDTO } from '../types/message';
+import { Chore, CreateChoreDTO, UpdateChoreDTO } from '../types/chore';
+import { Expense, CreateExpenseDTO, UpdateExpenseDTO } from '../types/expense';
 import { Notification } from '../types/notification';
 
 /**
@@ -69,7 +72,7 @@ class ApiClient {
             const refreshToken = localStorage.getItem('refreshToken');
             if (refreshToken) {
               const response = await this.auth.refreshToken(refreshToken);
-              const { accessToken: newAccessToken, refreshToken: newRefreshToken } = response.data;
+              const { accessToken: newAccessToken, refreshToken: newRefreshToken, user } = response;
 
               // Update tokens in localStorage
               localStorage.setItem('accessToken', newAccessToken);
@@ -117,8 +120,8 @@ class ApiClient {
      * @param credentials Object containing email and password.
      */
     login: async (credentials: { email: string; password: string }): Promise<LoginResponse> => {
-      const response = await this.axiosInstance.post<ApiResponse<{ accessToken: string; refreshToken: string }>>('/auth/login', credentials);
-      return response.data;
+      const response = await this.axiosInstance.post<ApiResponse<LoginResponse>>('/auth/login', credentials);
+      return response.data.data; // Extracted LoginResponse from ApiResponse
     },
 
     /**
@@ -217,6 +220,45 @@ class ApiClient {
       return response.data;
     },
 
+    /**
+     * Fetches all events for a specific household.
+     * @param householdId The ID of the household.
+     */
+    getHouseholdEvents: async (householdId: string): Promise<GetHouseholdEventsResponse> => {
+      const response = await this.axiosInstance.get<GetHouseholdEventsResponse>(`/households/${householdId}/events`);
+      return response.data;
+    },
+
+    /**
+     * Creates a new event for a specific household.
+     * @param householdId The ID of the household.
+     * @param eventData The data for the new event.
+     */
+    createEvent: async (householdId: string, eventData: Partial<Event>): Promise<CreateEventResponse> => {
+      const response = await this.axiosInstance.post<CreateEventResponse>(`/households/${householdId}/events`, eventData);
+      return response.data;
+    },
+
+    /**
+     * Updates an existing event for a specific household.
+     * @param householdId The ID of the household.
+     * @param eventId The ID of the event to update.
+     * @param eventData The updated data for the event.
+     */
+    updateEvent: async (householdId: string, eventId: string, eventData: Partial<Event>): Promise<UpdateEventResponse> => {
+      const response = await this.axiosInstance.patch<UpdateEventResponse>(`/households/${householdId}/events/${eventId}`, eventData);
+      return response.data;
+    },
+
+    /**
+     * Deletes an event from a specific household.
+     * @param householdId The ID of the household.
+     * @param eventId The ID of the event to delete.
+     */
+    deleteEvent: async (householdId: string, eventId: string): Promise<void> => {
+      await this.axiosInstance.delete(`/households/${householdId}/events/${eventId}`);
+    },
+
     // Add more household-related methods as needed
   };
 
@@ -294,20 +336,38 @@ class ApiClient {
     /**
      * Retrieves all messages in a household.
      */
-    getMessages: async (householdId: string): Promise<ApiResponse<Message[]>> => {
+    getMessages: async (householdId: string): Promise<Message[]> => {
       const response = await this.axiosInstance.get<ApiResponse<Message[]>>(`/households/${householdId}/messages`);
-      return response.data;
+      return response.data.data;
     },
 
     /**
      * Creates a new message.
      */
-    createMessage: async (householdId: string, data: CreateMessageDTO): Promise<ApiResponse<Message>> => {
+    createMessage: async (householdId: string, data: CreateMessageDTO): Promise<Message> => {
       const response = await this.axiosInstance.post<ApiResponse<Message>>(`/households/${householdId}/messages`, data);
-      return response.data;
+      return response.data.data;
     },
 
-    // ... additional messaging methods ...
+    /**
+     * Updates an existing message.
+     * @param householdId The ID of the household.
+     * @param messageId The ID of the message to update.
+     * @param data The updated message data.
+     */
+    updateMessage: async (householdId: string, messageId: string, data: UpdateMessageDTO): Promise<Message> => {
+      const response = await this.axiosInstance.patch<ApiResponse<Message>>(`/households/${householdId}/messages/${messageId}`, data);
+      return response.data.data;
+    },
+
+    /**
+     * Deletes a message.
+     * @param householdId The ID of the household.
+     * @param messageId The ID of the message to delete.
+     */
+    deleteMessage: async (householdId: string, messageId: string): Promise<void> => {
+      await this.axiosInstance.delete(`/households/${householdId}/messages/${messageId}`);
+    },
   };
 
   /**
@@ -317,24 +377,39 @@ class ApiClient {
     /**
      * Retrieves all chores in a household.
      */
-    getChores: async (householdId: string): Promise<ApiResponse<Chore[]>> => {
+    getChores: async (householdId: string): Promise<Chore[]> => {
       const response = await this.axiosInstance.get<ApiResponse<Chore[]>>(`/households/${householdId}/chores`);
-      return response.data;
+      return response.data.data;
     },
 
     /**
      * Creates a new chore.
      */
-    createChore: async (householdId: string, data: CreateChoreDTO): Promise<ApiResponse<Chore>> => {
-      const response = await this.axiosInstance.post<ApiResponse<Chore>>(`/households/${householdId}/chores`, data);
-      return response.data;
+    createChore: async (householdId: string, choreData: CreateChoreDTO): Promise<Chore> => {
+      const response = await this.axiosInstance.post<ApiResponse<Chore>>(`/households/${householdId}/chores`, choreData);
+      return response.data.data;
+    },
+
+    /**
+     * Updates an existing chore.
+     */
+    updateChore: async (householdId: string, choreId: string, choreData: UpdateChoreDTO): Promise<Chore> => {
+      const response = await this.axiosInstance.patch<ApiResponse<Chore>>(`/households/${householdId}/chores/${choreId}`, choreData);
+      return response.data.data;
+    },
+
+    /**
+     * Deletes a chore.
+     */
+    deleteChore: async (householdId: string, choreId: string): Promise<void> => {
+      await this.axiosInstance.delete(`/households/${householdId}/chores/${choreId}`);
     },
 
     // ... additional chore methods ...
   };
 
   /**
-   * Financial Management Methods
+   * Finances Management Methods
    */
   finances = {
     /**
@@ -348,12 +423,27 @@ class ApiClient {
     /**
      * Creates a new expense.
      */
-    createExpense: async (householdId: string, data: CreateExpenseDTO): Promise<ApiResponse<Expense>> => {
-      const response = await this.axiosInstance.post<ApiResponse<Expense>>(`/households/${householdId}/expenses`, data);
+    createExpense: async (householdId: string, expenseData: CreateExpenseDTO): Promise<ApiResponse<Expense>> => {
+      const response = await this.axiosInstance.post<ApiResponse<Expense>>(`/households/${householdId}/expenses`, expenseData);
       return response.data;
     },
 
-    // ... additional financial methods ...
+    /**
+     * Updates an existing expense.
+     */
+    updateExpense: async (householdId: string, expenseId: string, expenseData: UpdateExpenseDTO): Promise<ApiResponse<Expense>> => {
+      const response = await this.axiosInstance.patch<ApiResponse<Expense>>(`/households/${householdId}/expenses/${expenseId}`, expenseData);
+      return response.data;
+    },
+
+    /**
+     * Deletes an expense.
+     */
+    deleteExpense: async (householdId: string, expenseId: string): Promise<void> => {
+      await this.axiosInstance.delete(`/households/${householdId}/expenses/${expenseId}`);
+    },
+
+    // ... other finances-related methods ...
   };
 
   /**
@@ -361,14 +451,22 @@ class ApiClient {
    */
   notifications = {
     /**
-     * Retrieves all notifications for the user.
+     * Retrieves all notifications for the authenticated user.
      */
-    getNotifications: async (): Promise<ApiResponse<Notification[]>> => {
-      const response = await this.axiosInstance.get<ApiResponse<Notification[]>>(`/notifications`);
-      return response.data;
+    getNotifications: async (): Promise<Notification[]> => {
+      const response = await this.axiosInstance.get<ApiResponse<Notification[]>>('/notifications');
+      return response.data.data;
     },
 
-    // ... additional notification methods ...
+    /**
+     * Marks a specific notification as read.
+     * @param notificationId The ID of the notification to mark as read.
+     */
+    markAsRead: async (notificationId: string): Promise<void> => {
+      await this.axiosInstance.patch(`/notifications/${notificationId}/read`);
+    },
+    
+    // Add more notification-related methods as needed
   };
 
   // ... similarly add calendar and other feature methods ...

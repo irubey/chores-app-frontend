@@ -44,3 +44,19 @@ export interface CreateChoreDTO {
   assignedUserIds?: string[];
   subtasks?: CreateSubtaskDTO[];
 }
+
+export interface UpdateChoreDTO {
+  title?: string;
+  description?: string;
+  dueDate?: Date;
+  status?: ChoreStatus;
+  recurrence?: string;
+  priority?: number;
+  assignedUserIds?: string[];
+  subtasks?: UpdateSubtaskDTO[];
+}
+
+export interface UpdateSubtaskDTO {
+  title?: string;
+  status?: SubtaskStatus;
+}

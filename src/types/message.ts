@@ -14,3 +14,8 @@ export interface CreateMessageDTO {
   content: string;
   attachments?: CreateAttachmentDTO[];
 }
+
+export interface UpdateMessageDTO {
+  content?: string;
+  attachments?: CreateAttachmentDTO[];
+}
