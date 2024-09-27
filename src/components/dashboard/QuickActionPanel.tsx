@@ -2,52 +2,37 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import { useHousehold } from '../../hooks/useHousehold';
-import { useChores } from '../../hooks/useChores';
+import Button from '../common/Button';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const QuickActionPanel: React.FC = () => {
   const router = useRouter();
-  const { currentHousehold } = useHousehold();
-  const { createChore } = useChores();
+  const { theme } = useTheme();
 
-  const handleCreateChore = () => {
-    router.push('/chores/create');
-  };
-
-  const handleViewAllChores = () => {
-    router.push('/chores');
-  };
-
-  const handleManageHousehold = () => {
-    if (currentHousehold) {
-      router.push(`/household/${currentHousehold.id}`);
-    } else {
-      router.push('/household/create');
-    }
-  };
+  const actions = [
+    { label: 'Add Chore', action: () => router.push('/chores/new') },
+    { label: 'Add Expense', action: () => router.push('/finances/expenses/new') },
+    { label: 'Send Message', action: () => router.push('/messages/new') },
+    { label: 'Schedule Event', action: () => router.push('/calendar/new') },
+  ];
 
   return (
-    <div className="bg-white shadow rounded-lg p-6">
-      <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
-      <div className="space-y-4">
-        <button
-          onClick={handleCreateChore}
-          className="btn btn-primary w-full"
-        >
-          Create New Chore
-        </button>
-        <button
-          onClick={handleViewAllChores}
-          className="btn btn-secondary w-full"
-        >
-          View All Chores
-        </button>
-        <button
-          onClick={handleManageHousehold}
-          className="btn btn-accent w-full"
-        >
-          {currentHousehold ? 'Manage Household' : 'Create Household'}
-        </button>
+    <div className={`p-4 rounded-lg shadow-md ${theme === 'dark' ? 'bg-background-dark text-white' : 'bg-white'}`}>
+      <h2 className="text-h4 mb-4">Quick Actions</h2>
+      <div className="grid grid-cols-2 gap-4">
+        {actions.map((action, index) => (
+          <Button
+            key={index}
+            onClick={action.action}
+            className={`py-2 px-4 rounded-md ${
+              theme === 'dark'
+                ? 'bg-primary-dark text-white hover:bg-primary'
+                : 'bg-primary text-white hover:bg-primary-dark'
+            }`}
+          >
+            {action.label}
+          </Button>
+        ))}
       </div>
     </div>
   );

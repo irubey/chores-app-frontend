@@ -1,58 +1,59 @@
-'use client';
+'use client'
+
 import React, { useEffect } from 'react';
+import { useSelector } from 'react-redux';
+import { selectAuth } from '../../store/slices/authSlice';
 import { useRouter } from 'next/navigation';
-import DashboardSummary from '@/components/dashboard/DashboardSummary';
-import ChoreDistributionChart from '@/components/dashboard/ChoreDistributionChart';
-import RecentActivityFeed from '@/components/dashboard/RecentActivityFeed';
-import QuickActionPanel from '@/components/dashboard/QuickActionPanel';
-import UpcomingChores from '@/components/dashboard/UpcomingChores';
-import { useHousehold } from '@/hooks/useHousehold';
-import { useChores } from '@/hooks/useChores';
-import LoadingSpinner from '@/components/common/LoadingSpinner';
+import DashboardSummary from '../../components/dashboard/DashboardSummary';
+import QuickActionPanel from '../../components/dashboard/QuickActionPanel';
+import UpcomingChores from '../../components/dashboard/UpcomingChores';
+import HouseholdSelector from '../../components/household/HouseholdSelector';
+import ErrorBoundary from '../../components/common/ErrorBoundary';
+import { useTheme } from '../../contexts/ThemeContext';
+import LoadingSpinner from '../../components/common/LoadingSpinner';
 
 export default function DashboardPage() {
+  const { user } = useSelector(selectAuth);
+  const { theme } = useTheme();
   const router = useRouter();
-  const { currentHousehold, isLoading } = useHousehold();
-  const { chores } = useChores();
 
   useEffect(() => {
-    if (!isLoading && !currentHousehold) {
-      router.push('/household/create');
+    if (!user) {
+      router.push('/login');
     }
-  }, [currentHousehold, isLoading, router]);
+  }, [user, router]);
 
-  if (isLoading) {
+  if (!user) {
     return <LoadingSpinner />;
   }
 
-  if (!currentHousehold) {
-    return null; // This will prevent any flash of content before redirect
-  }
-
-  const showChoreDistributionChart = chores.length > 0;
+  const errorFallback = (
+    <div className="text-red-500 p-4 bg-red-100 rounded-md">
+      An error occurred while loading this component. Please try refreshing the page.
+    </div>
+  );
 
   return (
-    <main className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
+    <div className={`p-6 ${theme === 'dark' ? 'bg-background-dark text-white' : 'bg-background-light'}`}>
+      <h1 className="text-h1 mb-6">Welcome, {user.name}</h1>
+      
+      <ErrorBoundary fallback={errorFallback}>
+        <HouseholdSelector />
+      </ErrorBoundary>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div className="col-span-1 md:col-span-2 lg:col-span-3">
+        <ErrorBoundary fallback={errorFallback}>
           <DashboardSummary />
-        </div>
-        {showChoreDistributionChart && (
-          <div className="col-span-1 md:col-span-1 lg:col-span-1">
-            <ChoreDistributionChart />
-          </div>
-        )}
-        <div className="col-span-1 md:col-span-1 lg:col-span-1">
-          <RecentActivityFeed />
-        </div>
-        <div className="col-span-1 md:col-span-1 lg:col-span-1">
+        </ErrorBoundary>
+
+        <ErrorBoundary fallback={errorFallback}>
           <QuickActionPanel />
-        </div>
-        <div className="col-span-1 md:col-span-2 lg:col-span-3">
+        </ErrorBoundary>
+
+        <ErrorBoundary fallback={errorFallback}>
           <UpcomingChores />
-        </div>
+        </ErrorBoundary>
       </div>
-    </main>
+    </div>
   );
 }

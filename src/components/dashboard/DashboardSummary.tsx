@@ -1,37 +1,46 @@
-'use client'
-
 import React from 'react';
-import { useHousehold } from '../../hooks/useHousehold';
-import { useChores } from '../../hooks/useChores';
+import { useSelector } from 'react-redux';
+import { selectAuth } from '../../store/slices/authSlice';
+import { selectChores } from '../../store/slices/choresSlice';
+import { selectFinances } from '../../store/slices/financesSlice';
+import { selectNotifications } from '../../store/slices/notificationsSlice';
+import { useTheme } from '../../contexts/ThemeContext';
+import LoadingSpinner from '../common/LoadingSpinner';
 
 const DashboardSummary: React.FC = () => {
-  const { currentHousehold } = useHousehold();
-  const { chores } = useChores();
+  const { user } = useSelector(selectAuth);
+  const { chores, isLoading: choresLoading } = useSelector(selectChores);
+  const { expenses, isLoading: financesLoading } = useSelector(selectFinances);
+  const { notifications, isLoading: notificationsLoading } = useSelector(selectNotifications);
+  const { theme } = useTheme();
 
-  const totalChores = chores.length;
-  const completedChores = chores.filter(chore => chore.status === 'COMPLETED').length;
-  const pendingChores = totalChores - completedChores;
+  if (choresLoading || financesLoading || notificationsLoading) {
+    return <LoadingSpinner />;
+  }
+
+  const pendingChores = chores.filter(chore => chore.status === 'PENDING').length;
+  const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+  const unreadNotifications = notifications.filter(notification => !notification.isRead).length;
 
   return (
-    <div className="bg-white shadow rounded-lg p-6">
-      <h2 className="text-xl font-semibold mb-4">Household Summary</h2>
+    <div className={`p-6 rounded-lg shadow-md ${theme === 'dark' ? 'bg-neutral-800 text-white' : 'bg-white'}`}>
+      <h2 className="text-h2 mb-4">Household Summary</h2>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div>
-          <p className="text-gray-600">Total Chores</p>
-          <p className="text-2xl font-bold">{totalChores}</p>
+        <div className="text-center">
+          <p className="text-h4 font-bold">{pendingChores}</p>
+          <p className="text-sm">Pending Chores</p>
         </div>
-        <div>
-          <p className="text-gray-600">Completed Chores</p>
-          <p className="text-2xl font-bold text-green-600">{completedChores}</p>
+        <div className="text-center">
+          <p className="text-h4 font-bold">${totalExpenses.toFixed(2)}</p>
+          <p className="text-sm">Total Expenses</p>
         </div>
-        <div>
-          <p className="text-gray-600">Pending Chores</p>
-          <p className="text-2xl font-bold text-yellow-600">{pendingChores}</p>
+        <div className="text-center">
+          <p className="text-h4 font-bold">{unreadNotifications}</p>
+          <p className="text-sm">Unread Notifications</p>
         </div>
       </div>
-      <div className="mt-4">
-        <p className="text-gray-600">Current Household</p>
-        <p className="text-lg font-semibold">{currentHousehold?.name || 'No household selected'}</p>
+      <div className="mt-6">
+        <p className="text-sm">Welcome back, {user?.name}! Here's what's happening in your household.</p>
       </div>
     </div>
   );

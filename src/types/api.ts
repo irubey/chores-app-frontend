@@ -2,7 +2,6 @@
 
 import { User } from "./user";
 import { Household, HouseholdMember } from "./household";
-import { Chore } from "./chore";
 import { Message } from "./message";
 import { Notification } from "./notification";
 import { Event } from "./event";
@@ -10,6 +9,13 @@ import { Expense, ExpenseSplit, Transaction } from "./expense"; // Imported from
 import { OAuthIntegration } from "./oauth";
 import { Attachment } from "./attachment";
 import { UploadResponse } from "./upload";
+import { UpdateChoreDTO } from "./chore";
+import { Chore, Subtask } from "./chore";
+
+export interface ChoreWithAssignees extends Chore {
+  assignedUsers: User[];
+  subtasks: Subtask[];
+}
 
 /**
  * Generic API response structure.
@@ -24,14 +30,13 @@ export interface ApiResponse<T> {
  */
 export interface LoginResponse {
   accessToken: string;
-  refreshToken: string;
   user: User;
 }
 
 /**
  * Response structure for registration requests.
  */
-export interface RegisterResponse extends ApiResponse<User> {}
+export interface RegisterResponse extends ApiResponse<{ user: User; accessToken: string }> {}
 
 /**
  * Response structure for fetching households.
@@ -95,3 +100,4 @@ export interface MarkAsReadResponse extends ApiResponse<null> {}
 /**
  * Additional API response interfaces as needed
  */
+export interface UpdateChoreResponse extends ApiResponse<Chore> {}

@@ -1,50 +1,92 @@
-'use client'
+// import React, { useEffect, useState } from 'react';
+// import { useSelector, useDispatch } from 'react-redux';
+// import { fetchRecentActivities, selectRecentActivities } from '../../store/slices/activitySlice';
+// import { useSocket } from '../../contexts/SocketContext';
+// import { useTheme } from '../../contexts/ThemeContext';
+// import Button from '../common/Button';
+// import { Activity } from '../../types/activity';
 
-import React from 'react';
-import { useChores } from '../../hooks/useChores';
-import { useHousehold } from '../../hooks/useHousehold';
-import { Chore } from '../../utils/api';
+// const RecentActivityFeed: React.FC = () => {
+//   const dispatch = useDispatch();
+//   const { activities, isLoading, error } = useSelector(selectRecentActivities);
+//   const socket = useSocket();
+//   const { theme } = useTheme();
+//   const [page, setPage] = useState(1);
 
-const RecentActivityFeed: React.FC = () => {
-  const { chores } = useChores();
-  const { currentHousehold } = useHousehold();
+//   useEffect(() => {
+//     dispatch(fetchRecentActivities(page));
+//   }, [dispatch, page]);
 
-  const recentCompletedChores = chores
-    .filter(chore => chore.status === 'COMPLETED')
-    .sort((a, b) => new Date(b.lastCompleted!).getTime() - new Date(a.lastCompleted!).getTime())
-    .slice(0, 5);
+//   useEffect(() => {
+//     socket.on('activity_new', (newActivity: Activity) => {
+//       dispatch({ type: 'activities/activityAdded', payload: newActivity });
+//     });
 
-  return (
-    <div className="bg-white shadow rounded-lg p-6">
-      <h2 className="text-xl font-semibold mb-4">Recent Activity</h2>
-      {recentCompletedChores.length > 0 ? (
-        <ul className="space-y-4">
-          {recentCompletedChores.map((chore: Chore) => (
-            <li key={chore.id} className="flex items-center space-x-3">
-              <div className="flex-shrink-0">
-                <span className="inline-block h-8 w-8 rounded-full bg-green-100 text-green-500 flex items-center justify-center">
-                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                </span>
-              </div>
-              <div className="flex-grow">
-                <p className="text-sm font-medium text-gray-900">{chore.title}</p>
-                <p className="text-sm text-gray-500">
-                  Completed by {currentHousehold?.members.find(member => member.id in chore.assignedTo)?.name || 'Unknown'}
-                </p>
-              </div>
-              <div className="flex-shrink-0 text-sm text-gray-500">
-                {chore.lastCompleted && new Date(chore.lastCompleted).toLocaleDateString()}
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-gray-500">No recent activity</p>
-      )}
-    </div>
-  );
-};
+//     return () => {
+//       socket.off('activity_new');
+//     };
+//   }, [socket, dispatch]);
 
-export default RecentActivityFeed;
+//   const handleLoadMore = () => {
+//     setPage(prevPage => prevPage + 1);
+//   };
+
+//   const getActivityIcon = (type: string) => {
+//     switch (type) {
+//       case 'MESSAGE':
+//         return '💬';
+//       case 'CHORE':
+//         return '🧹';
+//       case 'EXPENSE':
+//         return '💰';
+//       case 'EVENT':
+//         return '📅';
+//       default:
+//         return '📌';
+//     }
+//   };
+
+//   if (isLoading && activities.length === 0) {
+//     return <div className="text-center">Loading activities...</div>;
+//   }
+
+//   if (error) {
+//     return <div className="text-red-500">Error: {error}</div>;
+//   }
+
+//   return (
+//     <div className={`bg-white ${theme === 'dark' ? 'bg-gray-800 text-white' : ''} rounded-lg shadow p-4`}>
+//       <h2 className="text-h2 mb-4">Recent Activity</h2>
+//       <ul className="space-y-4">
+//         {activities.map((activity) => (
+//           <li key={activity.id} className="flex items-start space-x-3">
+//             <span className="text-2xl">{getActivityIcon(activity.type)}</span>
+//             <div>
+//               <p className={`font-semibold ${theme === 'dark' ? 'text-gray-200' : 'text-gray-800'}`}>
+//                 {activity.message}
+//               </p>
+//               <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+//                 {new Date(activity.createdAt).toLocaleString()}
+//               </p>
+//             </div>
+//           </li>
+//         ))}
+//       </ul>
+//       {activities.length > 0 && (
+//         <div className="mt-4 text-center">
+//           <Button
+//             onClick={handleLoadMore}
+//             isLoading={isLoading}
+//             className={`px-4 py-2 ${
+//               theme === 'dark' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-500 hover:bg-blue-600'
+//             } text-white rounded`}
+//           >
+//             Load More
+//           </Button>
+//         </div>
+//       )}
+//     </div>
+//   );
+// };
+
+// export default RecentActivityFeed;

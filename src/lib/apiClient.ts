@@ -11,7 +11,7 @@ import {
   GetHouseholdEventsResponse,
   CreateEventResponse,
   UpdateEventResponse,
-} from '../types/api'; // Define and import your API response types
+} from '../types/api'; 
 import { User } from '../types/user';
 import { Household, HouseholdMember } from '../types/household';
 import { OAuthIntegration } from '../types/oauth';
@@ -23,22 +23,38 @@ import { Chore, CreateChoreDTO, UpdateChoreDTO } from '../types/chore';
 import { Expense, CreateExpenseDTO, UpdateExpenseDTO } from '../types/expense';
 import { Notification } from '../types/notification';
 
+
+type GetAccessTokenFn = () => string | null;
+type UpdateAccessTokenFn = (token: string | null) => void;
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000/api';
+
 /**
  * Handles all API interactions with the backend server.
  * Includes interceptors for attaching tokens, refreshing them upon expiration, and global error handling.
  */
 class ApiClient {
   private axiosInstance: AxiosInstance;
+  private getAccessToken?: GetAccessTokenFn;
+  private updateAccessToken?: UpdateAccessTokenFn;
 
   constructor() {
     this.axiosInstance = axios.create({
-      baseURL: process.env.NEXT_PUBLIC_API_BASE_URL || '/api',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      withCredentials: true, 
+      baseURL: API_BASE_URL,
+      withCredentials: true,
     });
+  }
 
+  /**
+   * Registers token management functions.
+   * Prevents direct coupling with the store.
+   */
+  public registerTokenFunctions(getAccessToken: GetAccessTokenFn, updateAccessToken: UpdateAccessTokenFn) {
+    this.getAccessToken = getAccessToken;
+    this.updateAccessToken = updateAccessToken;
+  }
+
+  public initializeInterceptors() {
     this.setupInterceptors();
   }
 
@@ -49,9 +65,13 @@ class ApiClient {
     // Request interceptor to attach the access token to headers
     this.axiosInstance.interceptors.request.use(
       (config: InternalAxiosRequestConfig) => {
-        const accessToken = localStorage.getItem('accessToken');
-        if (accessToken && config.headers) {
-          config.headers['Authorization'] = `Bearer ${accessToken}`;
+        if (this.getAccessToken) {
+          const accessToken = this.getAccessToken();
+          if (accessToken && config.headers) {
+            config.headers['Authorization'] = `Bearer ${accessToken}`;
+          }
+        } else {
+          console.warn('getAccessToken function is not registered.');
         }
         return config;
       },
@@ -68,41 +88,32 @@ class ApiClient {
 
         if (error.response?.status === 401 && !originalRequest._retry) {
           originalRequest._retry = true;
-          try {
-            const refreshToken = localStorage.getItem('refreshToken');
-            if (refreshToken) {
-              const response = await this.auth.refreshToken(refreshToken);
-              const { accessToken: newAccessToken, refreshToken: newRefreshToken, user } = response;
+          if (this.auth && this.updateAccessToken) {
+            try {
+              const response = await this.auth.refreshToken();
+              const { accessToken: newAccessToken } = response;
 
-              // Update tokens in localStorage
-              localStorage.setItem('accessToken', newAccessToken);
-              if (newRefreshToken) {
-                localStorage.setItem('refreshToken', newRefreshToken);
-              }
+              this.updateAccessToken(newAccessToken);
 
-              // Update the Authorization header and retry the original request
-              if (originalRequest.headers) {
-                originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
-              }
+              originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
               return this.axiosInstance(originalRequest);
+            } catch (refreshError) {
+              console.error('Token refresh failed:', refreshError);
+              await this.auth.logout();
+              window.location.href = '/login';
             }
-          } catch (refreshError) {
-            console.error('Token refresh failed:', refreshError);
-            // Optionally, redirect to login page or handle logout
-            this.auth.logout();
+          } else {
+            console.error('Token functions are not registered.');
           }
         }
 
         // Global error handling
         if (error.response) {
-          // Handle known errors
           const { status, data } = error.response as AxiosResponse<{ message?: string; error?: string }>;
           console.error(`API Error: ${status} - ${data.message || data.error || 'Unknown error'}`);
         } else if (error.request) {
-          // Handle no response
           console.error('API Error: No response received from server.');
         } else {
-          // Handle other errors
           console.error('API Error:', error.message);
         }
 
@@ -121,7 +132,10 @@ class ApiClient {
      */
     login: async (credentials: { email: string; password: string }): Promise<LoginResponse> => {
       const response = await this.axiosInstance.post<ApiResponse<LoginResponse>>('/auth/login', credentials);
-      return response.data.data; // Extracted LoginResponse from ApiResponse
+      if (this.updateAccessToken) {
+        this.updateAccessToken(response.data.data.accessToken);
+      }
+      return response.data.data;
     },
 
     /**
@@ -129,17 +143,19 @@ class ApiClient {
      * @param data Object containing email, password, and name.
      */
     register: async (data: { email: string; password: string; name: string }): Promise<RegisterResponse> => {
-      const response = await this.axiosInstance.post<ApiResponse<User>>('/auth/register', data);
+      const response = await this.axiosInstance.post<ApiResponse<{ user: User; accessToken: string }>>('/auth/register', data);
+      if (this.updateAccessToken) {
+        this.updateAccessToken(response.data.data.accessToken);
+      }
       return response.data;
     },
 
     /**
      * Refreshes the access token using a refresh token.
-     * @param token Refresh token string.
      */
-    refreshToken: async (token: string): Promise<LoginResponse> => {
-      const response = await this.axiosInstance.post<LoginResponse>('/auth/refresh', { token });
-      return response.data;
+    refreshToken: async (): Promise<{ accessToken: string }> => {
+      const response = await this.axiosInstance.post<ApiResponse<{ accessToken: string }>>('/auth/refresh-token');
+      return response.data.data;
     },
 
     /**
@@ -147,6 +163,9 @@ class ApiClient {
      */
     logout: async (): Promise<ApiResponse<null>> => {
       const response = await this.axiosInstance.post<ApiResponse<null>>('/auth/logout');
+      if (this.updateAccessToken) {
+        this.updateAccessToken(null);
+      }
       return response.data;
     },
 
@@ -158,6 +177,27 @@ class ApiClient {
     oauthIntegrate: async (provider: string, data: { accessToken: string; refreshToken?: string; expiresAt?: Date }): Promise<ApiResponse<OAuthIntegration>> => {
       const response = await this.axiosInstance.post<ApiResponse<OAuthIntegration>>(`/auth/oauth/${provider}`, data);
       return response.data;
+    },
+
+    /**
+     * Fetches the current user's data using the access token.
+     */
+    getCurrentUser: async (): Promise<User> => {
+      const response = await this.axiosInstance.get<ApiResponse<User>>('/auth/me');
+      return response.data.data;
+    },
+
+    /**
+     * Initializes the authentication state.
+     */
+    initializeAuth: async (): Promise<User | null> => {
+      try {
+        const user = await this.auth.getCurrentUser();
+        return user;
+      } catch (error) {
+        console.error('Failed to initialize auth:', error);
+        return null;
+      }
     },
   };
 
@@ -469,7 +509,7 @@ class ApiClient {
     // Add more notification-related methods as needed
   };
 
-  // ... similarly add calendar and other feature methods ...
+  // Remove methods that directly access the store
 }
 
 export const apiClient = new ApiClient();

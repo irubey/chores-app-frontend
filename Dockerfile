@@ -1,36 +1,45 @@
 # Stage 1: Build
-FROM node:20 AS build
+FROM node:20-alpine AS build
 
 WORKDIR /app
 
-COPY package*.json tsconfig.json ./
-COPY src ./src
+# Install necessary dependencies
+RUN apk add --no-cache python3 make g++ 
 
-RUN npm install
+# Copy package.json and package-lock.json for caching dependencies
+COPY package*.json ./
 
-RUN npm install -g prisma
+# Install dependencies with npm ci for cleaner installs
+RUN npm ci
 
+# Copy the rest of the application code
 COPY . .
 
-RUN npx prisma generate
+# Build the Next.js application
+RUN npm run build
 
-RUN npm run build && ls -la dist
+# Stage 2: Production
+FROM node:20-alpine AS runtime
 
-# Stage 2: Serve
-FROM node:20 AS runtime
+# Create a non-root user for security
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 WORKDIR /app
 
-COPY --from=build /app/dist /app/dist
+# Copy only the necessary files from the build stage
+COPY --from=build /app/.next ./.next
+COPY --from=build /app/public ./public
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/package*.json ./
 
-COPY --from=build /app/node_modules /app/node_modules
+# Change ownership to the non-root user
+RUN chown -R appuser:appgroup /app
 
-COPY --from=build /app/node_modules/@prisma /app/node_modules/@prisma
+# Switch to the non-root user
+USER appuser
 
-COPY --from=build /app/prisma /app/prisma
-
-
-
+# Expose the application's port
 EXPOSE 3000
 
+# Define the default command
 CMD ["npm", "start"]

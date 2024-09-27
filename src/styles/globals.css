@@ -44,7 +44,8 @@
 
 @layer base {
   body {
-    @apply font-sans text-text-primary bg-background-light;
+    @apply font-sans text-text-primary;
+    background-color: var(--color-background-light);
     background-image: var(--tw-gradient-to-bottom);
   }
 

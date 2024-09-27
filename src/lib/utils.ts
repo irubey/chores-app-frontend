@@ -142,3 +142,29 @@ export const getNestedProperty = <T>(
     return undefined;
   }, obj);
 };
+
+// Token management functions
+let getTokenFn: () => string | null = () => null;
+let setTokenFn: (token: string | null) => void = () => {};
+
+/**
+ * Registers the token management functions.
+ * This should be called once during store initialization.
+ */
+export const registerTokenFunctions = (
+  getToken: () => string | null,
+  setToken: (token: string | null) => void
+) => {
+  getTokenFn = getToken;
+  setTokenFn = setToken;
+};
+
+/**
+ * Retrieves the current access token.
+ */
+export const getToken = (): string | null => getTokenFn();
+
+/**
+ * Updates the access token.
+ */
+export const setToken = (token: string | null): void => setTokenFn(token);

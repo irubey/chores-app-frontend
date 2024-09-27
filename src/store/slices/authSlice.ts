@@ -1,31 +1,43 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { apiClient } from '../../lib/apiClient';
 import { User } from '../../types/user';
-import { RootState } from '../store';
+import { LoginResponse, RegisterResponse } from '../../types/api';
+import type { RootState } from '../store';
+import Cookies from 'js-cookie';
 
 interface AuthState {
   user: User | null;
+  accessToken: string | null;
   isLoading: boolean;
   isSuccess: boolean;
   isError: boolean;
-  message: string;
+  message: string | null;
+  isAuthenticated: boolean; // Add this line
 }
 
 const initialState: AuthState = {
   user: null,
+  accessToken: null,
   isLoading: false,
   isSuccess: false,
   isError: false,
-  message: '',
+  message: null,
+  isAuthenticated: false, // Add this line
 };
 
-// Async thunks
-export const login = createAsyncThunk<User, { email: string; password: string }, { rejectValue: string }>(
+// Async Thunks
+export const login = createAsyncThunk<
+  LoginResponse,
+  { email: string; password: string },
+  { rejectValue: string }
+>(
   'auth/login',
   async (credentials, thunkAPI) => {
     try {
       const response = await apiClient.auth.login(credentials);
-      return response.user; // {{ change: return User from ApiResponse }}
+      // Set the access token in a cookie
+      Cookies.set('accessToken', response.accessToken, { secure: true, sameSite: 'strict' });
+      return response;
     } catch (error: any) {
       const message =
         (error.response && error.response.data && error.response.data.message) ||
@@ -36,15 +48,19 @@ export const login = createAsyncThunk<User, { email: string; password: string },
   }
 );
 
-export const register = createAsyncThunk<User, { email: string; password: string; name: string }, { rejectValue: string }>(
+export const register = createAsyncThunk<
+  RegisterResponse,
+  { email: string; password: string; name: string },
+  { rejectValue: string }
+>(
   'auth/register',
   async (userData, thunkAPI) => {
     try {
       const response = await apiClient.auth.register(userData);
-      return response.data; // {{ change: return User from ApiResponse }}
+      return response;
     } catch (error: any) {
       const message =
-        (error.response && error.response.data && error.response.data.message) ||
+        (error.response && error.response.data && error.response.data.error) ||
         error.message ||
         'Registration failed';
       return thunkAPI.rejectWithValue(message);
@@ -57,6 +73,9 @@ export const logout = createAsyncThunk<void, void, { rejectValue: string }>(
   async (_, thunkAPI) => {
     try {
       await apiClient.auth.logout();
+      // Clear the access token cookie
+      Cookies.remove('accessToken');
+      return;
     } catch (error: any) {
       const message =
         (error.response && error.response.data && error.response.data.message) ||
@@ -67,7 +86,25 @@ export const logout = createAsyncThunk<void, void, { rejectValue: string }>(
   }
 );
 
-// Slice
+// Add a new action to initialize auth state
+export const initializeAuth = createAsyncThunk<
+  User | null,
+  void,
+  { rejectValue: string }
+>(
+  'auth/initialize',
+  async (_, thunkAPI) => {
+    try {
+      const user = await apiClient.auth.initializeAuth();
+      return user;
+    } catch (error: any) {
+      Cookies.remove('accessToken');
+      return thunkAPI.rejectWithValue('Failed to initialize auth');
+    }
+  }
+);
+
+// Create Slice
 const authSlice = createSlice({
   name: 'auth',
   initialState,
@@ -76,54 +113,76 @@ const authSlice = createSlice({
       state.isLoading = false;
       state.isSuccess = false;
       state.isError = false;
-      state.message = '';
+      state.message = null;
+    },
+    setAccessToken: (state, action: PayloadAction<string | null>) => {
+      state.accessToken = action.payload;
     },
   },
   extraReducers: (builder) => {
     builder
-      // Login
+      // Login Cases
       .addCase(login.pending, (state) => {
         state.isLoading = true;
       })
-      .addCase(login.fulfilled, (state, action: PayloadAction<User>) => {
+      .addCase(login.fulfilled, (state, action: PayloadAction<LoginResponse>) => {
         state.isLoading = false;
         state.isSuccess = true;
-        state.user = action.payload;
+        state.user = action.payload.user;
+        state.accessToken = action.payload.accessToken;
       })
-      .addCase(login.rejected, (state, action: PayloadAction<string>) => { // {{ change: PayloadAction<string> }}
+      .addCase(login.rejected, (state, action) => {
         state.isLoading = false;
         state.isError = true;
-        state.message = action.payload;
+        state.message = action.payload as string;
         state.user = null;
+        state.accessToken = null;
       })
-      // Register
+      // Register Cases
       .addCase(register.pending, (state) => {
         state.isLoading = true;
       })
-      .addCase(register.fulfilled, (state, action: PayloadAction<User>) => {
+      .addCase(register.fulfilled, (state, action: PayloadAction<RegisterResponse>) => {
         state.isLoading = false;
         state.isSuccess = true;
-        state.user = action.payload;
+        state.user = action.payload.data.user;
+        state.accessToken = action.payload.data.accessToken;
       })
-      .addCase(register.rejected, (state, action: PayloadAction<string>) => { // {{ change: PayloadAction<string> }}
+      .addCase(register.rejected, (state, action) => {
         state.isLoading = false;
         state.isError = true;
-        state.message = action.payload;
+        state.message = action.payload as string;
         state.user = null;
+        state.accessToken = null;
       })
-      // Logout
+      // Logout Cases
       .addCase(logout.fulfilled, (state) => {
         state.user = null;
+        state.accessToken = null;
       })
-      .addCase(logout.rejected, (state, action: PayloadAction<string>) => { // {{ change: PayloadAction<string> }}
+      .addCase(logout.rejected, (state, action) => {
         state.isError = true;
-        state.message = action.payload;
+        state.message = action.payload as string;
+      })
+      // Initialize Auth Cases
+      .addCase(initializeAuth.fulfilled, (state, action) => {
+        state.user = action.payload;
+        state.accessToken = Cookies.get('accessToken') || null;
+        state.isAuthenticated = !!action.payload;
+      })
+      .addCase(initializeAuth.rejected, (state) => {
+        state.user = null;
+        state.accessToken = null;
+        state.isAuthenticated = false;
       });
   },
 });
 
-export const { reset } = authSlice.actions;
+// Export Actions
+export const { reset, setAccessToken } = authSlice.actions;
 
-export const selectAuth = (state: RootState) => state.auth;
-
+// Export Reducer
 export default authSlice.reducer;
+
+// **Export the `selectAuth` Selector**
+export const selectAuth = (state: RootState) => state.auth;

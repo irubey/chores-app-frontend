@@ -7,7 +7,8 @@ export interface Chore {
   status: ChoreStatus;
   recurrence?: string;
   priority?: number;
-  // Add other fields as necessary
+  assignedUserIds?: string[]; // Added property
+  subtasks?: Subtask[];       // Added property
 }
 
 export enum ChoreStatus {
@@ -48,7 +49,7 @@ export interface CreateChoreDTO {
 export interface UpdateChoreDTO {
   title?: string;
   description?: string;
-  dueDate?: Date;
+  dueDate?: string; // Changed from Date to string
   status?: ChoreStatus;
   recurrence?: string;
   priority?: number;

@@ -1,135 +1,126 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useHousehold } from './useHousehold';
-import { choreApi, Chore, CreateChoreData, UpdateChoreData } from '../utils/api';
+import { useEffect } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
+import { RootState, AppDispatch } from '../store/store';
+import {
+  fetchChores,
+  addChore,
+  updateChore,
+  deleteChore as deleteChoreAction,
+  reset
+} from '../store/slices/choresSlice';
+import { handleApiError } from '../lib/utils';
+import { socketClient } from '../lib/socketClient';
+import { Chore, CreateChoreDTO, UpdateChoreDTO, Subtask } from '../types/chore';
+import { ChoreWithAssignees } from '../types/api'; // Assuming you have this type
 
-export const useChores = () => {
-  const [chores, setChores] = useState<Chore[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const { currentHousehold } = useHousehold();
+/**
+ * Custom hook for managing chores.
+ * Provides state and methods to perform CRUD operations on chores.
+ */
+const useChores = () => {
+  const dispatch: AppDispatch = useDispatch();
+  const { chores, isLoading, isSuccess, isError, message } = useSelector((state: RootState) => state.chores);
 
-  const fetchChores = useCallback(async (householdId: string) => {
-    if (!householdId) return;
-    setIsLoading(true);
+  /**
+   * Fetches all chores for a given household.
+   * @param householdId - The ID of the household.
+   */
+  const fetchAllChores = async (householdId: string) => {
     try {
-      const fetchedChores = await choreApi.getAll(householdId);
-      setChores(fetchedChores);
-      setError(null);
-    } catch (err) {
-      if (err instanceof Error && err.message.includes('You are not a member of this household')) {
-        setChores([]);
-        setError('Household not found or you are no longer a member');
-      } else {
-        setError('Failed to fetch chores');
-        console.error('Error fetching chores:', err);
-      }
-    } finally {
-      setIsLoading(false);
+      await dispatch(fetchChores(householdId)).unwrap();
+    } catch (error) {
+      handleApiError(error);
     }
-  }, []);
+  };
 
+  /**
+   * Creates a new chore.
+   * @param householdId - The ID of the household.
+   * @param choreData - The data for the new chore.
+   */
+  const createNewChore = async (householdId: string, choreData: CreateChoreDTO) => {
+    try {
+      await dispatch(addChore({ householdId, choreData })).unwrap();
+    } catch (error) {
+      handleApiError(error);
+    }
+  };
+
+  /**
+   * Updates an existing chore.
+   * @param householdId - The ID of the household.
+   * @param choreId - The ID of the chore to update.
+   * @param choreData - The updated data for the chore.
+   */
+  const updateExistingChore = async (householdId: string, choreId: string, choreData: UpdateChoreDTO) => {
+    try {
+      await dispatch(updateChore({ householdId, choreId, choreData })).unwrap();
+    } catch (error) {
+      handleApiError(error);
+    }
+  };
+
+  /**
+   * Deletes a chore.
+   * @param householdId - The ID of the household.
+   * @param choreId - The ID of the chore to delete.
+   */
+  const deleteChore = async (householdId: string, choreId: string) => {
+    try {
+      await dispatch(deleteChoreAction({ householdId, choreId })).unwrap();
+    } catch (error) {
+      handleApiError(error);
+    }
+  };
+
+  /**
+   * Resets the chores state.
+   */
+  const resetChores = () => {
+    dispatch(reset());
+  };
+
+  /**
+   * Handles real-time updates for chores.
+   */
   useEffect(() => {
-    if (currentHousehold) {
-      fetchChores(currentHousehold.id);
-    } else {
-      setChores([]);
-      setError(null);
-      setIsLoading(false);
-    }
-  }, [currentHousehold, fetchChores]);
+    // Listen for chore updates via Socket.IO
+    const handleChoreUpdate = (data: { chore: ChoreWithAssignees }) => {
+      const choreData: UpdateChoreDTO = {
+        title: data.chore.title,
+        description: data.chore.description,
+        dueDate: data.chore.dueDate, // already a string
+        status: data.chore.status,
+        recurrence: data.chore.recurrence,
+        priority: data.chore.priority,
+        assignedUserIds: data.chore.assignedUsers.map(user => user.id),
+        subtasks: data.chore.subtasks.map(subtask => ({
+          title: subtask.title,
+          status: subtask.status,
+        })),
+      };
+      dispatch(updateChore({ householdId: data.chore.householdId, choreId: data.chore.id, choreData }));
+    };
 
-  const createChore = async (choreData: CreateChoreData) => {
-    setIsLoading(true);
-    try {
-      if (!currentHousehold) throw new Error('No household selected');
-      console.log('Frontend - Sending chore data to API:', choreData);
-      const newChore = await choreApi.create(currentHousehold.id, {
-        ...choreData,
-        assignedTo: choreData.assignedTo || [],  // Ensure assignedTo is always an array
-      });
-      console.log('Frontend - Received new chore from API:', newChore);
-      setChores([...chores, newChore]);
-      setError(null);
-    } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message); // Display specific error messages
-      } else {
-        setError('Failed to create chore');
-      }
-      console.error('Error creating chore:', err);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    socketClient.on('chore_update', handleChoreUpdate);
 
-  const updateChore = async (choreId: string, choreData: UpdateChoreData) => {
-    setIsLoading(true);
-    try {
-      const updatedChore = await choreApi.update(choreId, choreData);
-      setChores(chores.map(chore => chore.id === choreId ? updatedChore : chore));
-      setError(null);
-    } catch (err) {
-      setError('Failed to update chore');
-      console.error('Error updating chore:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const deleteChore = async (choreId: string) => {
-    setIsLoading(true);
-    try {
-      await choreApi.delete(choreId);
-      setChores(chores.filter(chore => chore.id !== choreId));
-      setError(null);
-    } catch (err) {
-      setError('Failed to delete chore');
-      console.error('Error deleting chore:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const completeChore = async (choreId: string) => {
-    setIsLoading(true);
-    try {
-      await choreApi.complete(choreId);
-      setChores(chores.map(chore => 
-        chore.id === choreId ? { ...chore, status: 'COMPLETED' } : chore
-      ));
-      setError(null);
-    } catch (err) {
-      setError('Failed to complete chore');
-      console.error('Error completing chore:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const getChore = async (choreId: string) => {
-    setIsLoading(true);
-    try {
-      const chore = await choreApi.getOne(choreId);
-      setError(null);
-      return chore;
-    } catch (err) {
-      setError('Failed to fetch chore');
-      console.error('Error fetching chore:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    return () => {
+      socketClient.off('chore_update', handleChoreUpdate); // Using the newly added 'off' method
+    };
+  }, [dispatch]);
 
   return {
     chores,
     isLoading,
-    error,
-    fetchChores,
-    createChore,
-    updateChore,
+    isSuccess,
+    isError,
+    message,
+    fetchAllChores,
+    createNewChore,
+    updateExistingChore,
     deleteChore,
-    completeChore,
-    getChore,
+    resetChores,
   };
 };
+
+export default useChores;

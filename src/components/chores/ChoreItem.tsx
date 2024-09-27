@@ -1,3 +1,5 @@
+'use client'
+
 import React, { useState } from 'react';
 import { Chore } from '../../utils/api';
 import { useTheme } from '@/contexts/ThemeContext';

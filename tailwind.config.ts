@@ -27,6 +27,10 @@ const config: Config = {
           light: '#F8F9FA',
           dark: '#212529',
         },
+        background: { // Added background color
+          light: '#F8F9FA',
+          dark: '#212529',
+        },
         text: {
           primary: '#343A40',
           secondary: '#6C757D',

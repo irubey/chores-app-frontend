@@ -1,6 +1,7 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { apiClient } from '../../lib/apiClient';
 import { Event } from '../../types/event';
+import { Chore } from '../../types/chore';
 import { RootState } from '../store';
 
 interface CalendarState {
@@ -84,6 +85,30 @@ export const deleteEvent = createAsyncThunk<string, { householdId: string; event
   }
 );
 
+export const scheduleChores = createAsyncThunk<Chore[], string, { rejectValue: string }>(
+  'calendar/scheduleChores',
+  async (householdId, thunkAPI) => {
+    try {
+      // Fetch current chores
+      const chores = await apiClient.chores.getChores(householdId);
+      
+      // Here you would typically have some logic to schedule the chores
+      // For now, we'll just return the current chores
+      
+      // After scheduling, fetch events to update the calendar
+      thunkAPI.dispatch(fetchEvents(householdId));
+      
+      return chores;
+    } catch (error: any) {
+      const message =
+        (error.response?.data?.message) ||
+        error.message ||
+        'Failed to schedule chores';
+      return thunkAPI.rejectWithValue(message);
+    }
+  }
+);
+
 // Slice
 const calendarSlice = createSlice({
   name: 'calendar',
@@ -156,7 +181,21 @@ const calendarSlice = createSlice({
         state.isLoading = false;
         state.isError = true;
         state.message = action.payload;
-      });
+      })
+      // Schedule Chores
+      .addCase(scheduleChores.pending, (state) => {
+        state.isLoading = true;
+      })
+      .addCase(scheduleChores.fulfilled, (state, action: PayloadAction<Chore[]>) => {
+        state.isLoading = false;
+        state.isSuccess = true;
+        // You might want to update the state with the scheduled chores if needed
+      })
+      .addCase(scheduleChores.rejected, (state, action: PayloadAction<string>) => {
+        state.isLoading = false;
+        state.isError = true;
+        state.message = action.payload;
+      })
   },
 });
 

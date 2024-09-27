@@ -1,51 +1,97 @@
 'use client'
 
-import React from "react";
-import { useAuth } from '@/hooks/useAuth';
-import { useRouter } from 'next/navigation';
-import LoadingSpinner from '@/components/common/LoadingSpinner';
-import { useTheme } from '@/contexts/ThemeContext';
 import Link from 'next/link';
+import { FaMoneyBillWave, FaComments, FaClipboardList, FaCalendarAlt } from 'react-icons/fa';
 
-export default function HomePage() {
-  const { user, isLoading } = useAuth();
-  const router = useRouter();
-  const { primaryColor, backgroundColor, textColor } = useTheme();
+function LandingPage() {
+  return (
+    <div className="min-h-screen flex flex-col bg-background-light dark:bg-background-dark text-text-primary font-sans">
+      <main className="flex-grow">
+        {/* Welcome Section */}
+        <section className="container mx-auto py-20 px-4 text-center">
+          <h1 className="text-4xl md:text-5xl mb-6 font-serif text-primary-dark">Welcome to roomies</h1>
+          <p className="text-xl mb-8 text-text-secondary">
+            The ultimate household management app for seamless collaboration and harmonious living.
+          </p>
+          <div className="flex justify-center space-x-4">
+            <Link href="/login" className="btn btn-primary px-6 py-3 text-lg">
+              Login
+            </Link>
+            <Link href="/register" className="btn btn-secondary px-6 py-3 text-lg">
+              Register
+            </Link>
+          </div>
+        </section>
 
-  React.useEffect(() => {
-    // Redirect only if not loading and user is authenticated
-    if (!isLoading && user) {
-      router.push('/dashboard');
-    }
-  }, [user, isLoading, router]);
+        {/* Features Section */}
+        <section className="bg-white dark:bg-neutral-dark py-16 px-4">
+          <div className="container mx-auto">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Finance Splitting */}
+              <div className="card bg-white dark:bg-neutral-dark p-6 rounded-lg shadow-md">
+                <h3 className="text-2xl mb-4 font-serif text-primary flex items-center">
+                  <FaMoneyBillWave className="mr-2 text-accent" />
+                  Finance Splitting
+                </h3>
+                <p className="text-body text-text-secondary">
+                  Effortlessly track and split expenses among roommates. View summaries, settle debts, and manage your shared finances with ease.
+                </p>
+              </div>
 
-  if (isLoading) {
-    return <LoadingSpinner />;
-  }
+              {/* Household Messaging Forum */}
+              <div className="card bg-white dark:bg-neutral-dark p-6 rounded-lg shadow-md">
+                <h3 className="text-2xl mb-4 font-serif text-primary flex items-center">
+                  <FaComments className="mr-2 text-accent" />
+                  Messaging Forum
+                </h3>
+                <p className="text-body text-text-secondary">
+                  Engage in real-time conversations with threaded discussions. Share files and stay organized with our tailored household communication platform.
+                </p>
+              </div>
 
-  if (!user) {
-    return (
-      <div className={`min-h-screen flex flex-col items-center justify-center bg-${backgroundColor} p-4`}>
-        {/* Your landing page content */}
-        <h1 className={`font-heading text-4xl font-bold text-center text-${primaryColor} mb-6`}>
-          Welcome to roomies
-        </h1>
-        <p className={`text-center text-${textColor} mb-8 max-w-2xl`}>
-          Simplify your household chore management and collaboration. roomies helps you and your roommates fairly distribute tasks, track progress, and maintain a harmonious living environment.
-        </p>
-        <ul className={`text-${textColor} mb-8 max-w-xl`}>
-          <li className="mb-2">✅ Collaborative household setup</li>
-          <li className="mb-2">✅ Fair chore distribution based on preferences</li>
-          <li className="mb-2">✅ Real-time notifications and updates</li>
-          <li className="mb-2">✅ Calendar integration for easy scheduling</li>
-        </ul>
-        <Link href="/login" className={`btn btn-primary text-lg`}>
-          Get Started
-        </Link>
-      </div>
-    );
-  }
+              {/* Chores Management */}
+              <div className="card bg-white dark:bg-neutral-dark p-6 rounded-lg shadow-md">
+                <h3 className="text-2xl mb-4 font-serif text-primary flex items-center">
+                  <FaClipboardList className="mr-2 text-accent" />
+                  Chores Management
+                </h3>
+                <p className="text-body text-text-secondary">
+                  Create and assign chores with detailed checklists. Set due dates, track progress, and receive reminders to keep your household running smoothly.
+                </p>
+              </div>
 
-  return null;
+              {/* Shared Calendar */}
+              <div className="card bg-white dark:bg-neutral-dark p-6 rounded-lg shadow-md">
+                <h3 className="text-2xl mb-4 font-serif text-primary flex items-center">
+                  <FaCalendarAlt className="mr-2 text-accent" />
+                  Shared Calendar
+                </h3>
+                <p className="text-body text-text-secondary">
+                  Coordinate schedules, manage events collaboratively, and sync with personal calendars to ensure everyone is on the same page.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Call to Action Section */}
+        <section className="container mx-auto py-16 px-4 text-center">
+          <h2 className="text-3xl md:text-4xl mb-6 font-serif text-primary-dark">Join Roomies Today!</h2>
+          <p className="text-xl mb-8 text-text-secondary">
+            Simplify your household management and enjoy a harmonious living experience with your roommates.
+          </p>
+          <div className="flex justify-center space-x-4">
+            <Link href="/login" className="btn btn-primary px-6 py-3 text-lg">
+              Login
+            </Link>
+            <Link href="/register" className="btn btn-accent px-6 py-3 text-lg">
+              Get Started
+            </Link>
+          </div>
+        </section>
+      </main>
+    </div>
+  );
 }
 
+export default LandingPage;

@@ -1,17 +1,49 @@
 {
   "compilerOptions": {
     // ... existing options ...
-    "types": ["node"], // Add "node" to include Node.js type definitions
-    "typeRoots": ["./node_modules/@types"], // Ensure TypeScript looks for types here
-    "lib": ["dom", "dom.iterable", "esnext"], // Include DOM libraries if not already present
+    "types": [
+      "node"
+    ], // Add "node" to include Node.js type definitions
+    "typeRoots": [
+      "./node_modules/@types"
+    ], // Ensure TypeScript looks for types here
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ], // Include DOM libraries if not already present
     "esModuleInterop": true, // Allows default imports from modules with no default export
-    "jsx": "react", // Enables JSX syntax
+    "jsx": "preserve", // Enables JSX syntax
     "baseUrl": ".", // Sets the base directory for resolving non-relative module names
     "paths": {
-      "@/*": ["src/*"] // Defines path aliases
+      "@/*": [
+        "src/*"
+      ] // Defines path aliases
     }
     // ... other options ...
+    ,
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": false,
+    "noEmit": true,
+    "incremental": true,
+    "module": "esnext",
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
-  "exclude": ["node_modules"]
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }
