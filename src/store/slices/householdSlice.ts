@@ -2,10 +2,9 @@ import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { apiClient } from '../../lib/apiClient';
 import { Household, HouseholdMember } from '../../types/household';
 import { RootState } from '../store';
-import { ApiResponse } from '../../types/api';
 
 interface HouseholdState {
-  households: Household[];
+  userHouseholds: Household[];
   currentHousehold: Household | null;
   members: HouseholdMember[];
   isLoading: boolean;
@@ -15,7 +14,7 @@ interface HouseholdState {
 }
 
 const initialState: HouseholdState = {
-  households: [],
+  userHouseholds: [],
   currentHousehold: null,
   members: [],
   isLoading: false,
@@ -25,16 +24,43 @@ const initialState: HouseholdState = {
 };
 
 // Async thunks
-export const fetchHouseholds = createAsyncThunk<
+export const fetchUserHouseholds = createAsyncThunk<
   Household[],
   void,
   { rejectValue: string }
->('household/fetchHouseholds', async (_, thunkAPI) => {
+>('household/fetchUserHouseholds', async (_, thunkAPI) => {
+  return await thunkWrapper(
+    () => apiClient.households.getUserHouseholds(),
+    'Failed to fetch user households',
+    thunkAPI
+  );
+});
+
+// Helper function to reduce redundancy in async thunks
+async function thunkWrapper<T>(
+  apiCall: () => Promise<{ data: T }>,
+  errorMessage: string,
+  thunkAPI: any
+): Promise<T> {
   try {
-    const response = await apiClient.households.getHouseholds();
+    const response = await apiCall();
     return response.data;
   } catch (error: any) {
-    const message = error.response?.data?.message || error.message || 'Failed to fetch households';
+    const message = error.response?.data?.message || error.message || errorMessage;
+    return thunkAPI.rejectWithValue(message);
+  }
+}
+
+export const getHousehold = createAsyncThunk<
+  Household,
+  string,
+  { rejectValue: string }
+>('household/getHousehold', async (householdId, thunkAPI) => {
+  try {
+    const response = await apiClient.households.getHousehold(householdId);
+    return response.data;
+  } catch (error: any) {
+    const message = error.response?.data?.message || error.message || 'Failed to fetch user households';
     return thunkAPI.rejectWithValue(message);
   }
 });
@@ -49,20 +75,6 @@ export const createHousehold = createAsyncThunk<
     return response.data;
   } catch (error: any) {
     const message = error.response?.data?.message || error.message || 'Failed to create household';
-    return thunkAPI.rejectWithValue(message);
-  }
-});
-
-export const fetchHouseholdDetails = createAsyncThunk<
-  Household,
-  string,
-  { rejectValue: string }
->('household/fetchHouseholdDetails', async (householdId, thunkAPI) => {
-  try {
-    const response = await apiClient.households.getHousehold(householdId);
-    return response.data;
-  } catch (error: any) {
-    const message = error.response?.data?.message || error.message || 'Failed to fetch household details';
     return thunkAPI.rejectWithValue(message);
   }
 });
@@ -154,134 +166,105 @@ const householdSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      // Fetch Households
-      .addCase(fetchHouseholds.pending, (state) => {
-        state.isLoading = true;
+      // Fetch User Households
+      .addCase(fetchUserHouseholds.pending, setPending)
+      .addCase(fetchUserHouseholds.fulfilled, (state, action: PayloadAction<Household[]>) => {
+        setFulfilled(state);
+        state.userHouseholds = action.payload;
       })
-      .addCase(fetchHouseholds.fulfilled, (state, action: PayloadAction<Household[]>) => {
-        state.isLoading = false;
-        state.isSuccess = true;
-        state.households = action.payload;
-      })
-      .addCase(fetchHouseholds.rejected, (state, action) => {
-        state.isLoading = false;
-        state.isError = true;
-        state.message = action.payload as string;
-      })
-      // Create Household
-      .addCase(createHousehold.pending, (state) => {
-        state.isLoading = true;
-      })
-      .addCase(createHousehold.fulfilled, (state, action: PayloadAction<Household>) => {
-        state.isLoading = false;
-        state.isSuccess = true;
-        state.households.push(action.payload);
-      })
-      .addCase(createHousehold.rejected, (state, action) => {
-        state.isLoading = false;
-        state.isError = true;
-        state.message = action.payload as string;
-      })
-      // Fetch Household Details
-      .addCase(fetchHouseholdDetails.pending, (state) => {
-        state.isLoading = true;
-      })
-      .addCase(fetchHouseholdDetails.fulfilled, (state, action: PayloadAction<Household>) => {
-        state.isLoading = false;
-        state.isSuccess = true;
+      .addCase(fetchUserHouseholds.rejected, setRejected)
+      
+      // Get Household
+      .addCase(getHousehold.pending, setPending)
+      .addCase(getHousehold.fulfilled, (state, action: PayloadAction<Household>) => {
+        setFulfilled(state);
         state.currentHousehold = action.payload;
       })
-      .addCase(fetchHouseholdDetails.rejected, (state, action) => {
-        state.isLoading = false;
-        state.isError = true;
-        state.message = action.payload as string;
+      .addCase(getHousehold.rejected, setRejected)
+      
+      // Create Household
+      .addCase(createHousehold.pending, setPending)
+      .addCase(createHousehold.fulfilled, (state, action: PayloadAction<Household>) => {
+        setFulfilled(state);
+        state.userHouseholds.push(action.payload);
       })
+      .addCase(createHousehold.rejected, setRejected)
+      
       // Update Household
-      .addCase(updateHousehold.pending, (state) => {
-        state.isLoading = true;
-      })
+      .addCase(updateHousehold.pending, setPending)
       .addCase(updateHousehold.fulfilled, (state, action: PayloadAction<Household>) => {
-        state.isLoading = false;
-        state.isSuccess = true;
-        const index = state.households.findIndex(h => h.id === action.payload.id);
+        setFulfilled(state);
+        const index = state.userHouseholds.findIndex(h => h.id === action.payload.id);
         if (index !== -1) {
-          state.households[index] = action.payload;
+          state.userHouseholds[index] = action.payload;
         }
         if (state.currentHousehold?.id === action.payload.id) {
           state.currentHousehold = action.payload;
         }
       })
-      .addCase(updateHousehold.rejected, (state, action) => {
-        state.isLoading = false;
-        state.isError = true;
-        state.message = action.payload as string;
-      })
+      .addCase(updateHousehold.rejected, setRejected)
+      
       // Delete Household
-      .addCase(deleteHousehold.pending, (state) => {
-        state.isLoading = true;
-      })
+      .addCase(deleteHousehold.pending, setPending)
       .addCase(deleteHousehold.fulfilled, (state, action: PayloadAction<string>) => {
-        state.isLoading = false;
-        state.isSuccess = true;
-        state.households = state.households.filter(h => h.id !== action.payload);
+        setFulfilled(state);
+        state.userHouseholds = state.userHouseholds.filter(h => h.id !== action.payload);
         if (state.currentHousehold?.id === action.payload) {
           state.currentHousehold = null;
         }
       })
-      .addCase(deleteHousehold.rejected, (state, action) => {
-        state.isLoading = false;
-        state.isError = true;
-        state.message = action.payload as string;
-      })
+      .addCase(deleteHousehold.rejected, setRejected)
+      
       // Fetch Household Members
-      .addCase(fetchHouseholdMembers.pending, (state) => {
-        state.isLoading = true;
-      })
+      .addCase(fetchHouseholdMembers.pending, setPending)
       .addCase(fetchHouseholdMembers.fulfilled, (state, action: PayloadAction<HouseholdMember[]>) => {
-        state.isLoading = false;
-        state.isSuccess = true;
+        setFulfilled(state);
         state.members = action.payload;
       })
-      .addCase(fetchHouseholdMembers.rejected, (state, action) => {
-        state.isLoading = false;
-        state.isError = true;
-        state.message = action.payload as string;
-      })
+      .addCase(fetchHouseholdMembers.rejected, setRejected)
+      
       // Invite Household Member
-      .addCase(inviteHouseholdMember.pending, (state) => {
-        state.isLoading = true;
-      })
+      .addCase(inviteHouseholdMember.pending, setPending)
       .addCase(inviteHouseholdMember.fulfilled, (state, action: PayloadAction<HouseholdMember>) => {
-        state.isLoading = false;
-        state.isSuccess = true;
+        setFulfilled(state);
         state.members.push(action.payload);
       })
-      .addCase(inviteHouseholdMember.rejected, (state, action) => {
-        state.isLoading = false;
-        state.isError = true;
-        state.message = action.payload as string;
-      })
+      .addCase(inviteHouseholdMember.rejected, setRejected)
+      
       // Remove Household Member
-      .addCase(removeHouseholdMember.pending, (state) => {
-        state.isLoading = true;
-      })
+      .addCase(removeHouseholdMember.pending, setPending)
       .addCase(removeHouseholdMember.fulfilled, (state, action: PayloadAction<{ householdId: string; memberId: string }>) => {
-        state.isLoading = false;
-        state.isSuccess = true;
+        setFulfilled(state);
         state.members = state.members.filter(m => m.id !== action.payload.memberId);
       })
-      .addCase(removeHouseholdMember.rejected, (state, action) => {
-        state.isLoading = false;
-        state.isError = true;
-        state.message = action.payload as string;
-      });
+      .addCase(removeHouseholdMember.rejected, setRejected);
   },
 });
+
+// Helper functions to reduce redundancy in extraReducers
+function setPending(state: HouseholdState) {
+  state.isLoading = true;
+  state.isSuccess = false;
+  state.isError = false;
+  state.message = '';
+}
+
+function setFulfilled(state: HouseholdState) {
+  state.isLoading = false;
+  state.isSuccess = true;
+  state.isError = false;
+  state.message = '';
+}
+
+function setRejected(state: HouseholdState, action: PayloadAction<string>) {
+  state.isLoading = false;
+  state.isSuccess = false;
+  state.isError = true;
+  state.message = action.payload;
+}
 
 export const { reset, setCurrentHousehold } = householdSlice.actions;
 
 export const selectHousehold = (state: RootState) => state.household;
 
 export default householdSlice.reducer;
-
-

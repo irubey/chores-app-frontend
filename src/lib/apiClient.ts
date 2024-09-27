@@ -5,12 +5,18 @@ import {
   ApiResponse, 
   LoginResponse, 
   RegisterResponse, 
-  GetHouseholdsResponse, 
   SyncCalendarResponse,
   InviteMemberResponse,
   GetHouseholdEventsResponse,
   CreateEventResponse,
   UpdateEventResponse,
+  CreateSubtaskResponse,
+  UpdateSubtaskResponse,
+  DeleteSubtaskResponse,
+  GetTransactionsResponse,
+  CreateTransactionResponse,
+  UpdateTransactionResponse,
+  GetUserHouseholdsResponse,
 } from '../types/api'; 
 import { User } from '../types/user';
 import { Household, HouseholdMember } from '../types/household';
@@ -22,10 +28,11 @@ import { Message, CreateMessageDTO, UpdateMessageDTO } from '../types/message';
 import { Chore, CreateChoreDTO, UpdateChoreDTO } from '../types/chore';
 import { Expense, CreateExpenseDTO, UpdateExpenseDTO } from '../types/expense';
 import { Notification } from '../types/notification';
-
+import { Thread, AttachmentDTO } from '../types/message'; // Assuming these types exist
 
 type GetAccessTokenFn = () => string | null;
 type UpdateAccessTokenFn = (token: string | null) => void;
+type UpdateAuthStateFn = (state: { isAuthenticated: boolean; isInitialized: boolean }) => void;
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000/api';
 
@@ -37,6 +44,8 @@ class ApiClient {
   private axiosInstance: AxiosInstance;
   private getAccessToken?: GetAccessTokenFn;
   private updateAccessToken?: UpdateAccessTokenFn;
+  private updateAuthState?: UpdateAuthStateFn;
+  private user?: User;
 
   constructor() {
     this.axiosInstance = axios.create({
@@ -52,6 +61,14 @@ class ApiClient {
   public registerTokenFunctions(getAccessToken: GetAccessTokenFn, updateAccessToken: UpdateAccessTokenFn) {
     this.getAccessToken = getAccessToken;
     this.updateAccessToken = updateAccessToken;
+  }
+
+  /**
+   * Registers auth state update function.
+   * Prevents direct coupling with the store.
+   */
+  public registerAuthStateUpdate(updateFn: UpdateAuthStateFn) {
+    this.updateAuthState = updateFn;
   }
 
   public initializeInterceptors() {
@@ -86,8 +103,25 @@ class ApiClient {
       async (error: AxiosError) => {
         const originalRequest = error.config as any;
 
+        // Check if the error is due to an unauthorized request
         if (error.response?.status === 401 && !originalRequest._retry) {
+          // Prevent infinite loop by not retrying the refresh-token endpoint
+          const isRefreshTokenRequest = originalRequest.url?.includes('/auth/refresh-token');
+
+          if (isRefreshTokenRequest) {
+            // If refresh-token itself failed, update auth state and reject
+            console.error('Refresh token failed. Updating auth state.');
+            if (this.updateAccessToken) {
+              this.updateAccessToken(null);
+            }
+            if (this.updateAuthState) {
+              this.updateAuthState({ isAuthenticated: false, isInitialized: true });
+            }
+            return Promise.reject(error);
+          }
+
           originalRequest._retry = true;
+
           if (this.auth && this.updateAccessToken) {
             try {
               const response = await this.auth.refreshToken();
@@ -99,8 +133,14 @@ class ApiClient {
               return this.axiosInstance(originalRequest);
             } catch (refreshError) {
               console.error('Token refresh failed:', refreshError);
-              await this.auth.logout();
-              window.location.href = '/login';
+              // Instead of calling logout, update the auth state
+              if (this.updateAccessToken) {
+                this.updateAccessToken(null);
+              }
+              if (this.updateAuthState) {
+                this.updateAuthState({ isAuthenticated: false, isInitialized: true });
+              }
+              return Promise.reject(refreshError);
             }
           } else {
             console.error('Token functions are not registered.');
@@ -115,6 +155,15 @@ class ApiClient {
           console.error('API Error: No response received from server.');
         } else {
           console.error('API Error:', error.message);
+        }
+
+        // More detailed error logging
+        if (error.response) {
+          console.error('Response error:', error.response.status, error.response.data);
+        } else if (error.request) {
+          console.error('Request error:', error.request);
+        } else {
+          console.error('Error:', error.message);
         }
 
         return Promise.reject(error);
@@ -135,6 +184,7 @@ class ApiClient {
       if (this.updateAccessToken) {
         this.updateAccessToken(response.data.data.accessToken);
       }
+      this.user = response.data.data.user;
       return response.data.data;
     },
 
@@ -154,8 +204,18 @@ class ApiClient {
      * Refreshes the access token using a refresh token.
      */
     refreshToken: async (): Promise<{ accessToken: string }> => {
-      const response = await this.axiosInstance.post<ApiResponse<{ accessToken: string }>>('/auth/refresh-token');
-      return response.data.data;
+      try {
+        const response = await this.axiosInstance.post<ApiResponse<{ accessToken: string }>>('/auth/refresh-token');
+        return response.data.data;
+      } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.status === 401) {
+          // If refresh token fails with 401, update auth state
+          if (this.updateAuthState) {
+            this.updateAuthState({ isAuthenticated: false, isInitialized: true });
+          }
+        }
+        throw error;
+      }
     },
 
     /**
@@ -182,9 +242,25 @@ class ApiClient {
     /**
      * Fetches the current user's data using the access token.
      */
-    getCurrentUser: async (): Promise<User> => {
-      const response = await this.axiosInstance.get<ApiResponse<User>>('/auth/me');
-      return response.data.data;
+    getCurrentUser: async (): Promise<User | null> => {
+      try {
+        const response = await this.axiosInstance.get<ApiResponse<User>>('/auth/me');
+        return response.data.data;
+      } catch (error) {
+        if (axios.isAxiosError(error)) {
+          if (error.response) {
+            console.error('Response error:', error.response.status, error.response.data);
+          } else if (error.request) {
+            console.error('Request error:', error.request);
+          } else {
+            console.error('Error:', error.message);
+          }
+          if (error.response?.status === 401) {
+            return null; // User is not authenticated
+          }
+        }
+        throw error;
+      }
     },
 
     /**
@@ -192,8 +268,7 @@ class ApiClient {
      */
     initializeAuth: async (): Promise<User | null> => {
       try {
-        const user = await this.auth.getCurrentUser();
-        return user;
+        return await this.auth.getCurrentUser();
       } catch (error) {
         console.error('Failed to initialize auth:', error);
         return null;
@@ -208,8 +283,17 @@ class ApiClient {
     /**
      * Retrieves all households the user is a member of.
      */
-    getHouseholds: async (): Promise<GetHouseholdsResponse> => {
-      const response = await this.axiosInstance.get<ApiResponse<Household[]>>('/households');
+    getUserHouseholds: async (): Promise<GetUserHouseholdsResponse> => {
+      const response = await this.axiosInstance.get<GetUserHouseholdsResponse>('/users/me/households');
+      return response.data;
+    },
+
+    /**
+     * Retrieves details of a specific household.
+     * @param householdId The ID of the household.
+     */
+    getHousehold: async (householdId: string): Promise<ApiResponse<Household>> => {
+      const response = await this.axiosInstance.get<ApiResponse<Household>>(`/households/${householdId}`);
       return response.data;
     },
 
@@ -222,14 +306,6 @@ class ApiClient {
       return response.data;
     },
 
-    /**
-     * Retrieves details of a specific household.
-     * @param householdId The ID of the household.
-     */
-    getHousehold: async (householdId: string): Promise<ApiResponse<Household>> => {
-      const response = await this.axiosInstance.get<ApiResponse<Household>>(`/households/${householdId}`);
-      return response.data;
-    },
 
     /**
      * Updates a specific household.
@@ -408,6 +484,46 @@ class ApiClient {
     deleteMessage: async (householdId: string, messageId: string): Promise<void> => {
       await this.axiosInstance.delete(`/households/${householdId}/messages/${messageId}`);
     },
+
+    /**
+     * Retrieves threads for a specific message.
+     * @param householdId The ID of the household.
+     * @param messageId The ID of the message.
+     */
+    getThreads: async (householdId: string, messageId: string): Promise<Thread[]> => {
+      const response = await this.axiosInstance.get<ApiResponse<Thread[]>>(`/households/${householdId}/messages/${messageId}/threads`);
+      return response.data.data;
+    },
+
+    /**
+     * Creates a new thread under a specific message.
+     * @param householdId The ID of the household.
+     * @param messageId The ID of the message.
+     * @param data The thread data.
+     */
+    createThread: async (householdId: string, messageId: string, data: { content: string }): Promise<Thread> => {
+      const response = await this.axiosInstance.post<ApiResponse<Thread>>(`/households/${householdId}/messages/${messageId}/threads`, data);
+      return response.data.data;
+    },
+
+    /**
+     * Uploads an attachment to a specific message.
+     * @param householdId The ID of the household.
+     * @param messageId The ID of the message.
+     * @param file The file to attach.
+     */
+    uploadAttachment: async (householdId: string, messageId: string, file: File): Promise<Attachment> => {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await this.axiosInstance.post<ApiResponse<Attachment>>(`/households/${householdId}/messages/${messageId}/attachments`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data.data;
+    },
+
+    // Add more message-related methods as needed
   };
 
   /**
@@ -449,6 +565,45 @@ class ApiClient {
   };
 
   /**
+   * Subtask Management Methods
+   */
+  subtasks = {
+    /**
+     * Creates a new subtask under a specific chore.
+     * @param householdId The ID of the household.
+     * @param choreId The ID of the chore.
+     * @param subtaskData The subtask data.
+     */
+    createSubtask: async (householdId: string, choreId: string, subtaskData: { title: string; description?: string }): Promise<CreateSubtaskResponse> => {
+      const response = await this.axiosInstance.post<ApiResponse<Chore>>(`/households/${householdId}/chores/${choreId}/subtasks`, subtaskData);
+      return response.data;
+    },
+
+    /**
+     * Updates an existing subtask.
+     * @param householdId The ID of the household.
+     * @param choreId The ID of the chore.
+     * @param subtaskId The ID of the subtask.
+     * @param subtaskData The updated subtask data.
+     */
+    updateSubtask: async (householdId: string, choreId: string, subtaskId: string, subtaskData: { title?: string; description?: string; completed?: boolean }): Promise<UpdateSubtaskResponse> => {
+      const response = await this.axiosInstance.patch<ApiResponse<Chore>>(`/households/${householdId}/chores/${choreId}/subtasks/${subtaskId}`, subtaskData);
+      return response.data;
+    },
+
+    /**
+     * Deletes a subtask.
+     * @param householdId The ID of the household.
+     * @param choreId The ID of the chore.
+     * @param subtaskId The ID of the subtask.
+     */
+    deleteSubtask: async (householdId: string, choreId: string, subtaskId: string): Promise<DeleteSubtaskResponse> => {
+      const response = await this.axiosInstance.delete<ApiResponse<null>>(`/households/${householdId}/chores/${choreId}/subtasks/${subtaskId}`);
+      return response.data;
+    },
+  }
+
+  /**
    * Finances Management Methods
    */
   finances = {
@@ -483,6 +638,37 @@ class ApiClient {
       await this.axiosInstance.delete(`/households/${householdId}/expenses/${expenseId}`);
     },
 
+    /**
+     * Retrieves all transactions in a household.
+     */
+    getTransactions: async (householdId: string): Promise<GetTransactionsResponse> => {
+      const response = await this.axiosInstance.get<GetTransactionsResponse>(`/households/${householdId}/transactions`);
+      return response.data;
+    },
+
+    /**
+     * Creates a new transaction.
+     */
+    createTransaction: async (householdId: string, transactionData: { amount: number; type: 'INCOME' | 'EXPENSE'; category: string; date: string; description?: string }): Promise<CreateTransactionResponse> => {
+      const response = await this.axiosInstance.post<CreateTransactionResponse>(`/households/${householdId}/transactions`, transactionData);
+      return response.data;
+    },
+
+    /**
+     * Updates an existing transaction.
+     */
+    updateTransaction: async (householdId: string, transactionId: string, transactionData: { amount?: number; type?: 'INCOME' | 'EXPENSE'; category?: string; date?: string; description?: string }): Promise<UpdateTransactionResponse> => {
+      const response = await this.axiosInstance.patch<UpdateTransactionResponse>(`/households/${householdId}/transactions/${transactionId}`, transactionData);
+      return response.data;
+    },
+
+    /**
+     * Deletes a transaction.
+     */
+    deleteTransaction: async (householdId: string, transactionId: string): Promise<void> => {
+      await this.axiosInstance.delete(`/households/${householdId}/transactions/${transactionId}`);
+    },
+
     // ... other finances-related methods ...
   };
 
@@ -505,11 +691,21 @@ class ApiClient {
     markAsRead: async (notificationId: string): Promise<void> => {
       await this.axiosInstance.patch(`/notifications/${notificationId}/read`);
     },
-    
+
+    /**
+     * Deletes a specific notification.
+     * @param notificationId The ID of the notification to delete.
+     */
+    deleteNotification: async (notificationId: string): Promise<void> => {
+      await this.axiosInstance.delete(`/notifications/${notificationId}`);
+    },
+
     // Add more notification-related methods as needed
   };
 
-  // Remove methods that directly access the store
+  /**
+   * Remove methods that directly access the store
+   */
 }
 
 export const apiClient = new ApiClient();

@@ -7,10 +7,9 @@ import { login, register, logout } from '../store/slices/authSlice';
 
 const useAuth = () => {
   const dispatch: AppDispatch = useDispatch();
-  const { user, accessToken, isLoading, isError, message } = useSelector(
+  const { user, accessToken, isLoading, isError, message, isAuthenticated, isInitialized } = useSelector(
     (state: RootState) => state.auth
   );
-
 
   const loginUser = async (email: string, password: string) => {
     await dispatch(login({ email, password }));
@@ -33,6 +32,8 @@ const useAuth = () => {
     login: loginUser,
     register: registerUser,
     logout: logoutUser,
+    isAuthenticated,
+    isInitialized,
   };
 };
 

@@ -5,7 +5,7 @@ import { Household, HouseholdMember } from "./household";
 import { Message } from "./message";
 import { Notification } from "./notification";
 import { Event } from "./event";
-import { Expense, ExpenseSplit, Transaction } from "./expense"; // Imported from "./expense"
+import { Expense, ExpenseSplit,Transaction } from "./expense"; // Imported from "./expense"
 import { OAuthIntegration } from "./oauth";
 import { Attachment } from "./attachment";
 import { UploadResponse } from "./upload";
@@ -101,3 +101,29 @@ export interface MarkAsReadResponse extends ApiResponse<null> {}
  * Additional API response interfaces as needed
  */
 export interface UpdateChoreResponse extends ApiResponse<Chore> {}
+
+export interface DeleteTransactionResponse extends ApiResponse<null> {}
+
+// Add these new interfaces
+export interface GetTransactionsResponse extends ApiResponse<Transaction[]> {}
+
+export interface CreateTransactionResponse extends ApiResponse<Transaction> {}
+
+export interface UpdateTransactionResponse extends ApiResponse<Transaction> {}
+
+export interface CreateSubtaskResponse extends ApiResponse<Chore> {}
+
+export interface UpdateSubtaskResponse extends ApiResponse<Chore> {}
+
+export interface DeleteSubtaskResponse extends ApiResponse<null> {}
+
+// Add this new interface for expense operations
+export interface ExpenseResponse extends ApiResponse<Expense> {}
+
+// Add this new interface for chore operations
+export interface ChoreResponse extends ApiResponse<Chore> {}
+
+/**
+ * Corrected Response structure for fetching user households.
+ */
+export interface GetUserHouseholdsResponse extends ApiResponse<Household[]> {}

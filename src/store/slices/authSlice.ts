@@ -12,7 +12,8 @@ interface AuthState {
   isSuccess: boolean;
   isError: boolean;
   message: string | null;
-  isAuthenticated: boolean; // Add this line
+  isAuthenticated: boolean;
+  isInitialized: boolean; // New flag
 }
 
 const initialState: AuthState = {
@@ -22,7 +23,8 @@ const initialState: AuthState = {
   isSuccess: false,
   isError: false,
   message: null,
-  isAuthenticated: false, // Add this line
+  isAuthenticated: false,
+  isInitialized: false, // Initialize as false
 };
 
 // Async Thunks
@@ -118,6 +120,14 @@ const authSlice = createSlice({
     setAccessToken: (state, action: PayloadAction<string | null>) => {
       state.accessToken = action.payload;
     },
+    updateAuthState: (state, action: PayloadAction<{ isAuthenticated: boolean; isInitialized: boolean }>) => {
+      state.isAuthenticated = action.payload.isAuthenticated;
+      state.isInitialized = action.payload.isInitialized;
+      if (!action.payload.isAuthenticated) {
+        state.user = null;
+        state.accessToken = null;
+      }
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -130,6 +140,7 @@ const authSlice = createSlice({
         state.isSuccess = true;
         state.user = action.payload.user;
         state.accessToken = action.payload.accessToken;
+        state.isAuthenticated = true;
       })
       .addCase(login.rejected, (state, action) => {
         state.isLoading = false;
@@ -137,6 +148,7 @@ const authSlice = createSlice({
         state.message = action.payload as string;
         state.user = null;
         state.accessToken = null;
+        state.isAuthenticated = false;
       })
       // Register Cases
       .addCase(register.pending, (state) => {
@@ -147,6 +159,7 @@ const authSlice = createSlice({
         state.isSuccess = true;
         state.user = action.payload.data.user;
         state.accessToken = action.payload.data.accessToken;
+        state.isAuthenticated = true;
       })
       .addCase(register.rejected, (state, action) => {
         state.isLoading = false;
@@ -154,11 +167,14 @@ const authSlice = createSlice({
         state.message = action.payload as string;
         state.user = null;
         state.accessToken = null;
+        state.isAuthenticated = false;
       })
       // Logout Cases
       .addCase(logout.fulfilled, (state) => {
         state.user = null;
         state.accessToken = null;
+        state.isAuthenticated = false;
+        state.isInitialized = true;
       })
       .addCase(logout.rejected, (state, action) => {
         state.isError = true;
@@ -169,17 +185,19 @@ const authSlice = createSlice({
         state.user = action.payload;
         state.accessToken = Cookies.get('accessToken') || null;
         state.isAuthenticated = !!action.payload;
+        state.isInitialized = true; // Mark as initialized
       })
       .addCase(initializeAuth.rejected, (state) => {
         state.user = null;
         state.accessToken = null;
         state.isAuthenticated = false;
+        state.isInitialized = true; // Mark as initialized
       });
   },
 });
 
 // Export Actions
-export const { reset, setAccessToken } = authSlice.actions;
+export const { reset, setAccessToken, updateAuthState } = authSlice.actions;
 
 // Export Reducer
 export default authSlice.reducer;

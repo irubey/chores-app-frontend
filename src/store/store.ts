@@ -1,5 +1,5 @@
 import { configureStore } from '@reduxjs/toolkit';
-import authReducer, { setAccessToken } from './slices/authSlice';
+import authReducer, { setAccessToken, updateAuthState } from './slices/authSlice';
 import messagesReducer from './slices/messagesSlice';
 import financesReducer from './slices/financesSlice';
 import choresReducer from './slices/choresSlice';
@@ -30,6 +30,11 @@ const store = configureStore({
 apiClient.registerTokenFunctions(
   () => store.getState().auth.accessToken,
   (token: string | null) => store.dispatch(setAccessToken(token))
+);
+
+// Register the updateAuthState function
+apiClient.registerAuthStateUpdate((state: { isAuthenticated: boolean; isInitialized: boolean }) => 
+  store.dispatch(updateAuthState(state))
 );
 
 // Initialize Axios interceptors after registration
