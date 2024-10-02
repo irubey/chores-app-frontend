@@ -1,26 +1,15 @@
 import React from 'react';
-import { useSelector } from 'react-redux';
-import { selectAuth } from '../../store/slices/authSlice';
-import { selectChores } from '../../store/slices/choresSlice';
-import { selectFinances } from '../../store/slices/financesSlice';
-import { selectNotifications } from '../../store/slices/notificationsSlice';
 import { useTheme } from '../../contexts/ThemeContext';
 import LoadingSpinner from '../common/LoadingSpinner';
+import useDashboardData from '../../hooks/useDashboardData';
 
 const DashboardSummary: React.FC = () => {
-  const { user } = useSelector(selectAuth);
-  const { chores, isLoading: choresLoading } = useSelector(selectChores);
-  const { expenses, isLoading: financesLoading } = useSelector(selectFinances);
-  const { notifications, isLoading: notificationsLoading } = useSelector(selectNotifications);
   const { theme } = useTheme();
+  const { user, isLoading, pendingChores, totalExpenses, unreadNotifications } = useDashboardData();
 
-  if (choresLoading || financesLoading || notificationsLoading) {
+  if (isLoading) {
     return <LoadingSpinner />;
   }
-
-  const pendingChores = chores.filter(chore => chore.status === 'PENDING').length;
-  const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-  const unreadNotifications = notifications.filter(notification => !notification.isRead).length;
 
   return (
     <div className={`p-6 rounded-lg shadow-md ${theme === 'dark' ? 'bg-neutral-800 text-white' : 'bg-white'}`}>

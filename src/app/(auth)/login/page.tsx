@@ -5,18 +5,19 @@ import useAuth from '../../../hooks/useAuth';
 import Input from '../../../components/common/Input';
 import Button from '../../../components/common/Button';
 import { useRouter } from 'next/navigation';
+import LoadingSpinner from '../../../components/common/LoadingSpinner';
 
 const LoginPage: React.FC = () => {
-  const { login, isLoading, isError, message, user } = useAuth();
+  const { login, isLoading, isError, message, isAuthenticated } = useAuth();
   const [formData, setFormData] = useState({ email: '', password: '' });
   const router = useRouter();
   const { email, password } = formData;
 
   useEffect(() => {
-    if (user) {
+    if (isAuthenticated) {
       router.push('/dashboard');
     }
-  }, [user, router]);
+  }, [isAuthenticated, router]);
 
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) =>
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -24,7 +25,6 @@ const LoginPage: React.FC = () => {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await login(email, password);
-    
   };
 
   return (
@@ -75,6 +75,7 @@ const LoginPage: React.FC = () => {
           >
             {isLoading ? 'Signing In...' : 'Sign In'}
           </Button>
+          {isError && <div className="text-red-500 text-center">{message}</div>}
         </div>
       </form>
       <p className="mt-4 text-center">

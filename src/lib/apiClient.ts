@@ -1,10 +1,8 @@
 // frontend/src/lib/apiClient.ts: Comprehensive API client for Household Management App with strong typing and global error handling
 
-import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse, AxiosError } from 'axios';
+import axios, { AxiosInstance, AxiosResponse, AxiosError } from 'axios';
 import { 
   ApiResponse, 
-  LoginResponse, 
-  RegisterResponse, 
   SyncCalendarResponse,
   InviteMemberResponse,
   GetHouseholdEventsResponse,
@@ -17,137 +15,93 @@ import {
   CreateTransactionResponse,
   UpdateTransactionResponse,
   GetUserHouseholdsResponse,
+  ExtendedAxiosRequestConfig, 
 } from '../types/api'; 
 import { User } from '../types/user';
 import { Household, HouseholdMember } from '../types/household';
-import { OAuthIntegration } from '../types/oauth';
 import { Attachment } from '../types/attachment';
 import { UploadResponse } from '../types/upload';
 import { Event } from '../types/event';
 import { Message, CreateMessageDTO, UpdateMessageDTO } from '../types/message';
-import { Chore, CreateChoreDTO, UpdateChoreDTO } from '../types/chore';
+import { Chore, CreateChoreDTO, UpdateChoreDTO, Subtask, CreateSubtaskDTO, UpdateSubtaskDTO, ChoreSwapRequest } from '../types/chore';
 import { Expense, CreateExpenseDTO, UpdateExpenseDTO } from '../types/expense';
 import { Notification } from '../types/notification';
-import { Thread, AttachmentDTO } from '../types/message'; // Assuming these types exist
+import { Thread } from '../types/message';
 
-type GetAccessTokenFn = () => string | null;
-type UpdateAccessTokenFn = (token: string | null) => void;
-type UpdateAuthStateFn = (state: { isAuthenticated: boolean; isInitialized: boolean }) => void;
+type AuthStateUpdateCallback = (state: { isAuthenticated: boolean; isInitialized: boolean }) => void;
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000/api';
-
-/**
- * Handles all API interactions with the backend server.
- * Includes interceptors for attaching tokens, refreshing them upon expiration, and global error handling.
- */
 class ApiClient {
   private axiosInstance: AxiosInstance;
-  private getAccessToken?: GetAccessTokenFn;
-  private updateAccessToken?: UpdateAccessTokenFn;
-  private updateAuthState?: UpdateAuthStateFn;
-  private user?: User;
+  private isRefreshing: boolean = false;
+  private pendingRequests: Array<() => void> = [];
+  private authStateUpdateCallbacks: AuthStateUpdateCallback[] = [];
+  private channel: BroadcastChannel;
 
   constructor() {
     this.axiosInstance = axios.create({
-      baseURL: API_BASE_URL,
-      withCredentials: true,
+      baseURL: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000/api',
+      withCredentials: true, // This ensures cookies are sent with every request
     });
-  }
 
-  /**
-   * Registers token management functions.
-   * Prevents direct coupling with the store.
-   */
-  public registerTokenFunctions(getAccessToken: GetAccessTokenFn, updateAccessToken: UpdateAccessTokenFn) {
-    this.getAccessToken = getAccessToken;
-    this.updateAccessToken = updateAccessToken;
-  }
+    this.channel = new BroadcastChannel('auth');
+    this.channel.onmessage = this.handleChannelMessage.bind(this);
 
-  /**
-   * Registers auth state update function.
-   * Prevents direct coupling with the store.
-   */
-  public registerAuthStateUpdate(updateFn: UpdateAuthStateFn) {
-    this.updateAuthState = updateFn;
-  }
-
-  public initializeInterceptors() {
     this.setupInterceptors();
   }
 
-  /**
-   * Sets up Axios interceptors for request and response.
-   */
-  private setupInterceptors() {
-    // Request interceptor to attach the access token to headers
-    this.axiosInstance.interceptors.request.use(
-      (config: InternalAxiosRequestConfig) => {
-        if (this.getAccessToken) {
-          const accessToken = this.getAccessToken();
-          if (accessToken && config.headers) {
-            config.headers['Authorization'] = `Bearer ${accessToken}`;
-          }
-        } else {
-          console.warn('getAccessToken function is not registered.');
-        }
-        return config;
-      },
-      (error: AxiosError) => {
-        return Promise.reject(error);
-      }
-    );
+  private handleChannelMessage(message: MessageEvent) {
+    if (message.data.type === 'REFRESH_TOKEN_SUCCESS') {
+      this.pendingRequests.forEach((cb) => cb());
+      this.pendingRequests = [];
+    } else if (message.data.type === 'REFRESH_TOKEN_FAILURE') {
+      this.notifyAuthStateChange({ isAuthenticated: false, isInitialized: true });
+      window.location.href = '/login';
+    }
+  }
 
-    // Response interceptor to handle token refresh on 401 errors and global error handling
+  private async refreshToken(): Promise<void> {
+    try {
+      await this.axiosInstance.post<ApiResponse<{ user: User }>>('/auth/refresh-token');
+      this.channel.postMessage({ type: 'REFRESH_TOKEN_SUCCESS' });
+    } catch (error) {
+      this.channel.postMessage({ type: 'REFRESH_TOKEN_FAILURE' });
+      throw error;
+    }
+  }
+
+  private setupInterceptors() {
     this.axiosInstance.interceptors.response.use(
       (response: AxiosResponse) => response,
       async (error: AxiosError) => {
-        const originalRequest = error.config as any;
+        const originalRequest = error.config as ExtendedAxiosRequestConfig;
 
-        // Check if the error is due to an unauthorized request
         if (error.response?.status === 401 && !originalRequest._retry) {
-          // Prevent infinite loop by not retrying the refresh-token endpoint
-          const isRefreshTokenRequest = originalRequest.url?.includes('/auth/refresh-token');
-
-          if (isRefreshTokenRequest) {
-            // If refresh-token itself failed, update auth state and reject
-            console.error('Refresh token failed. Updating auth state.');
-            if (this.updateAccessToken) {
-              this.updateAccessToken(null);
-            }
-            if (this.updateAuthState) {
-              this.updateAuthState({ isAuthenticated: false, isInitialized: true });
-            }
-            return Promise.reject(error);
+          if (this.isRefreshing) {
+            return new Promise((resolve, reject) => {
+              this.pendingRequests.push(() => {
+                resolve(this.axiosInstance(originalRequest));
+              });
+            });
           }
 
           originalRequest._retry = true;
+          this.isRefreshing = true;
 
-          if (this.auth && this.updateAccessToken) {
-            try {
-              const response = await this.auth.refreshToken();
-              const { accessToken: newAccessToken } = response;
-
-              this.updateAccessToken(newAccessToken);
-
-              originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
-              return this.axiosInstance(originalRequest);
-            } catch (refreshError) {
-              console.error('Token refresh failed:', refreshError);
-              // Instead of calling logout, update the auth state
-              if (this.updateAccessToken) {
-                this.updateAccessToken(null);
-              }
-              if (this.updateAuthState) {
-                this.updateAuthState({ isAuthenticated: false, isInitialized: true });
-              }
-              return Promise.reject(refreshError);
-            }
-          } else {
-            console.error('Token functions are not registered.');
+          try {
+            await this.refreshToken();
+            this.pendingRequests.forEach((cb) => cb());
+            this.pendingRequests = [];
+            return this.axiosInstance(originalRequest);
+          } catch (refreshError) {
+            this.notifyAuthStateChange({ isAuthenticated: false, isInitialized: true });
+            window.location.href = '/login';
+            return Promise.reject(refreshError);
+          } finally {
+            this.isRefreshing = false;
           }
         }
 
-        // Global error handling
+        // Existing global error handling
         if (error.response) {
           const { status, data } = error.response as AxiosResponse<{ message?: string; error?: string }>;
           console.error(`API Error: ${status} - ${data.message || data.error || 'Unknown error'}`);
@@ -157,120 +111,64 @@ class ApiClient {
           console.error('API Error:', error.message);
         }
 
-        // More detailed error logging
-        if (error.response) {
-          console.error('Response error:', error.response.status, error.response.data);
-        } else if (error.request) {
-          console.error('Request error:', error.request);
-        } else {
-          console.error('Error:', error.message);
-        }
-
         return Promise.reject(error);
       }
     );
   }
 
   /**
+   * Registers a callback to update authentication state in the Redux store.
+   * @param callback The function to call with the new auth state.
+   */
+  registerAuthStateUpdate(callback: AuthStateUpdateCallback) {
+    this.authStateUpdateCallbacks.push(callback);
+  }
+
+  /**
+   * Initializes Axios interceptors or other configurations.
+   */
+  initializeInterceptors() {
+    // Example: You can set up additional interceptors here if needed.
+    // Currently, interceptors are set up in the constructor.
+    // This method can be expanded based on specific requirements.
+    console.log('Axios interceptors have been initialized.');
+  }
+
+  /**
+   * Call these callbacks to notify about auth state changes.
+   */
+  private notifyAuthStateChange(state: { isAuthenticated: boolean; isInitialized: boolean }) {
+    this.authStateUpdateCallbacks.forEach(callback => callback(state));
+  }
+
+  /**
    * Authentication Methods
    */
   auth = {
-    /**
-     * Logs in a user with email and password.
-     * @param credentials Object containing email and password.
-     */
-    login: async (credentials: { email: string; password: string }): Promise<LoginResponse> => {
-      const response = await this.axiosInstance.post<ApiResponse<LoginResponse>>('/auth/login', credentials);
-      if (this.updateAccessToken) {
-        this.updateAccessToken(response.data.data.accessToken);
-      }
-      this.user = response.data.data.user;
+    register: async (data: { email: string; password: string; name: string }): Promise<User> => {
+      const response = await this.axiosInstance.post<ApiResponse<User>>('/auth/register', data);
+      this.notifyAuthStateChange({ isAuthenticated: true, isInitialized: true });
       return response.data.data;
     },
 
-    /**
-     * Registers a new user.
-     * @param data Object containing email, password, and name.
-     */
-    register: async (data: { email: string; password: string; name: string }): Promise<RegisterResponse> => {
-      const response = await this.axiosInstance.post<ApiResponse<{ user: User; accessToken: string }>>('/auth/register', data);
-      if (this.updateAccessToken) {
-        this.updateAccessToken(response.data.data.accessToken);
-      }
-      return response.data;
+    login: async (credentials: { email: string; password: string }): Promise<User> => {
+      const response = await this.axiosInstance.post<ApiResponse<User>>('/auth/login', credentials);
+      this.notifyAuthStateChange({ isAuthenticated: true, isInitialized: true });
+      return response.data.data;
     },
 
-    /**
-     * Refreshes the access token using a refresh token.
-     */
-    refreshToken: async (): Promise<{ accessToken: string }> => {
-      try {
-        const response = await this.axiosInstance.post<ApiResponse<{ accessToken: string }>>('/auth/refresh-token');
-        return response.data.data;
-      } catch (error) {
-        if (axios.isAxiosError(error) && error.response?.status === 401) {
-          // If refresh token fails with 401, update auth state
-          if (this.updateAuthState) {
-            this.updateAuthState({ isAuthenticated: false, isInitialized: true });
-          }
-        }
-        throw error;
-      }
+    logout: async (): Promise<void> => {
+      await this.axiosInstance.post('/auth/logout');
+      this.notifyAuthStateChange({ isAuthenticated: false, isInitialized: true });
     },
 
-    /**
-     * Logs out the current user.
-     */
-    logout: async (): Promise<ApiResponse<null>> => {
-      const response = await this.axiosInstance.post<ApiResponse<null>>('/auth/logout');
-      if (this.updateAccessToken) {
-        this.updateAccessToken(null);
-      }
-      return response.data;
-    },
-
-    /**
-     * Integrates OAuth providers for authentication.
-     * @param provider OAuth provider name.
-     * @param data OAuth tokens and related information.
-     */
-    oauthIntegrate: async (provider: string, data: { accessToken: string; refreshToken?: string; expiresAt?: Date }): Promise<ApiResponse<OAuthIntegration>> => {
-      const response = await this.axiosInstance.post<ApiResponse<OAuthIntegration>>(`/auth/oauth/${provider}`, data);
-      return response.data;
-    },
-
-    /**
-     * Fetches the current user's data using the access token.
-     */
-    getCurrentUser: async (): Promise<User | null> => {
-      try {
-        const response = await this.axiosInstance.get<ApiResponse<User>>('/auth/me');
-        return response.data.data;
-      } catch (error) {
-        if (axios.isAxiosError(error)) {
-          if (error.response) {
-            console.error('Response error:', error.response.status, error.response.data);
-          } else if (error.request) {
-            console.error('Request error:', error.request);
-          } else {
-            console.error('Error:', error.message);
-          }
-          if (error.response?.status === 401) {
-            return null; // User is not authenticated
-          }
-        }
-        throw error;
-      }
-    },
-
-    /**
-     * Initializes the authentication state.
-     */
     initializeAuth: async (): Promise<User | null> => {
       try {
-        return await this.auth.getCurrentUser();
+        const response = await this.axiosInstance.get<ApiResponse<User>>('/auth/me');
+        this.notifyAuthStateChange({ isAuthenticated: true, isInitialized: true });
+        return response.data.data;
       } catch (error) {
-        console.error('Failed to initialize auth:', error);
+        this.notifyAuthStateChange({ isAuthenticated: false, isInitialized: true });
         return null;
       }
     },
@@ -280,148 +178,103 @@ class ApiClient {
    * Household Management Methods
    */
   households = {
-    /**
-     * Retrieves all households the user is a member of.
-     */
-    getUserHouseholds: async (): Promise<GetUserHouseholdsResponse> => {
-      const response = await this.axiosInstance.get<GetUserHouseholdsResponse>('/users/me/households');
-      return response.data;
+    getUserHouseholds: async (): Promise<Household[]> => {
+      const response = await this.axiosInstance.get<ApiResponse<Household[]>>('/households');
+      return response.data.data;
     },
 
-    /**
-     * Retrieves details of a specific household.
-     * @param householdId The ID of the household.
-     */
-    getHousehold: async (householdId: string): Promise<ApiResponse<Household>> => {
+    getHousehold: async (householdId: string): Promise<Household> => {
       const response = await this.axiosInstance.get<ApiResponse<Household>>(`/households/${householdId}`);
-      return response.data;
+      return response.data.data;
     },
 
-    /**
-     * Creates a new household.
-     * @param data Object containing household details.
-     */
-    createHousehold: async (data: { name: string }): Promise<ApiResponse<Household>> => {
+    createHousehold: async (data: { name: string }): Promise<Household> => {
       const response = await this.axiosInstance.post<ApiResponse<Household>>('/households', data);
-      return response.data;
+      return response.data.data;
     },
 
-
-    /**
-     * Updates a specific household.
-     * @param householdId The ID of the household.
-     * @param data Object containing updates.
-     */
-    updateHousehold: async (householdId: string, data: Partial<Household>): Promise<ApiResponse<Household>> => {
+    updateHousehold: async (householdId: string, data: Partial<Household>): Promise<Household> => {
       const response = await this.axiosInstance.patch<ApiResponse<Household>>(`/households/${householdId}`, data);
-      return response.data;
+      return response.data.data;
     },
 
-    /**
-     * Deletes a specific household.
-     * @param householdId The ID of the household.
-     */
-    deleteHousehold: async (householdId: string): Promise<ApiResponse<null>> => {
-      const response = await this.axiosInstance.delete<ApiResponse<null>>(`/households/${householdId}`);
-      return response.data;
+    deleteHousehold: async (householdId: string): Promise<void> => {
+      await this.axiosInstance.delete(`/households/${householdId}`);
     },
 
-    /**
-     * Syncs household calendar with external providers.
-     * @param householdId The ID of the household.
-     * @param data SyncCalendarDTO containing provider and access token.
-     */
-    syncCalendar: async (householdId: string, data: { provider: string; accessToken: string }): Promise<SyncCalendarResponse> => {
+    addMember: async (householdId: string, data: { email: string; role?: 'ADMIN' | 'MEMBER' }): Promise<HouseholdMember> => {
+      const response = await this.axiosInstance.post<ApiResponse<HouseholdMember>>(`/households/${householdId}/members`, data);
+      return response.data.data;
+    },
+
+    removeMember: async (householdId: string, memberId: string): Promise<void> => {
+      await this.axiosInstance.delete(`/households/${householdId}/members/${memberId}`);
+    },
+
+    updateMemberStatus: async (householdId: string, memberId: string, status: string): Promise<HouseholdMember> => {
+      const response = await this.axiosInstance.patch<ApiResponse<HouseholdMember>>(`/households/${householdId}/members/${memberId}/status`, { status });
+      return response.data.data;
+    },
+
+    getSelectedHouseholds: async (): Promise<Household[]> => {
+      const response = await this.axiosInstance.get<ApiResponse<Household[]>>('/households/selected');
+      return response.data.data;
+    },
+
+    toggleHouseholdSelection: async (householdId: string, isSelected: boolean): Promise<HouseholdMember> => {
+      const response = await this.axiosInstance.patch<ApiResponse<HouseholdMember>>(`/households/${householdId}/members/selection`, { isSelected });
+      return response.data.data;
+    },
+
+    syncCalendar: async (householdId: string, data: { provider: string; }): Promise<SyncCalendarResponse> => {
       const response = await this.axiosInstance.post<ApiResponse<Event[]>>(`/households/${householdId}/calendar/sync`, data);
       return response.data;
     },
 
-    /**
-     * Fetches all events for a specific household.
-     * @param householdId The ID of the household.
-     */
     getHouseholdEvents: async (householdId: string): Promise<GetHouseholdEventsResponse> => {
       const response = await this.axiosInstance.get<GetHouseholdEventsResponse>(`/households/${householdId}/events`);
       return response.data;
     },
 
-    /**
-     * Creates a new event for a specific household.
-     * @param householdId The ID of the household.
-     * @param eventData The data for the new event.
-     */
     createEvent: async (householdId: string, eventData: Partial<Event>): Promise<CreateEventResponse> => {
       const response = await this.axiosInstance.post<CreateEventResponse>(`/households/${householdId}/events`, eventData);
       return response.data;
     },
 
-    /**
-     * Updates an existing event for a specific household.
-     * @param householdId The ID of the household.
-     * @param eventId The ID of the event to update.
-     * @param eventData The updated data for the event.
-     */
     updateEvent: async (householdId: string, eventId: string, eventData: Partial<Event>): Promise<UpdateEventResponse> => {
       const response = await this.axiosInstance.patch<UpdateEventResponse>(`/households/${householdId}/events/${eventId}`, eventData);
       return response.data;
     },
 
-    /**
-     * Deletes an event from a specific household.
-     * @param householdId The ID of the household.
-     * @param eventId The ID of the event to delete.
-     */
     deleteEvent: async (householdId: string, eventId: string): Promise<void> => {
       await this.axiosInstance.delete(`/households/${householdId}/events/${eventId}`);
     },
-
-    // Add more household-related methods as needed
   };
-
+ 
   /**
    * Household Member Management Methods
    */
   householdMembers = {
-    /**
-     * Retrieves all members of a household.
-     * @param householdId The ID of the household.
-     */
     getMembers: async (householdId: string): Promise<ApiResponse<HouseholdMember[]>> => {
       const response = await this.axiosInstance.get<ApiResponse<HouseholdMember[]>>(`/households/${householdId}/members`);
       return response.data;
     },
 
-    /**
-     * Invites a new member to the household.
-     * @param householdId The ID of the household.
-     * @param data Invitation details.
-     */
     inviteMember: async (householdId: string, data: { email: string; role?: 'ADMIN' | 'MEMBER' }): Promise<InviteMemberResponse> => {
       const response = await this.axiosInstance.post<ApiResponse<HouseholdMember>>(`/households/${householdId}/invitations`, data);
       return response.data;
     },
 
-    /**
-     * Removes a member from the household.
-     * @param householdId The ID of the household.
-     * @param memberId The ID of the member to remove.
-     */
     removeMember: async (householdId: string, memberId: string): Promise<ApiResponse<null>> => {
       const response = await this.axiosInstance.delete<ApiResponse<null>>(`/households/${householdId}/members/${memberId}`);
       return response.data;
     },
-
-    // Add more household member-related methods as needed
   };
 
   /**
    * Utility Methods
    */
   utils = {
-    /**
-     * Uploads a file to the server.
-     * @param file The file to upload.
-     */
     uploadFile: async (file: File): Promise<ApiResponse<UploadResponse>> => {
       const formData = new FormData();
       formData.append('file', file);
@@ -433,85 +286,45 @@ class ApiClient {
       return response.data;
     },
 
-    /**
-     * Fetches attachment details.
-     * @param attachmentId The ID of the attachment.
-     */
     getAttachment: async (attachmentId: string): Promise<ApiResponse<Attachment>> => {
       const response = await this.axiosInstance.get<ApiResponse<Attachment>>(`/attachments/${attachmentId}`);
       return response.data;
     },
-
-    // Add more utility-related methods as needed
   };
 
   /**
    * Messaging Methods
    */
   messages = {
-    /**
-     * Retrieves all messages in a household.
-     */
     getMessages: async (householdId: string): Promise<Message[]> => {
       const response = await this.axiosInstance.get<ApiResponse<Message[]>>(`/households/${householdId}/messages`);
       return response.data.data;
     },
 
-    /**
-     * Creates a new message.
-     */
     createMessage: async (householdId: string, data: CreateMessageDTO): Promise<Message> => {
       const response = await this.axiosInstance.post<ApiResponse<Message>>(`/households/${householdId}/messages`, data);
       return response.data.data;
     },
 
-    /**
-     * Updates an existing message.
-     * @param householdId The ID of the household.
-     * @param messageId The ID of the message to update.
-     * @param data The updated message data.
-     */
     updateMessage: async (householdId: string, messageId: string, data: UpdateMessageDTO): Promise<Message> => {
       const response = await this.axiosInstance.patch<ApiResponse<Message>>(`/households/${householdId}/messages/${messageId}`, data);
       return response.data.data;
     },
 
-    /**
-     * Deletes a message.
-     * @param householdId The ID of the household.
-     * @param messageId The ID of the message to delete.
-     */
     deleteMessage: async (householdId: string, messageId: string): Promise<void> => {
       await this.axiosInstance.delete(`/households/${householdId}/messages/${messageId}`);
     },
 
-    /**
-     * Retrieves threads for a specific message.
-     * @param householdId The ID of the household.
-     * @param messageId The ID of the message.
-     */
     getThreads: async (householdId: string, messageId: string): Promise<Thread[]> => {
       const response = await this.axiosInstance.get<ApiResponse<Thread[]>>(`/households/${householdId}/messages/${messageId}/threads`);
       return response.data.data;
     },
 
-    /**
-     * Creates a new thread under a specific message.
-     * @param householdId The ID of the household.
-     * @param messageId The ID of the message.
-     * @param data The thread data.
-     */
     createThread: async (householdId: string, messageId: string, data: { content: string }): Promise<Thread> => {
       const response = await this.axiosInstance.post<ApiResponse<Thread>>(`/households/${householdId}/messages/${messageId}/threads`, data);
       return response.data.data;
     },
 
-    /**
-     * Uploads an attachment to a specific message.
-     * @param householdId The ID of the household.
-     * @param messageId The ID of the message.
-     * @param file The file to attach.
-     */
     uploadAttachment: async (householdId: string, messageId: string, file: File): Promise<Attachment> => {
       const formData = new FormData();
       formData.append('file', file);
@@ -522,190 +335,132 @@ class ApiClient {
       });
       return response.data.data;
     },
-
-    // Add more message-related methods as needed
   };
 
   /**
    * Chore Management Methods
    */
   chores = {
-    /**
-     * Retrieves all chores in a household.
-     */
     getChores: async (householdId: string): Promise<Chore[]> => {
       const response = await this.axiosInstance.get<ApiResponse<Chore[]>>(`/households/${householdId}/chores`);
       return response.data.data;
     },
 
-    /**
-     * Creates a new chore.
-     */
     createChore: async (householdId: string, choreData: CreateChoreDTO): Promise<Chore> => {
       const response = await this.axiosInstance.post<ApiResponse<Chore>>(`/households/${householdId}/chores`, choreData);
       return response.data.data;
     },
 
-    /**
-     * Updates an existing chore.
-     */
     updateChore: async (householdId: string, choreId: string, choreData: UpdateChoreDTO): Promise<Chore> => {
       const response = await this.axiosInstance.patch<ApiResponse<Chore>>(`/households/${householdId}/chores/${choreId}`, choreData);
       return response.data.data;
     },
 
-    /**
-     * Deletes a chore.
-     */
     deleteChore: async (householdId: string, choreId: string): Promise<void> => {
       await this.axiosInstance.delete(`/households/${householdId}/chores/${choreId}`);
     },
 
-    // ... additional chore methods ...
+    subtasks: {
+      createSubtask: async (householdId: string, choreId: string, subtaskData: CreateSubtaskDTO): Promise<Subtask> => {
+        const response = await this.axiosInstance.post<ApiResponse<Subtask>>(
+          `/households/${householdId}/chores/${choreId}/subtasks`,
+          subtaskData
+        );
+        return response.data.data;
+      },
+
+      updateSubtask: async (householdId: string, choreId: string, subtaskId: string, subtaskData: UpdateSubtaskDTO): Promise<Subtask> => {
+        const response = await this.axiosInstance.patch<ApiResponse<Subtask>>(
+          `/households/${householdId}/chores/${choreId}/subtasks/${subtaskId}`,
+          subtaskData
+        );
+        return response.data.data;
+      },
+
+      deleteSubtask: async (householdId: string, choreId: string, subtaskId: string): Promise<void> => {
+        await this.axiosInstance.delete<ApiResponse<null>>(
+          `/households/${householdId}/chores/${choreId}/subtasks/${subtaskId}`
+        );
+      },
+    },
+
+    requestChoreSwap: async (householdId: string, choreId: string, targetUserId: string): Promise<ChoreSwapRequest> => {
+      const response = await this.axiosInstance.post<ApiResponse<ChoreSwapRequest>>(
+        `/households/${householdId}/chores/${choreId}/swap-request`,
+        { targetUserId }
+      );
+      return response.data.data;
+    },
+
+    approveChoreSwap: async (householdId: string, choreId: string, swapRequestId: string, approved: boolean): Promise<Chore> => {
+      const response = await this.axiosInstance.patch<ApiResponse<Chore>>(
+        `/households/${householdId}/chores/${choreId}/swap-approve`,
+        { swapRequestId, approved }
+      );
+      return response.data.data;
+    },
   };
-
-  /**
-   * Subtask Management Methods
-   */
-  subtasks = {
-    /**
-     * Creates a new subtask under a specific chore.
-     * @param householdId The ID of the household.
-     * @param choreId The ID of the chore.
-     * @param subtaskData The subtask data.
-     */
-    createSubtask: async (householdId: string, choreId: string, subtaskData: { title: string; description?: string }): Promise<CreateSubtaskResponse> => {
-      const response = await this.axiosInstance.post<ApiResponse<Chore>>(`/households/${householdId}/chores/${choreId}/subtasks`, subtaskData);
-      return response.data;
-    },
-
-    /**
-     * Updates an existing subtask.
-     * @param householdId The ID of the household.
-     * @param choreId The ID of the chore.
-     * @param subtaskId The ID of the subtask.
-     * @param subtaskData The updated subtask data.
-     */
-    updateSubtask: async (householdId: string, choreId: string, subtaskId: string, subtaskData: { title?: string; description?: string; completed?: boolean }): Promise<UpdateSubtaskResponse> => {
-      const response = await this.axiosInstance.patch<ApiResponse<Chore>>(`/households/${householdId}/chores/${choreId}/subtasks/${subtaskId}`, subtaskData);
-      return response.data;
-    },
-
-    /**
-     * Deletes a subtask.
-     * @param householdId The ID of the household.
-     * @param choreId The ID of the chore.
-     * @param subtaskId The ID of the subtask.
-     */
-    deleteSubtask: async (householdId: string, choreId: string, subtaskId: string): Promise<DeleteSubtaskResponse> => {
-      const response = await this.axiosInstance.delete<ApiResponse<null>>(`/households/${householdId}/chores/${choreId}/subtasks/${subtaskId}`);
-      return response.data;
-    },
-  }
 
   /**
    * Finances Management Methods
    */
   finances = {
-    /**
-     * Retrieves all expenses in a household.
-     */
     getExpenses: async (householdId: string): Promise<ApiResponse<Expense[]>> => {
       const response = await this.axiosInstance.get<ApiResponse<Expense[]>>(`/households/${householdId}/expenses`);
       return response.data;
     },
 
-    /**
-     * Creates a new expense.
-     */
     createExpense: async (householdId: string, expenseData: CreateExpenseDTO): Promise<ApiResponse<Expense>> => {
       const response = await this.axiosInstance.post<ApiResponse<Expense>>(`/households/${householdId}/expenses`, expenseData);
       return response.data;
     },
 
-    /**
-     * Updates an existing expense.
-     */
     updateExpense: async (householdId: string, expenseId: string, expenseData: UpdateExpenseDTO): Promise<ApiResponse<Expense>> => {
       const response = await this.axiosInstance.patch<ApiResponse<Expense>>(`/households/${householdId}/expenses/${expenseId}`, expenseData);
       return response.data;
     },
 
-    /**
-     * Deletes an expense.
-     */
     deleteExpense: async (householdId: string, expenseId: string): Promise<void> => {
       await this.axiosInstance.delete(`/households/${householdId}/expenses/${expenseId}`);
     },
 
-    /**
-     * Retrieves all transactions in a household.
-     */
     getTransactions: async (householdId: string): Promise<GetTransactionsResponse> => {
       const response = await this.axiosInstance.get<GetTransactionsResponse>(`/households/${householdId}/transactions`);
       return response.data;
     },
 
-    /**
-     * Creates a new transaction.
-     */
     createTransaction: async (householdId: string, transactionData: { amount: number; type: 'INCOME' | 'EXPENSE'; category: string; date: string; description?: string }): Promise<CreateTransactionResponse> => {
       const response = await this.axiosInstance.post<CreateTransactionResponse>(`/households/${householdId}/transactions`, transactionData);
       return response.data;
     },
 
-    /**
-     * Updates an existing transaction.
-     */
     updateTransaction: async (householdId: string, transactionId: string, transactionData: { amount?: number; type?: 'INCOME' | 'EXPENSE'; category?: string; date?: string; description?: string }): Promise<UpdateTransactionResponse> => {
       const response = await this.axiosInstance.patch<UpdateTransactionResponse>(`/households/${householdId}/transactions/${transactionId}`, transactionData);
       return response.data;
     },
 
-    /**
-     * Deletes a transaction.
-     */
     deleteTransaction: async (householdId: string, transactionId: string): Promise<void> => {
       await this.axiosInstance.delete(`/households/${householdId}/transactions/${transactionId}`);
     },
-
-    // ... other finances-related methods ...
   };
 
   /**
    * Notification Methods
    */
   notifications = {
-    /**
-     * Retrieves all notifications for the authenticated user.
-     */
     getNotifications: async (): Promise<Notification[]> => {
       const response = await this.axiosInstance.get<ApiResponse<Notification[]>>('/notifications');
       return response.data.data;
     },
 
-    /**
-     * Marks a specific notification as read.
-     * @param notificationId The ID of the notification to mark as read.
-     */
     markAsRead: async (notificationId: string): Promise<void> => {
       await this.axiosInstance.patch(`/notifications/${notificationId}/read`);
     },
 
-    /**
-     * Deletes a specific notification.
-     * @param notificationId The ID of the notification to delete.
-     */
     deleteNotification: async (notificationId: string): Promise<void> => {
       await this.axiosInstance.delete(`/notifications/${notificationId}`);
     },
-
-    // Add more notification-related methods as needed
   };
-
-  /**
-   * Remove methods that directly access the store
-   */
 }
 
 export const apiClient = new ApiClient();

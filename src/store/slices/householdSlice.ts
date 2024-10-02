@@ -2,11 +2,13 @@ import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { apiClient } from '../../lib/apiClient';
 import { Household, HouseholdMember } from '../../types/household';
 import { RootState } from '../store';
+import { GetUserHouseholdsResponse, InviteMemberResponse } from '../../types/api';
 
 interface HouseholdState {
   userHouseholds: Household[];
   currentHousehold: Household | null;
   members: HouseholdMember[];
+  selectedHouseholds: Household[];
   isLoading: boolean;
   isSuccess: boolean;
   isError: boolean;
@@ -17,39 +19,26 @@ const initialState: HouseholdState = {
   userHouseholds: [],
   currentHousehold: null,
   members: [],
+  selectedHouseholds: [],
   isLoading: false,
   isSuccess: false,
   isError: false,
   message: '',
 };
 
-// Async thunks
 export const fetchUserHouseholds = createAsyncThunk<
   Household[],
   void,
   { rejectValue: string }
 >('household/fetchUserHouseholds', async (_, thunkAPI) => {
-  return await thunkWrapper(
-    () => apiClient.households.getUserHouseholds(),
-    'Failed to fetch user households',
-    thunkAPI
-  );
-});
-
-// Helper function to reduce redundancy in async thunks
-async function thunkWrapper<T>(
-  apiCall: () => Promise<{ data: T }>,
-  errorMessage: string,
-  thunkAPI: any
-): Promise<T> {
   try {
-    const response = await apiCall();
-    return response.data;
+    const response = await apiClient.households.getUserHouseholds();
+    return response;
   } catch (error: any) {
-    const message = error.response?.data?.message || error.message || errorMessage;
+    const message = error.response?.data?.message || error.message || 'Failed to fetch user households';
     return thunkAPI.rejectWithValue(message);
   }
-}
+});
 
 export const getHousehold = createAsyncThunk<
   Household,
@@ -58,9 +47,9 @@ export const getHousehold = createAsyncThunk<
 >('household/getHousehold', async (householdId, thunkAPI) => {
   try {
     const response = await apiClient.households.getHousehold(householdId);
-    return response.data;
+    return response;
   } catch (error: any) {
-    const message = error.response?.data?.message || error.message || 'Failed to fetch user households';
+    const message = error.response?.data?.message || error.message || 'Failed to fetch household';
     return thunkAPI.rejectWithValue(message);
   }
 });
@@ -72,7 +61,7 @@ export const createHousehold = createAsyncThunk<
 >('household/createHousehold', async (data, thunkAPI) => {
   try {
     const response = await apiClient.households.createHousehold(data);
-    return response.data;
+    return response;
   } catch (error: any) {
     const message = error.response?.data?.message || error.message || 'Failed to create household';
     return thunkAPI.rejectWithValue(message);
@@ -86,7 +75,7 @@ export const updateHousehold = createAsyncThunk<
 >('household/updateHousehold', async ({ householdId, data }, thunkAPI) => {
   try {
     const response = await apiClient.households.updateHousehold(householdId, data);
-    return response.data;
+    return response;
   } catch (error: any) {
     const message = error.response?.data?.message || error.message || 'Failed to update household';
     return thunkAPI.rejectWithValue(message);
@@ -149,7 +138,34 @@ export const removeHouseholdMember = createAsyncThunk<
   }
 });
 
-// Slice
+export const fetchSelectedHouseholds = createAsyncThunk<
+  Household[],
+  void,
+  { rejectValue: string }
+>('household/fetchSelectedHouseholds', async (_, thunkAPI) => {
+  try {
+    const response = await apiClient.households.getSelectedHouseholds();
+    return response;
+  } catch (error: any) {
+    const message = error.response?.data?.message || error.message || 'Failed to fetch selected households';
+    return thunkAPI.rejectWithValue(message);
+  }
+});
+
+export const toggleHouseholdSelection = createAsyncThunk<
+  HouseholdMember,
+  { householdId: string; isSelected: boolean },
+  { rejectValue: string }
+>('household/toggleHouseholdSelection', async ({ householdId, isSelected }, thunkAPI) => {
+  try {
+    const response = await apiClient.households.toggleHouseholdSelection(householdId, isSelected);
+    return response;
+  } catch (error: any) {
+    const message = error.response?.data?.message || error.message || 'Failed to toggle household selection';
+    return thunkAPI.rejectWithValue(message);
+  }
+});
+
 const householdSlice = createSlice({
   name: 'household',
   initialState,
@@ -237,11 +253,40 @@ const householdSlice = createSlice({
         setFulfilled(state);
         state.members = state.members.filter(m => m.id !== action.payload.memberId);
       })
-      .addCase(removeHouseholdMember.rejected, setRejected);
+      .addCase(removeHouseholdMember.rejected, setRejected)
+      
+      // Fetch Selected Households
+      .addCase(fetchSelectedHouseholds.pending, setPending)
+      .addCase(fetchSelectedHouseholds.fulfilled, (state, action: PayloadAction<Household[]>) => {
+        setFulfilled(state);
+        // Assuming you have a separate state field for selectedHouseholds
+        state.selectedHouseholds = action.payload;
+      })
+      .addCase(fetchSelectedHouseholds.rejected, setRejected)
+      
+      // Toggle Household Selection
+      .addCase(toggleHouseholdSelection.pending, setPending)
+      .addCase(toggleHouseholdSelection.fulfilled, (state, action: PayloadAction<HouseholdMember>) => {
+        setFulfilled(state);
+        // Update the members list with the new isSelected status
+        const index = state.members.findIndex(m => m.userId === action.payload.userId && m.householdId === action.payload.householdId);
+        if (index !== -1) {
+          state.members[index].isSelected = action.payload.isSelected;
+        }
+        // Optionally, update selectedHouseholds based on isSelected
+        if (action.payload.isSelected) {
+          const household = state.userHouseholds.find(h => h.id === action.payload.householdId);
+          if (household && !state.selectedHouseholds.find(sh => sh.id === household.id)) {
+            state.selectedHouseholds.push(household);
+          }
+        } else {
+          state.selectedHouseholds = state.selectedHouseholds.filter(sh => sh.id !== action.payload.householdId);
+        }
+      })
+      .addCase(toggleHouseholdSelection.rejected, setRejected);
   },
 });
 
-// Helper functions to reduce redundancy in extraReducers
 function setPending(state: HouseholdState) {
   state.isLoading = true;
   state.isSuccess = false;
@@ -266,5 +311,7 @@ function setRejected(state: HouseholdState, action: PayloadAction<string>) {
 export const { reset, setCurrentHousehold } = householdSlice.actions;
 
 export const selectHousehold = (state: RootState) => state.household;
+
+export const selectSelectedHouseholds = (state: RootState) => state.household.selectedHouseholds;
 
 export default householdSlice.reducer;

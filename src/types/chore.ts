@@ -7,8 +7,9 @@ export interface Chore {
   status: ChoreStatus;
   recurrence?: string;
   priority?: number;
-  assignedUserIds?: string[]; // Added property
-  subtasks?: Subtask[];       // Added property
+  assignedUserIds?: string[]; 
+  subtasks?: Subtask[];       
+  swapRequests?: ChoreSwapRequest[];
 }
 
 export enum ChoreStatus {
@@ -60,4 +61,29 @@ export interface UpdateChoreDTO {
 export interface UpdateSubtaskDTO {
   title?: string;
   status?: SubtaskStatus;
+}
+
+export enum ChoreSwapRequestStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+}
+
+export interface ChoreSwapRequest {
+  id: string;
+  choreId: string;
+  requestingUserId: string;
+  targetUserId: string;
+  status: ChoreSwapRequestStatus;
+  createdAt: string; // ISO date string
+  updatedAt: string; // ISO date string
+}
+
+export interface CreateChoreSwapRequestDTO {
+  choreId: string;
+  targetUserId: string;
+}
+
+export interface UpdateChoreSwapRequestDTO {
+  status: ChoreSwapRequestStatus;
 }

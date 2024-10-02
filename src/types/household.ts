@@ -2,7 +2,8 @@ export interface Household {
   id: string;
   name: string;
   createdAt: string; // ISO string format
-  updatedAt: string; // ISO string format
+  updatedAt: string;// ISO string format
+  members: HouseholdMember[];
   // Add other fields as necessary
 }
 
@@ -12,5 +13,8 @@ export interface HouseholdMember {
   householdId: string;
   role: 'ADMIN' | 'MEMBER';
   joinedAt: string; // ISO string format
-  // Add other fields as necessary
+  isInvited: boolean;
+  isAccepted: boolean;
+  isRejected: boolean;
+  isSelected: boolean;
 }

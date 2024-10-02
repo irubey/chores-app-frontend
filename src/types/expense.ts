@@ -8,7 +8,12 @@ export interface Expense {
   updatedAt: string; // ISO string format
   dueDate?: string; // ISO string format
   category?: string;
-  // Add other fields as necessary
+  splits: ExpenseSplit[];
+  paidBy: {
+    id: string;
+    name: string;
+  };
+  transactions: Transaction[];
 }
 
 export interface ExpenseSplit {
@@ -16,7 +21,6 @@ export interface ExpenseSplit {
   expenseId: string;
   userId: string;
   amount: number;
-  // Add other fields as necessary
 }
 
 export interface Transaction {

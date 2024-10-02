@@ -1,15 +1,13 @@
 import { configureStore } from '@reduxjs/toolkit';
-import authReducer, { setAccessToken, updateAuthState } from './slices/authSlice';
+import authReducer, { updateAuthState } from './slices/authSlice';
 import messagesReducer from './slices/messagesSlice';
 import financesReducer from './slices/financesSlice';
 import choresReducer from './slices/choresSlice';
 import calendarReducer from './slices/calendarSlice';
 import notificationsReducer from './slices/notificationsSlice';
-import householdReducer from './slices/householdSlice'; // Import the new household reducer
+import householdReducer from './slices/householdSlice';
+import { apiClient } from '../lib/apiClient';
 
-import { apiClient } from '../lib/apiClient'; // Import apiClient
-
-// Initialize the Redux store with all reducers
 const store = configureStore({
   reducer: {
     auth: authReducer,
@@ -18,7 +16,7 @@ const store = configureStore({
     chores: choresReducer,
     calendar: calendarReducer,
     notifications: notificationsReducer,
-    household: householdReducer, // Add the new household reducer
+    household: householdReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
@@ -26,14 +24,8 @@ const store = configureStore({
     }),
 });
 
-// **Register Token Management Functions with ApiClient**
-apiClient.registerTokenFunctions(
-  () => store.getState().auth.accessToken,
-  (token: string | null) => store.dispatch(setAccessToken(token))
-);
-
 // Register the updateAuthState function
-apiClient.registerAuthStateUpdate((state: { isAuthenticated: boolean; isInitialized: boolean }) => 
+apiClient.registerAuthStateUpdate((state: { isAuthenticated: boolean; isInitialized: boolean }) =>
   store.dispatch(updateAuthState(state))
 );
 

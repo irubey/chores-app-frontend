@@ -15,17 +15,7 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 export default function DashboardPage() {
   const { user } = useSelector(selectAuth);
   const { theme } = useTheme();
-  const router = useRouter();
 
-  useEffect(() => {
-    if (!user) {
-      router.push('/login');
-    }
-  }, [user, router]);
-
-  if (!user) {
-    return <LoadingSpinner />;
-  }
 
   const errorFallback = (
     <div className="text-red-500 p-4 bg-red-100 rounded-md">
@@ -38,7 +28,7 @@ export default function DashboardPage() {
       <h1 className="text-h1 mb-6">Welcome, {user.name}</h1>
       
       <ErrorBoundary fallback={errorFallback}>
-        <HouseholdSelector />
+        <HouseholdSelector user={user}/>
       </ErrorBoundary>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

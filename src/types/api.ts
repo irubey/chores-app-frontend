@@ -11,6 +11,7 @@ import { Attachment } from "./attachment";
 import { UploadResponse } from "./upload";
 import { UpdateChoreDTO } from "./chore";
 import { Chore, Subtask } from "./chore";
+import { AxiosRequestConfig } from 'axios';
 
 export interface ChoreWithAssignees extends Chore {
   assignedUsers: User[];
@@ -33,10 +34,6 @@ export interface LoginResponse {
   user: User;
 }
 
-/**
- * Response structure for registration requests.
- */
-export interface RegisterResponse extends ApiResponse<{ user: User; accessToken: string }> {}
 
 /**
  * Response structure for fetching households.
@@ -127,3 +124,7 @@ export interface ChoreResponse extends ApiResponse<Chore> {}
  * Corrected Response structure for fetching user households.
  */
 export interface GetUserHouseholdsResponse extends ApiResponse<Household[]> {}
+
+export interface ExtendedAxiosRequestConfig extends AxiosRequestConfig {
+  _retry?: boolean;
+}

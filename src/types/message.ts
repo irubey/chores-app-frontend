@@ -1,4 +1,4 @@
-import { CreateAttachmentDTO } from './attachment';
+import { User } from './user';
 
 export interface Message {
   id: string;
@@ -7,7 +7,9 @@ export interface Message {
   content: string;
   createdAt: string; // ISO string format
   updatedAt: string; // ISO string format
-  // Add other fields as necessary
+  author: User;
+  threads: Thread[];
+  attachments: Attachment[];
 }
 
 export interface CreateMessageDTO {
@@ -27,7 +29,8 @@ export interface Thread {
   content: string;
   createdAt: string; // ISO string format
   updatedAt: string; // ISO string format
-  // Add other fields as necessary
+  author: User;
+  attachments: Attachment[];
 }
 
 export interface CreateThreadDTO {
@@ -46,7 +49,11 @@ export interface Attachment {
   fileType: string;
   createdAt: string; // ISO string format
   updatedAt: string; // ISO string format
-  // Add other fields as necessary
+}
+
+export interface CreateAttachmentDTO {
+  url: string;
+  fileType: string;
 }
 
 export interface AttachmentDTO {
@@ -54,21 +61,7 @@ export interface AttachmentDTO {
   fileType: string;
 }
 
-export interface MessageWithDetails extends Message {
-  author: {
-    id: string;
-    name: string;
-    // Add other relevant user fields
-  };
-  threads: Thread[];
-  attachments: Attachment[];
-}
-
-export interface ThreadWithDetails extends Thread {
-  author: {
-    id: string;
-    name: string;
-    // Add other relevant user fields
-  };
-  attachments: Attachment[];
-}
+// These interfaces are now redundant as they're covered by the main interfaces
+// Keeping them for backwards compatibility, but they can be removed if not used elsewhere
+export interface MessageWithDetails extends Message {}
+export interface ThreadWithDetails extends Thread {}

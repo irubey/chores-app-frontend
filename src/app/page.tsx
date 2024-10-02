@@ -1,12 +1,31 @@
 'use client'
 
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { FaMoneyBillWave, FaComments, FaClipboardList, FaCalendarAlt } from 'react-icons/fa';
+import useAuth from '../hooks/useAuth';
+import LoadingSpinner from '../components/common/LoadingSpinner';
 
 function LandingPage() {
+  const router = useRouter();
+  const { isAuthenticated, isInitialized } = useAuth();
+
+  useEffect(() => {
+    if (isInitialized && isAuthenticated) {
+      router.push('/dashboard');
+    }
+  }, [isInitialized, isAuthenticated, router]);
+
+  // Display spinner only if initialization is pending
+  if (!isInitialized) {
+    return <LoadingSpinner />;
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-background-light dark:bg-background-dark text-text-primary font-sans">
-      <main className="flex-grow">
+      {/* Landing Page Content */}
+      <main>
         {/* Welcome Section */}
         <section className="container mx-auto py-20 px-4 text-center">
           <h1 className="text-4xl md:text-5xl mb-6 font-serif text-primary-dark">Welcome to roomies</h1>
@@ -17,59 +36,46 @@ function LandingPage() {
             <Link href="/login" className="btn btn-primary px-6 py-3 text-lg">
               Login
             </Link>
-            <Link href="/register" className="btn btn-secondary px-6 py-3 text-lg">
-              Register
+            <Link href="/register" className="btn btn-accent px-6 py-3 text-lg">
+              Get Started
             </Link>
           </div>
         </section>
 
         {/* Features Section */}
-        <section className="bg-white dark:bg-neutral-dark py-16 px-4">
-          <div className="container mx-auto">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Finance Splitting */}
-              <div className="card bg-white dark:bg-neutral-dark p-6 rounded-lg shadow-md">
-                <h3 className="text-2xl mb-4 font-serif text-primary flex items-center">
-                  <FaMoneyBillWave className="mr-2 text-accent" />
-                  Finance Splitting
-                </h3>
-                <p className="text-body text-text-secondary">
-                  Effortlessly track and split expenses among roommates. View summaries, settle debts, and manage your shared finances with ease.
-                </p>
-              </div>
+        <section className="container mx-auto py-16 px-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Messaging Forum */}
+            <div className="card bg-white dark:bg-neutral-dark p-6 rounded-lg shadow-md">
+              <h3 className="text-2xl mb-4 font-serif text-primary flex items-center">
+                <FaComments className="mr-2 text-accent" />
+                Messaging Forum
+              </h3>
+              <p className="text-body text-text-secondary">
+                Engage in real-time conversations with threaded discussions. Share files and stay organized with our tailored household communication platform.
+              </p>
+            </div>
 
-              {/* Household Messaging Forum */}
-              <div className="card bg-white dark:bg-neutral-dark p-6 rounded-lg shadow-md">
-                <h3 className="text-2xl mb-4 font-serif text-primary flex items-center">
-                  <FaComments className="mr-2 text-accent" />
-                  Messaging Forum
-                </h3>
-                <p className="text-body text-text-secondary">
-                  Engage in real-time conversations with threaded discussions. Share files and stay organized with our tailored household communication platform.
-                </p>
-              </div>
+            {/* Chores Management */}
+            <div className="card bg-white dark:bg-neutral-dark p-6 rounded-lg shadow-md">
+              <h3 className="text-2xl mb-4 font-serif text-primary flex items-center">
+                <FaClipboardList className="mr-2 text-accent" />
+                Chores Management
+              </h3>
+              <p className="text-body text-text-secondary">
+                Create and assign chores with detailed checklists. Set due dates, track progress, and receive reminders to keep your household running smoothly.
+              </p>
+            </div>
 
-              {/* Chores Management */}
-              <div className="card bg-white dark:bg-neutral-dark p-6 rounded-lg shadow-md">
-                <h3 className="text-2xl mb-4 font-serif text-primary flex items-center">
-                  <FaClipboardList className="mr-2 text-accent" />
-                  Chores Management
-                </h3>
-                <p className="text-body text-text-secondary">
-                  Create and assign chores with detailed checklists. Set due dates, track progress, and receive reminders to keep your household running smoothly.
-                </p>
-              </div>
-
-              {/* Shared Calendar */}
-              <div className="card bg-white dark:bg-neutral-dark p-6 rounded-lg shadow-md">
-                <h3 className="text-2xl mb-4 font-serif text-primary flex items-center">
-                  <FaCalendarAlt className="mr-2 text-accent" />
-                  Shared Calendar
-                </h3>
-                <p className="text-body text-text-secondary">
-                  Coordinate schedules, manage events collaboratively, and sync with personal calendars to ensure everyone is on the same page.
-                </p>
-              </div>
+            {/* Shared Calendar */}
+            <div className="card bg-white dark:bg-neutral-dark p-6 rounded-lg shadow-md">
+              <h3 className="text-2xl mb-4 font-serif text-primary flex items-center">
+                <FaCalendarAlt className="mr-2 text-accent" />
+                Shared Calendar
+              </h3>
+              <p className="text-body text-text-secondary">
+                Coordinate schedules, manage events collaboratively, and sync with personal calendars to ensure everyone is on the same page.
+              </p>
             </div>
           </div>
         </section>

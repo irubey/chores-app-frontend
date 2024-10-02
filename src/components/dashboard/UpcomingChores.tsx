@@ -1,23 +1,22 @@
+'use client'
+
 import React, { useEffect } from 'react';
-import { useSelector, useDispatch } from 'react-redux';
-import { selectChores, fetchChores, updateChore } from '../../store/slices/choresSlice';
-import { selectAuth } from '../../store/slices/authSlice';
 import { Chore, ChoreStatus } from '../../types/chore';
 import Button from '../common/Button';
 import { useTheme } from '../../contexts/ThemeContext';
-import { AppDispatch } from '../../store/store';
+import useChores from '../../hooks/useChores';
+import useAuth from '../../hooks/useAuth';
 
 const UpcomingChores: React.FC = () => {
-  const dispatch = useDispatch<AppDispatch>();
-  const { chores, isLoading, isError, message } = useSelector(selectChores);
-  const { user } = useSelector(selectAuth);
+  const { user } = useAuth();
+  const { chores, loading, error, getChores, editChore } = useChores(user?.id || '');
   const { theme } = useTheme();
 
   useEffect(() => {
     if (user?.id) {
-      dispatch(fetchChores(user.id));
+      getChores();
     }
-  }, [dispatch, user?.id]);
+  }, [user?.id, getChores]);
 
   const upcomingChores = chores.filter(chore => 
     chore.status !== ChoreStatus.COMPLETED && 
@@ -26,20 +25,16 @@ const UpcomingChores: React.FC = () => {
 
   const handleCompleteChore = (choreId: string) => {
     if (user?.id) {
-      dispatch(updateChore({
-        householdId: user.id,
-        choreId,
-        choreData: { status: ChoreStatus.COMPLETED }
-      }));
+      editChore(choreId, { status: ChoreStatus.COMPLETED });
     }
   };
 
-  if (isLoading) {
+  if (loading.fetchChores) {
     return <div className="text-center">Loading upcoming chores...</div>;
   }
 
-  if (isError) {
-    return <div className="text-red-500">Error: {message}</div>;
+  if (error) {
+    return <div className="text-red-500">Error: {error}</div>;
   }
 
   return (
@@ -58,8 +53,9 @@ const UpcomingChores: React.FC = () => {
               <Button
                 onClick={() => handleCompleteChore(chore.id)}
                 className="btn-primary"
+                disabled={loading.updateChore}
               >
-                Complete
+                {loading.updateChore ? 'Updating...' : 'Complete'}
               </Button>
             </li>
           ))}

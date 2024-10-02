@@ -1,95 +1,80 @@
-import { useEffect } from 'react';
+'use client'
 import { useSelector, useDispatch } from 'react-redux';
-import { RootState, AppDispatch } from '../store/store';
+import { AppDispatch, RootState } from '../store/store';
 import {
   fetchChores,
   addChore,
   updateChore,
-  deleteChore as deleteChoreAction,
-  reset
+  deleteChore,
+  resetError,
+  selectChores,
+  selectChoresLoading,
+  selectChoresError,
+  addSubtask,
+  updateSubtask,
+  deleteSubtask,
+  requestChoreSwap,
+  approveChoreSwap
 } from '../store/slices/choresSlice';
-import { handleApiError } from '../lib/utils';
+import { CreateChoreDTO, UpdateChoreDTO, CreateSubtaskDTO, UpdateSubtaskDTO } from '../types/chore';
+import { useEffect } from 'react';
 import { socketClient } from '../lib/socketClient';
-import { Chore, CreateChoreDTO, UpdateChoreDTO, Subtask } from '../types/chore';
 import { ChoreWithAssignees } from '../types/api'; // Assuming you have this type
 
-/**
- * Custom hook for managing chores.
- * Provides state and methods to perform CRUD operations on chores.
- */
-const useChores = () => {
+const useChores = (householdId: string) => {
   const dispatch: AppDispatch = useDispatch();
-  const { chores, isLoading, isSuccess, isError, message } = useSelector((state: RootState) => state.chores);
+  const chores = useSelector(selectChores);
+  const loading = useSelector(selectChoresLoading);
+  const error = useSelector(selectChoresError);
 
-  /**
-   * Fetches all chores for a given household.
-   * @param householdId - The ID of the household.
-   */
-  const fetchAllChores = async (householdId: string) => {
-    try {
-      await dispatch(fetchChores(householdId)).unwrap();
-    } catch (error) {
-      handleApiError(error);
-    }
+  const getChores = async () => {
+    await dispatch(fetchChores(householdId));
   };
 
-  /**
-   * Creates a new chore.
-   * @param householdId - The ID of the household.
-   * @param choreData - The data for the new chore.
-   */
-  const createNewChore = async (householdId: string, choreData: CreateChoreDTO) => {
-    try {
-      await dispatch(addChore({ householdId, choreData })).unwrap();
-    } catch (error) {
-      handleApiError(error);
-    }
+  const createChore = async (choreData: CreateChoreDTO) => {
+    await dispatch(addChore({ householdId, choreData }));
   };
 
-  /**
-   * Updates an existing chore.
-   * @param householdId - The ID of the household.
-   * @param choreId - The ID of the chore to update.
-   * @param choreData - The updated data for the chore.
-   */
-  const updateExistingChore = async (householdId: string, choreId: string, choreData: UpdateChoreDTO) => {
-    try {
-      await dispatch(updateChore({ householdId, choreId, choreData })).unwrap();
-    } catch (error) {
-      handleApiError(error);
-    }
+  const editChore = async (choreId: string, choreData: UpdateChoreDTO) => {
+    await dispatch(updateChore({ householdId, choreId, choreData }));
   };
 
-  /**
-   * Deletes a chore.
-   * @param householdId - The ID of the household.
-   * @param choreId - The ID of the chore to delete.
-   */
-  const deleteChore = async (householdId: string, choreId: string) => {
-    try {
-      await dispatch(deleteChoreAction({ householdId, choreId })).unwrap();
-    } catch (error) {
-      handleApiError(error);
-    }
+  const removeChore = async (choreId: string) => {
+    await dispatch(deleteChore({ householdId, choreId }));
   };
 
-  /**
-   * Resets the chores state.
-   */
-  const resetChores = () => {
-    dispatch(reset());
+  const resetChoresError = () => {
+    dispatch(resetError());
   };
 
-  /**
-   * Handles real-time updates for chores.
-   */
+  // New Functions for Subtasks
+  const addNewSubtask = async (choreId: string, subtaskData: CreateSubtaskDTO) => {
+    await dispatch(addSubtask({ householdId, choreId, subtaskData }));
+  };
+
+  const updateExistingSubtask = async (choreId: string, subtaskId: string, subtaskData: UpdateSubtaskDTO) => {
+    await dispatch(updateSubtask({ householdId, choreId, subtaskId, subtaskData }));
+  };
+
+  const removeSubtask = async (choreId: string, subtaskId: string) => {
+    await dispatch(deleteSubtask({ householdId, choreId, subtaskId }));
+  };
+
+  // New Functions for Chore Swapping
+  const initiateChoreSwap = async (choreId: string, targetUserId: string) => {
+    await dispatch(requestChoreSwap({ householdId, choreId, targetUserId }));
+  };
+
+  const handleChoreSwapApproval = async (choreId: string, swapRequestId: string, approved: boolean) => {
+    await dispatch(approveChoreSwap({ householdId, choreId, swapRequestId, approved }));
+  };
+
   useEffect(() => {
-    // Listen for chore updates via Socket.IO
     const handleChoreUpdate = (data: { chore: ChoreWithAssignees }) => {
       const choreData: UpdateChoreDTO = {
         title: data.chore.title,
         description: data.chore.description,
-        dueDate: data.chore.dueDate, // already a string
+        dueDate: data.chore.dueDate,
         status: data.chore.status,
         recurrence: data.chore.recurrence,
         priority: data.chore.priority,
@@ -105,21 +90,26 @@ const useChores = () => {
     socketClient.on('chore_update', handleChoreUpdate);
 
     return () => {
-      socketClient.off('chore_update', handleChoreUpdate); // Using the newly added 'off' method
+      socketClient.off('chore_update', handleChoreUpdate);
     };
-  }, [dispatch]);
+  }, [dispatch, householdId]);
 
   return {
     chores,
-    isLoading,
-    isSuccess,
-    isError,
-    message,
-    fetchAllChores,
-    createNewChore,
-    updateExistingChore,
-    deleteChore,
-    resetChores,
+    loading,
+    error,
+    getChores,
+    createChore,
+    editChore,
+    removeChore,
+    resetChoresError,
+    // Subtasks
+    addNewSubtask,
+    updateExistingSubtask,
+    removeSubtask,
+    // Chore Swapping
+    initiateChoreSwap,
+    handleChoreSwapApproval,
   };
 };
 

@@ -4,8 +4,8 @@ export interface User {
   passwordHash?: string;
   name: string;
   profileImageURL?: string;
-  createdAt: string; // ISO string format
-  updatedAt: string; // ISO string format
+  createdAt: string; 
+  updatedAt: string; 
   deviceTokens: string[];
-  // Add other fields as necessary
+  role: 'ADMIN' | 'MEMBER';
 }
