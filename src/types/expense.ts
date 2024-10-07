@@ -1,3 +1,8 @@
+export enum TransactionStatus {
+  PENDING = 'PENDING',
+  COMPLETED = 'COMPLETED',
+}
+
 export interface Expense {
   id: string;
   householdId: string;
@@ -29,10 +34,9 @@ export interface Transaction {
   fromUserId: string;
   toUserId: string;
   amount: number;
-  status: 'PENDING' | 'COMPLETED'; // Adjust based on backend's TransactionStatus enum
+  status: TransactionStatus;
   createdAt: string; // ISO string format
   updatedAt: string; // ISO string format
-  // Add other fields as necessary
 }
 
 export interface CreateExpenseSplitDTO {
@@ -61,4 +65,27 @@ export interface UpdateExpenseDTO {
 export interface UpdateExpenseSplitDTO {
   userId: string;
   amount: number;
+}
+
+// Updated CreateTransactionDTO
+export interface CreateTransactionDTO {
+  expenseId: string;
+  fromUserId: string;
+  toUserId: string;
+  amount: number;
+  type: 'EXPENSE' | 'INCOME';      // Added 'type'
+  category: string;                // Added 'category'
+  date: string;                    // Added 'date' as ISO string
+  description?: string;            // Optional 'description'
+}
+
+export interface UpdateTransactionDTO {
+  expenseId?: string;
+  fromUserId?: string;
+  toUserId?: string;
+  amount?: number;
+  type?: 'EXPENSE' | 'INCOME';      // Optional 'type'
+  category?: string;                // Optional 'category'
+  date?: string;                    // Optional 'date' as ISO string
+  description?: string;             // Optional 'description'
 }

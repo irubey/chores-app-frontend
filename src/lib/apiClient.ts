@@ -27,6 +27,8 @@ import { Chore, CreateChoreDTO, UpdateChoreDTO, Subtask, CreateSubtaskDTO, Updat
 import { Expense, CreateExpenseDTO, UpdateExpenseDTO } from '../types/expense';
 import { Notification } from '../types/notification';
 import { Thread } from '../types/message';
+import { ReceiptResponse, Receipt } from '../types/api';
+import { CreateTransactionDTO, UpdateTransactionDTO } from '../types/expense';
 
 type AuthStateUpdateCallback = (state: { isAuthenticated: boolean; isInitialized: boolean }) => void;
 
@@ -188,7 +190,13 @@ class ApiClient {
       return response.data.data;
     },
 
-    createHousehold: async (data: { name: string }): Promise<Household> => {
+    createHousehold: async (data: { 
+      name: string;
+      currency?: string;
+      icon?: string;
+      timezone?: string;
+      language?: string;
+    }): Promise<Household> => {
       const response = await this.axiosInstance.post<ApiResponse<Household>>('/households', data);
       return response.data.data;
     },
@@ -211,8 +219,11 @@ class ApiClient {
       await this.axiosInstance.delete(`/households/${householdId}/members/${memberId}`);
     },
 
-    updateMemberStatus: async (householdId: string, memberId: string, status: string): Promise<HouseholdMember> => {
-      const response = await this.axiosInstance.patch<ApiResponse<HouseholdMember>>(`/households/${householdId}/members/${memberId}/status`, { status });
+    updateMemberStatus: async (householdId: string, memberId: string, status: { 
+      isAccepted?: boolean;
+      isRejected?: boolean;
+    }): Promise<HouseholdMember> => {
+      const response = await this.axiosInstance.patch<ApiResponse<HouseholdMember>>(`/households/${householdId}/members/${memberId}/status`, status);
       return response.data.data;
     },
 
@@ -227,7 +238,7 @@ class ApiClient {
     },
 
     syncCalendar: async (householdId: string, data: { provider: string; }): Promise<SyncCalendarResponse> => {
-      const response = await this.axiosInstance.post<ApiResponse<Event[]>>(`/households/${householdId}/calendar/sync`, data);
+      const response = await this.axiosInstance.post<SyncCalendarResponse>(`/households/${householdId}/calendar/sync`, data);
       return response.data;
     },
 
@@ -429,18 +440,37 @@ class ApiClient {
       return response.data;
     },
 
-    createTransaction: async (householdId: string, transactionData: { amount: number; type: 'INCOME' | 'EXPENSE'; category: string; date: string; description?: string }): Promise<CreateTransactionResponse> => {
+    createTransaction: async (
+      householdId: string,
+      transactionData: CreateTransactionDTO
+    ): Promise<CreateTransactionResponse> => {
       const response = await this.axiosInstance.post<CreateTransactionResponse>(`/households/${householdId}/transactions`, transactionData);
       return response.data;
     },
 
-    updateTransaction: async (householdId: string, transactionId: string, transactionData: { amount?: number; type?: 'INCOME' | 'EXPENSE'; category?: string; date?: string; description?: string }): Promise<UpdateTransactionResponse> => {
+    updateTransaction: async (
+      householdId: string,
+      transactionId: string,
+      transactionData: UpdateTransactionDTO
+    ): Promise<UpdateTransactionResponse> => {
       const response = await this.axiosInstance.patch<UpdateTransactionResponse>(`/households/${householdId}/transactions/${transactionId}`, transactionData);
       return response.data;
     },
 
     deleteTransaction: async (householdId: string, transactionId: string): Promise<void> => {
       await this.axiosInstance.delete(`/households/${householdId}/transactions/${transactionId}`);
+    },
+
+    // **Added uploadReceipt Method**
+    uploadReceipt: async (householdId: string, expenseId: string, receiptFile: File): Promise<ReceiptResponse> => {
+      const formData = new FormData();
+      formData.append('file', receiptFile);
+      const response = await this.axiosInstance.post<ReceiptResponse>(`/households/${householdId}/expenses/${expenseId}/receipts`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data;
     },
   };
 

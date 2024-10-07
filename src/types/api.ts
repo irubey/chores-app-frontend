@@ -43,7 +43,11 @@ export interface GetHouseholdsResponse extends ApiResponse<Household[]> {}
 /**
  * Response structure for syncing calendar.
  */
-export interface SyncCalendarResponse extends ApiResponse<Event[]> {}
+export interface SyncCalendarResponse extends ApiResponse<{
+  events: Event[];
+  provider: string;
+  lastSync: string; // ISO date string
+}> {}
 
 /**
  * Response structure for fetching household members.
@@ -128,3 +132,14 @@ export interface GetUserHouseholdsResponse extends ApiResponse<Household[]> {}
 export interface ExtendedAxiosRequestConfig extends AxiosRequestConfig {
   _retry?: boolean;
 }
+
+export interface ReceiptResponse extends ApiResponse<Receipt> {}
+
+export interface Receipt {
+  id: string;
+  expenseId: string;
+  url: string;
+  fileType: string;
+  createdAt: Date;
+}
+

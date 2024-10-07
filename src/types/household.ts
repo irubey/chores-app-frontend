@@ -4,7 +4,10 @@ export interface Household {
   createdAt: string; // ISO string format
   updatedAt: string;// ISO string format
   members: HouseholdMember[];
-  // Add other fields as necessary
+  currency: string;
+  icon?: string;
+  timezone?: string;
+  language?: string;
 }
 
 export interface HouseholdMember {

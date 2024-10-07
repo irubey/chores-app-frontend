@@ -1,11 +1,13 @@
 import { useCallback } from 'react';
-import { useDispatch } from 'react-redux';
-import { fetchEvents, addEvent, updateEvent, deleteEvent } from '../store/slices/calendarSlice';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchEvents, addEvent, updateEvent, deleteEvent, syncCalendar, scheduleChores, selectCalendar } from '../store/slices/calendarSlice';
 import { Event } from '../types/event';
-import { AppDispatch } from '../store/store'; // Add this import
+import { AppDispatch } from '../store/store';
 
 const useCalendar = () => {
-  const dispatch = useDispatch<AppDispatch>(); // Use AppDispatch type
+  const dispatch = useDispatch<AppDispatch>();
+
+  const calendarState = useSelector(selectCalendar);
 
   const fetchEventsAction = useCallback((householdId: string) => {
     dispatch(fetchEvents(householdId));
@@ -23,11 +25,22 @@ const useCalendar = () => {
     dispatch(deleteEvent({ householdId, eventId }));
   }, [dispatch]);
 
+  const syncCalendarAction = useCallback((householdId: string, provider: string) => {
+    dispatch(syncCalendar({ householdId, provider }));
+  }, [dispatch]);
+
+  const scheduleChoresAction = useCallback((householdId: string) => {
+    dispatch(scheduleChores(householdId));
+  }, [dispatch]);
+
   return {
+    ...calendarState,
     fetchEvents: fetchEventsAction,
     addEvent: addEventAction,
     updateEvent: updateEventAction,
     deleteEvent: deleteEventAction,
+    syncCalendar: syncCalendarAction,
+    scheduleChores: scheduleChoresAction,
   };
 };
 

@@ -3,6 +3,7 @@ import { apiClient } from '../../lib/apiClient';
 import { Event } from '../../types/event';
 import { Chore } from '../../types/chore';
 import { RootState } from '../store';
+import { SyncCalendarResponse } from '@/types/api';
 
 interface CalendarState {
   events: Event[];
@@ -10,6 +11,10 @@ interface CalendarState {
   isSuccess: boolean;
   isError: boolean;
   message: string;
+  isSynced: boolean;
+  syncProvider: string | null;
+  lastSync: Date | null;
+  syncError: string | null;
 }
 
 const initialState: CalendarState = {
@@ -18,6 +23,10 @@ const initialState: CalendarState = {
   isSuccess: false,
   isError: false,
   message: '',
+  isSynced: false,
+  syncProvider: null,
+  lastSync: null,
+  syncError: null,
 };
 
 // Async thunks
@@ -26,7 +35,7 @@ export const fetchEvents = createAsyncThunk<Event[], string, { rejectValue: stri
   async (householdId, thunkAPI) => {
     try {
       const response = await apiClient.households.getHouseholdEvents(householdId);
-      return response.data; // {{ change: return response.data instead of response }}
+      return response.data; 
     } catch (error: any) {
       const message =
         (error.response?.data?.message) ||
@@ -42,7 +51,7 @@ export const addEvent = createAsyncThunk<Event, { householdId: string; eventData
   async ({ householdId, eventData }, thunkAPI) => {
     try {
       const response = await apiClient.households.createEvent(householdId, eventData);
-      return response.data; // {{ change: return response.data instead of response }}
+      return response.data; 
     } catch (error: any) {
       const message =
         (error.response?.data?.message) ||
@@ -58,7 +67,7 @@ export const updateEvent = createAsyncThunk<Event, { householdId: string; eventI
   async ({ householdId, eventId, eventData }, thunkAPI) => {
     try {
       const response = await apiClient.households.updateEvent(householdId, eventId, eventData);
-      return response.data; // {{ change: return response.data instead of response }}
+      return response.data; 
     } catch (error: any) {
       const message =
         (error.response?.data?.message) ||
@@ -104,6 +113,28 @@ export const scheduleChores = createAsyncThunk<Chore[], string, { rejectValue: s
         (error.response?.data?.message) ||
         error.message ||
         'Failed to schedule chores';
+      return thunkAPI.rejectWithValue(message);
+    }
+  }
+);
+
+
+// Async thunk for syncing calendar
+export const syncCalendar = createAsyncThunk<
+  SyncCalendarResponse['data'], // Return type is the inner data object
+  { householdId: string; provider: string },
+  { rejectValue: string }
+>(
+  'calendar/syncCalendar',
+  async ({ householdId, provider }, thunkAPI) => {
+    try {
+      const response = await apiClient.households.syncCalendar(householdId, { provider });
+      return response.data;
+    } catch (error: any) {
+      const message =
+        (error.response?.data?.message) ||
+        error.message ||
+        'Failed to sync calendar';
       return thunkAPI.rejectWithValue(message);
     }
   }
@@ -196,6 +227,26 @@ const calendarSlice = createSlice({
         state.isError = true;
         state.message = action.payload;
       })
+      // Sync Calendar
+      .addCase(syncCalendar.pending, (state) => {
+        state.isLoading = true;
+        state.isSuccess = false;
+        state.isError = false;
+        state.syncError = null;
+      })
+      .addCase(syncCalendar.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.isSuccess = true;
+        state.isSynced = true;
+        state.syncProvider = action.payload.provider;
+        state.lastSync = new Date();
+        // Optionally update events based on sync response
+      })
+      .addCase(syncCalendar.rejected, (state, action: PayloadAction<string>) => {
+        state.isLoading = false;
+        state.isError = true;
+        state.syncError = action.payload || 'Sync failed';
+      });
   },
 });
 
