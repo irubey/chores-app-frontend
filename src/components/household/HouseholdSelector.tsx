@@ -1,28 +1,36 @@
-import React, { useEffect, useState } from 'react';
-import { useSelector, useDispatch } from 'react-redux';
-import { RootState, AppDispatch } from '../../store/store';
-import { fetchUserHouseholds, setCurrentHousehold } from '../../store/slices/householdSlice';
-import { Household, HouseholdMember } from '../../types/household';
-import Button from '../common/Button';
-import { useTheme } from '../../contexts/ThemeContext';
-import { User } from '../../types/user';
+import React, { useEffect, useState } from "react";
+import { useHousehold } from "../../hooks/useHousehold"; // Corrected import path
+import { User } from "../../types/user";
+import Button from "../common/Button";
+import { useTheme } from "../../contexts/ThemeContext";
+import { HouseholdMember } from "../../types/household";
 
 const HouseholdSelector: React.FC<{ user: User }> = ({ user }) => {
-  const dispatch: AppDispatch = useDispatch();
-  const { userHouseholds, currentHousehold, isLoading, isError } = useSelector((state: RootState) => state.household);
+  const {
+    households, // Expected to be Household[]
+    currentHousehold,
+    isLoading,
+    isError,
+    fetchHouseholds,
+    setCurrent,
+  } = useHousehold();
   const [isOpen, setIsOpen] = useState(false);
   const { theme } = useTheme();
 
   useEffect(() => {
-    if (user?.id) {
-      dispatch(fetchUserHouseholds());
+    console.log("Households:", households);
+    console.log("User ID:", user?.id);
+    console.log("Is Loading:", isLoading);
+
+    if (user?.id && households && households.length === 0 && !isLoading) {
+      fetchHouseholds();
     }
-  }, [dispatch, user?.id]);
+  }, [user?.id, fetchHouseholds, households, isLoading]);
 
   const handleHouseholdSelect = (householdId: string) => {
-    const selectedHousehold = userHouseholds.find((h) => h.id === householdId);
+    const selectedHousehold = households.find((h) => h.id === householdId);
     if (selectedHousehold) {
-      dispatch(setCurrentHousehold(selectedHousehold));
+      setCurrent(selectedHousehold);
     }
     setIsOpen(false);
   };
@@ -49,42 +57,56 @@ const HouseholdSelector: React.FC<{ user: User }> = ({ user }) => {
   }
 
   return (
-    <div className={`relative ${theme === 'dark' ? 'text-white' : 'text-text-primary'}`}>
+    <div
+      className={`relative ${
+        theme === "dark" ? "text-white" : "text-text-primary"
+      }`}
+    >
       <Button
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-full text-left ${theme === 'dark' ? 'bg-primary-dark' : 'bg-primary'} text-white px-4 py-2 rounded-md`}
+        className={`w-full text-left ${
+          theme === "dark" ? "bg-primary-dark" : "bg-primary"
+        } text-white px-4 py-2 rounded-md`}
       >
-        {currentHousehold ? currentHousehold.name : 'Select a Household'}
+        {currentHousehold ? currentHousehold.name : "Select a Household"}
       </Button>
       {isOpen && (
         <ul
           className={`absolute z-10 w-full mt-1 border rounded-md shadow-lg ${
-            theme === 'dark' ? 'bg-background-dark border-gray-700' : 'bg-white border-gray-200'
+            theme === "dark"
+              ? "bg-background-dark border-gray-700"
+              : "bg-white border-gray-200"
           }`}
         >
-          {userHouseholds.map((household: Household) => (
-            <li key={household.id}>
-              <button
-                onClick={() => handleHouseholdSelect(household.id)}
-                className={`w-full text-left px-4 py-2 hover:bg-gray-100 ${
-                  theme === 'dark' ? 'hover:bg-gray-700' : ''
-                }`}
-              >
-                <div className="flex justify-between items-center">
-                  <span>{household.name}</span>
-                  {household.members && (
-                    <span className="text-sm text-gray-500">
-                      {household.members.map((member) => (
-                        <span key={member.id} className="ml-2">
-                          {renderMemberStatus(member)}
-                        </span>
-                      ))}
-                    </span>
-                  )}
-                </div>
-              </button>
+          {households && households.length > 0 ? (
+            households.map((household) => (
+              <li key={household.id}>
+                <button
+                  onClick={() => handleHouseholdSelect(household.id)}
+                  className={`w-full text-left px-4 py-2 hover:bg-gray-100 ${
+                    theme === "dark" ? "hover:bg-gray-700" : ""
+                  }`}
+                >
+                  <div className="flex justify-between items-center">
+                    <span>{household.name}</span>
+                    {household.members && household.members.length > 0 && (
+                      <span className="text-sm text-gray-500">
+                        {household.members.map((member) => (
+                          <span key={member.id} className="ml-2">
+                            {renderMemberStatus(member)}
+                          </span>
+                        ))}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              </li>
+            ))
+          ) : (
+            <li className="px-4 py-2 text-center text-gray-500">
+              No households available.
             </li>
-          ))}
+          )}
         </ul>
       )}
     </div>

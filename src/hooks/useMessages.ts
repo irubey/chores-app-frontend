@@ -1,66 +1,57 @@
-'use client'
-import { useSelector, useDispatch } from 'react-redux';
-import { AppDispatch } from '../store/store';
+"use client";
+import { useSelector, useDispatch } from "react-redux";
+import { AppDispatch, RootState } from "../store/store";
 import {
+  fetchThreads,
+  createThread,
   fetchMessages,
-  addMessage,
+  sendMessage,
   updateMessage,
   deleteMessage,
-  addThread,
-  addAttachment,
-  selectMessages,
   reset,
-} from '../store/slices/messagesSlice';
-import { CreateMessageDTO, UpdateMessageDTO, CreateThreadDTO } from '../types/message';
+  selectMessages,
+} from "../store/slices/messagesSlice";
+import { CreateMessageDTO, UpdateMessageDTO } from "../types/message";
 
-const useMessages = (householdId: string) => {
-  const dispatch: AppDispatch = useDispatch();
-  const { messages, threads, attachments, isLoading, isSuccess, isError, error } = useSelector(selectMessages);
+export const useMessages = () => {
+  const dispatch = useDispatch<AppDispatch>();
+  const messagesState = useSelector(selectMessages);
 
-  const getMessages = async () => {
-    await dispatch(fetchMessages(householdId));
-  };
-
-  const createMessage = async (messageData: CreateMessageDTO) => {
-    await dispatch(addMessage({ householdId, messageData }));
-  };
-
-  const editMessage = async (messageId: string, messageData: UpdateMessageDTO) => {
-    await dispatch(updateMessage({ householdId, messageId, messageData }));
-  };
-
-  const removeMessage = async (messageId: string) => {
-    await dispatch(deleteMessage({ householdId, messageId }));
-  };
-
-  const createThread = async (messageId: string, threadData: CreateThreadDTO) => {
-    await dispatch(addThread({ householdId, messageId, threadData }));
-  };
-
-  const uploadAttachment = async (messageId: string, file: File) => {
-    await dispatch(addAttachment({ householdId, messageId, file }));
-  };
-
-  const resetMessages = () => {
-    dispatch(reset());
-  };
+  const getThreads = (householdId: string) =>
+    dispatch(fetchThreads(householdId));
+  const startNewThread = (
+    householdId: string,
+    data: { title: string; participants: string[] }
+  ) => dispatch(createThread({ householdId, data }));
+  const getMessages = (householdId: string, threadId: string) =>
+    dispatch(fetchMessages({ householdId, threadId }));
+  const sendNewMessage = (
+    householdId: string,
+    threadId: string,
+    messageData: CreateMessageDTO
+  ) => dispatch(sendMessage({ householdId, threadId, messageData }));
+  const editMessage = (
+    householdId: string,
+    threadId: string,
+    messageId: string,
+    messageData: UpdateMessageDTO
+  ) =>
+    dispatch(updateMessage({ householdId, threadId, messageId, messageData }));
+  const removeMessage = (
+    householdId: string,
+    threadId: string,
+    messageId: string
+  ) => dispatch(deleteMessage({ householdId, threadId, messageId }));
+  const resetMessages = () => dispatch(reset());
 
   return {
-    messages,
-    threads,
-    attachments,
-    isLoading,
-    isSuccess,
-    isError,
-    error,
+    ...messagesState,
+    getThreads,
+    startNewThread,
     getMessages,
-    createMessage,
+    sendNewMessage,
     editMessage,
     removeMessage,
-    createThread,
-    uploadAttachment,
     resetMessages,
   };
 };
-
-export default useMessages;

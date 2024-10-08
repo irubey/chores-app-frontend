@@ -2,138 +2,83 @@
 
 import { User } from "./user";
 import { Household, HouseholdMember } from "./household";
-import { Message } from "./message";
+import { Message, Thread } from "./message";
 import { Notification } from "./notification";
 import { Event } from "./event";
-import { Expense, ExpenseSplit,Transaction } from "./expense"; // Imported from "./expense"
+import { Expense, ExpenseSplit, Transaction } from "./expense"; // Imported from "./expense"
 import { OAuthIntegration } from "./oauth";
 import { Attachment } from "./attachment";
 import { UploadResponse } from "./upload";
 import { UpdateChoreDTO } from "./chore";
 import { Chore, Subtask } from "./chore";
-import { AxiosRequestConfig } from 'axios';
+import { AxiosRequestConfig } from "axios";
 
 export interface ChoreWithAssignees extends Chore {
   assignedUsers: User[];
   subtasks: Subtask[];
 }
 
-/**
- * Generic API response structure.
- */
-export interface ApiResponse<T> {
+export type ApiResponse<T> = {
   data: T;
   error?: string;
-}
+};
 
-/**
- * Response structure for login requests.
- */
-export interface LoginResponse {
-  accessToken: string;
+// Use type aliases consistently
+export type LoginResponse = ApiResponse<{
   user: User;
-}
+}>;
 
+export type GetHouseholdsResponse = ApiResponse<Household[]>;
 
-/**
- * Response structure for fetching households.
- */
-export interface GetHouseholdsResponse extends ApiResponse<Household[]> {}
-
-/**
- * Response structure for syncing calendar.
- */
-export interface SyncCalendarResponse extends ApiResponse<{
+export type SyncCalendarResponse = ApiResponse<{
   events: Event[];
   provider: string;
   lastSync: string; // ISO date string
-}> {}
+}>;
 
-/**
- * Response structure for fetching household members.
- */
-export interface GetHouseholdMembersResponse extends ApiResponse<HouseholdMember[]> {}
+export type GetHouseholdMembersResponse = ApiResponse<HouseholdMember[]>;
 
-/**
- * Response structure for inviting a household member.
- */
-export interface InviteMemberResponse extends ApiResponse<HouseholdMember> {}
+export type InviteMemberResponse = ApiResponse<HouseholdMember>;
 
-/**
- * Response structure for creating an expense split.
- */
-export interface CreateExpenseSplitResponse extends ApiResponse<ExpenseSplit> {}
+export type CreateExpenseSplitResponse = ApiResponse<ExpenseSplit>;
 
-/**
- * Response structure for transactions.
- */
-export interface TransactionResponse extends ApiResponse<Transaction> {}
+export type TransactionResponse = ApiResponse<Transaction>;
 
-/**
- * Response structure for fetching household events.
- */
-export interface GetHouseholdEventsResponse extends ApiResponse<Event[]> {}
+export type GetHouseholdEventsResponse = ApiResponse<Event[]>;
 
-/**
- * Response structure for creating an event.
- */
-export interface CreateEventResponse extends ApiResponse<Event> {}
+export type CreateEventResponse = ApiResponse<Event>;
 
-/**
- * Response structure for updating an event.
- */
-export interface UpdateEventResponse extends ApiResponse<Event> {}
+export type UpdateEventResponse = ApiResponse<Event>;
 
-/**
- * No response structure needed for deleteEvent as it returns void.
- */
+export type GetNotificationsResponse = ApiResponse<Notification[]>;
 
-/**
- * Response structure for fetching notifications.
- */
-export interface GetNotificationsResponse extends ApiResponse<Notification[]> {}
+export type UpdateChoreResponse = ApiResponse<Chore>;
 
-/**
- * Response structure for marking a notification as read.
- */
-export interface MarkAsReadResponse extends ApiResponse<null> {}
+export type GetTransactionsResponse = ApiResponse<Transaction[]>;
 
-/**
- * Additional API response interfaces as needed
- */
-export interface UpdateChoreResponse extends ApiResponse<Chore> {}
+export type CreateTransactionResponse = ApiResponse<Transaction>;
 
-export interface DeleteTransactionResponse extends ApiResponse<null> {}
+export type UpdateTransactionResponse = ApiResponse<Transaction>;
 
-// Add these new interfaces
-export interface GetTransactionsResponse extends ApiResponse<Transaction[]> {}
+export type CreateSubtaskResponse = ApiResponse<Subtask>;
 
-export interface CreateTransactionResponse extends ApiResponse<Transaction> {}
+export type UpdateSubtaskResponse = ApiResponse<Subtask>;
 
-export interface UpdateTransactionResponse extends ApiResponse<Transaction> {}
+export type DeleteSubtaskResponse = ApiResponse<null>;
 
-export interface CreateSubtaskResponse extends ApiResponse<Chore> {}
+export type ExpenseResponse = ApiResponse<Expense>;
 
-export interface UpdateSubtaskResponse extends ApiResponse<Chore> {}
+export type ChoreResponse = ApiResponse<Chore>;
 
-export interface DeleteSubtaskResponse extends ApiResponse<null> {}
+export type GetUserHouseholdsResponse = ApiResponse<Household[]>;
 
-// Add this new interface for expense operations
-export interface ExpenseResponse extends ApiResponse<Expense> {}
+export type ReceiptResponse = ApiResponse<Receipt>;
 
-// Add this new interface for chore operations
-export interface ChoreResponse extends ApiResponse<Chore> {}
-
-/**
- * Corrected Response structure for fetching user households.
- */
-export interface GetUserHouseholdsResponse extends ApiResponse<Household[]> {}
+export type DeleteHouseholdResponse = ApiResponse<null>;
 
 export interface ExtendedAxiosRequestConfig extends AxiosRequestConfig {
   _retry?: boolean;
 }
-
-export interface ReceiptResponse extends ApiResponse<Receipt> {}
 
 export interface Receipt {
   id: string;
@@ -143,3 +88,19 @@ export interface Receipt {
   createdAt: Date;
 }
 
+export type RegisterResponse = ApiResponse<User>;
+export type InitializeAuthResponse = ApiResponse<User>;
+export type CreateHouseholdResponse = ApiResponse<Household>;
+export type GetHouseholdDetailsResponse = ApiResponse<Household>;
+export type UpdateHouseholdResponse = ApiResponse<Household>;
+export type AcceptInvitationResponse = ApiResponse<Household>;
+export type UpdateMemberRoleResponse = ApiResponse<HouseholdMember>;
+export type GetThreadsResponse = ApiResponse<Thread[]>;
+export type CreateThreadResponse = ApiResponse<Thread>;
+export type GetMessagesResponse = ApiResponse<Message[]>;
+export type SendMessageResponse = ApiResponse<Message>;
+export type UpdateMessageResponse = ApiResponse<Message>;
+export type GetAttachmentResponse = ApiResponse<Attachment>;
+export type DeleteTransactionResponse = ApiResponse<null>;
+export type DeleteMessageResponse = ApiResponse<null>;
+export type RemoveMemberResponse = ApiResponse<null>;

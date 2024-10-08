@@ -1,53 +1,44 @@
 // frontend/src/hooks/useAuth.ts
-'use client'
-import { useSelector, useDispatch } from 'react-redux';
-import { RootState, AppDispatch } from '../store/store';
-import { login, register, logout, reset, updateAuthState } from '../store/slices/authSlice';
+"use client";
+import { useSelector, useDispatch } from "react-redux";
+import { AppDispatch } from "../store/store";
+import {
+  login,
+  register,
+  logout,
+  reset,
+  selectAuth,
+  initializeAuth,
+} from "../store/slices/authSlice";
+import { useCallback } from "react";
 
-const useAuth = () => {
-  const dispatch: AppDispatch = useDispatch();
-  const { user, isLoading, isError, message, isAuthenticated, isInitialized } = useSelector(
-    (state: RootState) => state.auth
+export const useAuth = () => {
+  const dispatch = useDispatch<AppDispatch>();
+  const authState = useSelector(selectAuth);
+
+  const loginUser = useCallback(
+    (email: string, password: string) => dispatch(login({ email, password })),
+    [dispatch]
   );
 
-  const loginUser = async (email: string, password: string): Promise<void> => {
-    await dispatch(login({ email, password }));
-  };
+  const registerUser = useCallback(
+    (email: string, password: string, name: string) =>
+      dispatch(register({ email, password, name })),
+    [dispatch]
+  );
 
-  const registerUser = async (email: string, password: string, name: string): Promise<void> => {
-    await dispatch(register({ email, password, name }));
-  };
+  const logoutUser = useCallback(() => dispatch(logout()), [dispatch]);
 
-  const logoutUser = async (): Promise<void> => {
-    await dispatch(logout());
-  };
+  const resetAuth = useCallback(() => dispatch(reset()), [dispatch]);
 
-  const resetAuth = () => {
-    dispatch(reset());
-  };
-
-  const updateAuthFlags = (isAuthenticated: boolean, isInitialized: boolean) => {
-    dispatch(updateAuthState({ isAuthenticated, isInitialized }));
-  };
-
-  const clearError = () => {
-    dispatch(reset());
-  };
+  const initAuth = useCallback(() => dispatch(initializeAuth()), [dispatch]);
 
   return {
-    user,
-    isLoading,
-    isError,
-    message,
-    login: loginUser,
-    register: registerUser,
-    logout: logoutUser,
-    reset: resetAuth,
-    updateAuthState: updateAuthFlags,
-    clearError,
-    isAuthenticated,
-    isInitialized,
+    ...authState,
+    loginUser,
+    registerUser,
+    logoutUser,
+    resetAuth,
+    initAuth,
   };
 };
-
-export default useAuth;

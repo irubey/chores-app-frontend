@@ -1,30 +1,39 @@
-'use client'
+"use client";
 
-import React, { useEffect } from 'react';
-import { Chore, ChoreStatus } from '../../types/chore';
-import Button from '../common/Button';
-import { useTheme } from '../../contexts/ThemeContext';
-import useChores from '../../hooks/useChores';
-import useAuth from '../../hooks/useAuth';
+import React, { useEffect } from "react";
+import { Chore, ChoreStatus } from "../../types/chore";
+import Button from "../common/Button";
+import { useTheme } from "../../contexts/ThemeContext";
+import { useChores, useAuth, useHousehold } from "../../hooks";
 
 const UpcomingChores: React.FC = () => {
   const { user } = useAuth();
-  const { chores, loading, error, getChores, editChore } = useChores(user?.id || '');
+  const { currentHousehold } = useHousehold();
+  const { chores, loading, error, getChores, editChore } = useChores(
+    currentHousehold?.id || ""
+  );
   const { theme } = useTheme();
 
   useEffect(() => {
-    if (user?.id) {
+    if (currentHousehold?.id) {
       getChores();
     }
-  }, [user?.id, getChores]);
+  }, [currentHousehold?.id, getChores]);
 
-  const upcomingChores = chores.filter(chore => 
-    chore.status !== ChoreStatus.COMPLETED && 
-    chore.assignedUserIds?.includes(user?.id || '')
-  ).sort((a, b) => new Date(a.dueDate || '').getTime() - new Date(b.dueDate || '').getTime());
+  const upcomingChores = chores
+    .filter(
+      (chore) =>
+        chore.status !== ChoreStatus.COMPLETED &&
+        chore.assignedUserIds?.includes(user?.id || "")
+    )
+    .sort(
+      (a, b) =>
+        new Date(a.dueDate || "").getTime() -
+        new Date(b.dueDate || "").getTime()
+    );
 
   const handleCompleteChore = (choreId: string) => {
-    if (user?.id) {
+    if (currentHousehold?.id) {
       editChore(choreId, { status: ChoreStatus.COMPLETED });
     }
   };
@@ -38,7 +47,11 @@ const UpcomingChores: React.FC = () => {
   }
 
   return (
-    <div className={`p-4 rounded-lg shadow-md ${theme === 'dark' ? 'bg-gray-800 text-white' : 'bg-white'}`}>
+    <div
+      className={`p-4 rounded-lg shadow-md ${
+        theme === "dark" ? "bg-gray-800 text-white" : "bg-white"
+      }`}
+    >
       <h2 className="text-h2 mb-4">Upcoming Chores</h2>
       {upcomingChores.length === 0 ? (
         <p>No upcoming chores. Great job!</p>
@@ -48,14 +61,19 @@ const UpcomingChores: React.FC = () => {
             <li key={chore.id} className="flex items-center justify-between">
               <div>
                 <h3 className="text-h5">{chore.title}</h3>
-                <p className="text-sm text-gray-500">Due: {chore.dueDate ? new Date(chore.dueDate).toLocaleDateString() : 'No due date'}</p>
+                <p className="text-sm text-gray-500">
+                  Due:{" "}
+                  {chore.dueDate
+                    ? new Date(chore.dueDate).toLocaleDateString()
+                    : "No due date"}
+                </p>
               </div>
               <Button
                 onClick={() => handleCompleteChore(chore.id)}
                 className="btn-primary"
                 disabled={loading.updateChore}
               >
-                {loading.updateChore ? 'Updating...' : 'Complete'}
+                {loading.updateChore ? "Updating..." : "Complete"}
               </Button>
             </li>
           ))}

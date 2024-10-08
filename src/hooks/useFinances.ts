@@ -1,11 +1,7 @@
-'use client'
-import { useSelector, useDispatch } from 'react-redux';
-import { AppDispatch, RootState } from '../store/store';
+"use client";
+import { useSelector, useDispatch } from "react-redux";
+import { AppDispatch, RootState } from "../store/store";
 import {
-  selectFinances,
-  selectReceiptsByExpenseId,
-  selectIsUploadingReceipt,
-  selectUploadReceiptError,
   fetchExpenses,
   addExpense,
   updateExpense,
@@ -15,115 +11,81 @@ import {
   updateTransaction,
   deleteTransaction,
   addReceipt,
-  clearUploadReceiptError,
   reset,
-} from '../store/slices/financesSlice';
+  clearUploadReceiptError,
+  selectFinances,
+  selectReceiptsByExpenseId,
+  selectIsUploadingReceipt,
+  selectUploadReceiptError,
+} from "../store/slices/financesSlice";
 import {
   CreateExpenseDTO,
   UpdateExpenseDTO,
   CreateTransactionDTO,
   UpdateTransactionDTO,
-} from '../types/expense';
+} from "../types/expense";
 
-const useFinances = (householdId: string) => {
-  const dispatch: AppDispatch = useDispatch();
-  const {
-    expenses,
-    isLoading,
-    isSuccess,
-    isError,
-    message,
-    totalExpenses,
-    totalDebts,
-    userSummaries,
-    transactions,
-    transactionSummaries,
-    receipts,
-  } = useSelector(selectFinances);
+export const useFinances = () => {
+  const dispatch = useDispatch<AppDispatch>();
+  const financesState = useSelector(selectFinances);
 
-  const getExpenses = async () => {
-    await dispatch(fetchExpenses(householdId));
-  };
+  const getExpenses = (householdId: string) =>
+    dispatch(fetchExpenses(householdId));
+  const createExpense = (householdId: string, expenseData: CreateExpenseDTO) =>
+    dispatch(addExpense({ householdId, expenseData }));
+  const editExpense = (
+    householdId: string,
+    expenseId: string,
+    expenseData: UpdateExpenseDTO
+  ) => dispatch(updateExpense({ householdId, expenseId, expenseData }));
+  const removeExpense = (householdId: string, expenseId: string) =>
+    dispatch(deleteExpense({ householdId, expenseId }));
 
-  const createExpense = async (expenseData: CreateExpenseDTO) => {
-    await dispatch(addExpense({ householdId, expenseData }));
-  };
+  const getTransactions = (householdId: string) =>
+    dispatch(fetchTransactions(householdId));
+  const createTransaction = (
+    householdId: string,
+    transactionData: CreateTransactionDTO
+  ) => dispatch(addTransaction({ householdId, transactionData }));
+  const editTransaction = (
+    householdId: string,
+    transactionId: string,
+    transactionData: UpdateTransactionDTO
+  ) =>
+    dispatch(
+      updateTransaction({ householdId, transactionId, transactionData })
+    );
+  const removeTransaction = (householdId: string, transactionId: string) =>
+    dispatch(deleteTransaction({ householdId, transactionId }));
 
-  const editExpense = async (expenseId: string, expenseData: UpdateExpenseDTO) => {
-    await dispatch(updateExpense({ householdId, expenseId, expenseData }));
-  };
+  const uploadReceipt = (householdId: string, file: File) =>
+    dispatch(addReceipt({ householdId, file }));
 
-  const removeExpense = async (expenseId: string) => {
-    await dispatch(deleteExpense({ householdId, expenseId }));
-  };
+  const resetFinances = () => dispatch(reset());
+  const clearReceiptError = () => dispatch(clearUploadReceiptError());
 
-  const resetFinances = () => {
-    dispatch(reset());
-  };
-
-  const fetchTransactionsData = async () => {
-    await dispatch(fetchTransactions(householdId));
-  };
-
-  const createTransaction = async (transactionData: CreateTransactionDTO) => {
-    await dispatch(addTransaction({ householdId, transactionData }));
-  };
-
-  const updateTransactionData = async (transactionId: string, transactionData: UpdateTransactionDTO) => {
-    await dispatch(updateTransaction({ householdId, transactionId, transactionData }));
-  };
-
-  const removeTransaction = async (transactionId: string) => {
-    await dispatch(deleteTransaction({ householdId, transactionId }));
-  };
-
-  const uploadReceipt = async (expenseId: string, file: File) => {
-    await dispatch(addReceipt({ householdId, expenseId, receiptFile: file }));
-  };
-
-  const clearReceiptUploadError = () => {
-    dispatch(clearUploadReceiptError());
-  };
-
-  const getReceiptsByExpenseId = (expenseId: string) => {
-    return useSelector((state: RootState) => selectReceiptsByExpenseId(state, expenseId));
-  };
-
-  const getIsUploadingReceipt = () => {
-    return useSelector(selectIsUploadingReceipt);
-  };
-
-  const getUploadReceiptError = () => {
-    return useSelector(selectUploadReceiptError);
-  };
+  const getReceiptsByExpenseId = (expenseId: string) =>
+    useSelector((state: RootState) =>
+      selectReceiptsByExpenseId(state, expenseId)
+    );
+  const isUploadingReceipt = useSelector(selectIsUploadingReceipt);
+  const uploadReceiptError = useSelector(selectUploadReceiptError);
 
   return {
-    expenses,
-    isLoading,
-    isSuccess,
-    isError,
-    message,
-    totalExpenses,
-    totalDebts,
-    userSummaries,
-    transactions,
-    transactionSummaries,
-    receipts,
+    ...financesState,
     getExpenses,
     createExpense,
     editExpense,
     removeExpense,
-    fetchTransactions: fetchTransactionsData,
+    getTransactions,
     createTransaction,
-    updateTransaction: updateTransactionData,
+    editTransaction,
     removeTransaction,
     uploadReceipt,
-    clearReceiptUploadError,
-    getReceiptsByExpenseId,
-    getIsUploadingReceipt,
-    getUploadReceiptError,
     resetFinances,
+    clearReceiptError,
+    getReceiptsByExpenseId,
+    isUploadingReceipt,
+    uploadReceiptError,
   };
 };
-
-export default useFinances;

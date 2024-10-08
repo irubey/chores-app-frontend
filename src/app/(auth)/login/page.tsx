@@ -1,21 +1,21 @@
-'use client'
-import React, { useState, useEffect } from 'react';
-import AuthLayout from '../layout';
-import useAuth from '../../../hooks/useAuth';
-import Input from '../../../components/common/Input';
-import Button from '../../../components/common/Button';
-import { useRouter } from 'next/navigation';
-import LoadingSpinner from '../../../components/common/LoadingSpinner';
+"use client";
+import React, { useState, useEffect } from "react";
+import AuthLayout from "../layout";
+import { useAuth } from "../../../hooks/useAuth";
+import Input from "../../../components/common/Input";
+import Button from "../../../components/common/Button";
+import { useRouter } from "next/navigation";
+import LoadingSpinner from "../../../components/common/LoadingSpinner";
 
 const LoginPage: React.FC = () => {
-  const { login, isLoading, isError, message, isAuthenticated } = useAuth();
-  const [formData, setFormData] = useState({ email: '', password: '' });
+  const { loginUser, isLoading, isError, message, isAuthenticated } = useAuth();
+  const [formData, setFormData] = useState({ email: "", password: "" });
   const router = useRouter();
   const { email, password } = formData;
 
   useEffect(() => {
     if (isAuthenticated) {
-      router.push('/dashboard');
+      router.push("/dashboard");
     }
   }, [isAuthenticated, router]);
 
@@ -24,12 +24,14 @@ const LoginPage: React.FC = () => {
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await login(email, password);
+    await loginUser(email, password);
   };
 
   return (
     <AuthLayout>
-      <h2 className="text-2xl font-semibold text-center">Login to Your Account</h2>
+      <h2 className="text-2xl font-semibold text-center">
+        Login to Your Account
+      </h2>
       {isError && <div className="text-red-500 text-center">{message}</div>}
       <form className="mt-8 space-y-6" onSubmit={onSubmit}>
         <div className="rounded-md shadow-sm -space-y-px">
@@ -68,18 +70,20 @@ const LoginPage: React.FC = () => {
         </div>
 
         <div>
-          <Button 
-            type="submit" 
-            className={`w-full ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+          <Button
+            type="submit"
+            className={`w-full ${
+              isLoading ? "opacity-50 cursor-not-allowed" : ""
+            }`}
             disabled={isLoading}
           >
-            {isLoading ? 'Signing In...' : 'Sign In'}
+            {isLoading ? "Signing In..." : "Sign In"}
           </Button>
           {isError && <div className="text-red-500 text-center">{message}</div>}
         </div>
       </form>
       <p className="mt-4 text-center">
-        Don't have an account?{' '}
+        Don't have an account?{" "}
         <a href="/auth/register" className="text-blue-600 hover:underline">
           Register here
         </a>

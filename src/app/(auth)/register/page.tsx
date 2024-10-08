@@ -1,13 +1,17 @@
-'use client'
-import React, { useState } from 'react';
-import AuthLayout from '../layout';
-import useAuth from '../../../hooks/useAuth';
-import Input from '../../../components/common/Input';
-import Button from '../../../components/common/Button';
+"use client";
+import React, { useState } from "react";
+import AuthLayout from "../layout";
+import { useAuth } from "../../../hooks/useAuth";
+import Input from "../../../components/common/Input";
+import Button from "../../../components/common/Button";
 
 const RegisterPage: React.FC = () => {
-  const { register, isLoading, isError, message } = useAuth();
-  const [formData, setFormData] = useState({ name: '', email: '', password: '' });
+  const { registerUser, isLoading, isError, message } = useAuth();
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    password: "",
+  });
 
   const { name, email, password } = formData;
 
@@ -16,12 +20,14 @@ const RegisterPage: React.FC = () => {
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await register(email, password, name);
+    await registerUser(email, password, name);
   };
 
   return (
     <AuthLayout>
-      <h2 className="text-2xl font-semibold text-center">Create a New Account</h2>
+      <h2 className="text-2xl font-semibold text-center">
+        Create a New Account
+      </h2>
       {isError && <div className="text-red-500 text-center">{message}</div>}
       <form className="mt-8 space-y-6" onSubmit={onSubmit}>
         <div className="rounded-md shadow-sm -space-y-px">
@@ -82,7 +88,7 @@ const RegisterPage: React.FC = () => {
         </div>
       </form>
       <p className="mt-4 text-center">
-        Already have an account?{' '}
+        Already have an account?{" "}
         <a href="/login" className="text-blue-600 hover:underline">
           Login here
         </a>
