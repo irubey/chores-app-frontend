@@ -9,6 +9,7 @@ import {
   fetchHouseholdMembers,
   inviteMember,
   removeMember,
+  rejectInvitation,
   setCurrentHousehold,
   reset,
   selectHousehold,
@@ -17,6 +18,7 @@ import {
   fetchSelectedHouseholds,
   toggleHouseholdSelection,
   acceptInvitation,
+  getHouseholdDetails,
 } from "../store/slices/householdSlice";
 import { Household, HouseholdMember } from "../types/household";
 
@@ -27,10 +29,6 @@ export const useHousehold = () => {
   // Existing Actions
   const fetchHouseholds = useCallback(
     () => dispatch(fetchUserHouseholds()),
-    [dispatch]
-  );
-  const getHouseholdById = useCallback(
-    (id: string) => dispatch(getHouseholdById(id)),
     [dispatch]
   );
   const createNewHousehold = useCallback(
@@ -51,11 +49,14 @@ export const useHousehold = () => {
     (householdId: string) => dispatch(fetchHouseholdMembers(householdId)),
     [dispatch]
   );
-  const inviteMemberAction = useCallback(
+
+  // Keep this more detailed version
+  const sendInvitation = useCallback(
     (householdId: string, email: string) =>
       dispatch(inviteMember({ householdId, email })),
     [dispatch]
   );
+
   const removeMemberAction = useCallback(
     (householdId: string, memberId: string) =>
       dispatch(removeMember({ householdId, memberId })),
@@ -65,14 +66,19 @@ export const useHousehold = () => {
     (household: Household) => dispatch(setCurrentHousehold(household)),
     [dispatch]
   );
-  const resetHouseholdState = useCallback(() => dispatch(reset()), [dispatch]);
+  const resetHouseholdState = () => dispatch(reset());
+
   const updateMemberRoleAction = useCallback(
     (householdId: string, memberId: string, role: "ADMIN" | "MEMBER") =>
       dispatch(updateMemberRole({ householdId, memberId, role })),
     [dispatch]
   );
 
-  // New Actions
+  // Updated and New Actions
+  const getHouseholdDetailsAction = useCallback(
+    (householdId: string) => dispatch(getHouseholdDetails(householdId)),
+    [dispatch]
+  );
   const updateMemberStatusAction = useCallback(
     (householdId: string, memberId: string, status: "ACCEPTED" | "REJECTED") =>
       dispatch(updateMemberStatus({ householdId, memberId, status })),
@@ -92,6 +98,11 @@ export const useHousehold = () => {
     [dispatch]
   );
 
+  const rejectInvitationAction = useCallback(
+    (token: string) => dispatch(rejectInvitation({ token })),
+    [dispatch]
+  );
+
   return {
     // State
     households: householdState.userHouseholds,
@@ -104,21 +115,22 @@ export const useHousehold = () => {
 
     // Actions
     fetchHouseholds,
-    getHouseholdById,
     createNewHousehold,
     updateHouseholdDetails,
     removeHousehold,
     fetchMembers,
-    inviteMember: inviteMemberAction,
+    inviteMember: sendInvitation,
     removeMember: removeMemberAction,
     setCurrent,
     resetHouseholdState,
     updateMemberRole: updateMemberRoleAction,
 
-    // New Actions
+    // New and Updated Actions
+    getHouseholdDetails: getHouseholdDetailsAction,
     updateMemberStatus: updateMemberStatusAction,
     getSelectedHouseholds,
     toggleHouseholdSelection: toggleHouseholdSelectionAction,
     acceptInvitation: acceptInvitationAction,
+    rejectInvitation: rejectInvitationAction,
   };
 };

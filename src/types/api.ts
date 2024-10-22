@@ -36,6 +36,8 @@ export type SyncCalendarResponse = ApiResponse<{
   lastSync: string; // ISO date string
 }>;
 
+export type UpdateThreadResponse = ApiResponse<Thread>;
+
 export type GetHouseholdMembersResponse = ApiResponse<HouseholdMember[]>;
 
 export type InviteMemberResponse = ApiResponse<HouseholdMember>;

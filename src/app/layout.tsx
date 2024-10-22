@@ -18,17 +18,13 @@ function AppContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
-  // Define routes where auth is NOT required
   const publicRoutes = ["/login", "/register", "/"];
 
   React.useEffect(() => {
-    if (status === "idle") {
-      initAuth();
-    }
-  }, [status, initAuth]);
+    initAuth();
+  }, [initAuth]);
 
   React.useEffect(() => {
-    // After auth initialization, handle redirection
     if (status === "succeeded") {
       if (!publicRoutes.includes(pathname) && !isAuthenticated) {
         router.push("/login");
@@ -37,13 +33,12 @@ function AppContent({ children }: { children: React.ReactNode }) {
         isAuthenticated &&
         pathname !== "/dashboard"
       ) {
-        // Redirect authenticated users away from public pages like login/register
         router.push("/dashboard");
       }
     }
   }, [status, isAuthenticated, router, pathname]);
 
-  if (status === "idle" || status === "loading") {
+  if (status === "loading" || status === "idle") {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <LoadingSpinner />
@@ -51,11 +46,6 @@ function AppContent({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Check if the current route is public
-  const isPublicRoute = publicRoutes.includes(pathname);
-
-  // If the route is public or the user is authenticated, render children
-  // Otherwise, render nothing as the redirect will handle navigation
   return (
     <ThemeProvider>
       <SocketProvider>

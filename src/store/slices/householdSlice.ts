@@ -5,6 +5,7 @@ import { apiClient } from "../../lib/apiClient";
 
 interface HouseholdState {
   userHouseholds: Household[];
+  selectedHouseholds: Household[];
   currentHousehold: Household | null;
   members: HouseholdMember[];
   isLoading: boolean;
@@ -15,6 +16,7 @@ interface HouseholdState {
 
 const initialState: HouseholdState = {
   userHouseholds: [],
+  selectedHouseholds: [],
   currentHousehold: null,
   members: [],
   isLoading: false,
@@ -29,19 +31,31 @@ const initialState: HouseholdState = {
 export const fetchUserHouseholds = createAsyncThunk<
   Household[],
   void,
-  { rejectValue: string }
->("household/fetchUserHouseholds", async (_, thunkAPI) => {
-  try {
-    const households = await apiClient.household.getHouseholds();
-    return households;
-  } catch (error: any) {
-    const message =
-      error.response?.data?.message ||
-      error.message ||
-      "Fetch user households failed";
-    return thunkAPI.rejectWithValue(message);
+  { state: RootState; rejectValue: string }
+>(
+  "household/fetchUserHouseholds",
+  async (_, thunkAPI) => {
+    try {
+      const households = await apiClient.household.getHouseholds();
+      return households;
+    } catch (error: any) {
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Fetch user households failed";
+      return thunkAPI.rejectWithValue(message);
+    }
+  },
+  {
+    condition: (_, { getState }) => {
+      const { household } = getState();
+      if (household.isLoading || household.userHouseholds.length > 0) {
+        // Already fetching or households are loaded
+        return false;
+      }
+    },
   }
-});
+);
 
 // Fetch members of a specific household
 export const fetchHouseholdMembers = createAsyncThunk<
@@ -68,7 +82,7 @@ export const inviteMember = createAsyncThunk<
   { rejectValue: string }
 >("household/inviteMember", async ({ householdId, email }, thunkAPI) => {
   try {
-    const invitedMember = await apiClient.household.members.inviteMember(
+    const invitedMember = await apiClient.household.invitations.sendInvitation(
       householdId,
       email
     );
@@ -105,6 +119,7 @@ export const createHousehold = createAsyncThunk<
   try {
     const newHousehold = await apiClient.household.createHousehold({
       name,
+      currency, // Include 'currency' in the payload
     });
     return newHousehold;
   } catch (error: any) {
@@ -224,6 +239,23 @@ export const toggleHouseholdSelection = createAsyncThunk<
   }
 );
 
+// Reject Invitation
+export const rejectInvitation = createAsyncThunk<
+  void,
+  { token: string },
+  { rejectValue: string }
+>("household/rejectInvitation", async ({ token }, thunkAPI) => {
+  try {
+    await apiClient.household.invitations.rejectInvitation(token);
+  } catch (error: any) {
+    const message =
+      error.response?.data?.message ||
+      error.message ||
+      "Reject invitation failed";
+    return thunkAPI.rejectWithValue(message);
+  }
+});
+
 // Accept Invitation
 export const acceptInvitation = createAsyncThunk<
   Household,
@@ -231,7 +263,9 @@ export const acceptInvitation = createAsyncThunk<
   { rejectValue: string }
 >("household/acceptInvitation", async ({ token }, thunkAPI) => {
   try {
-    const household = await apiClient.household.members.acceptInvitation(token);
+    const household = await apiClient.household.invitations.acceptInvitation(
+      token
+    );
     return household;
   } catch (error: any) {
     const message =
@@ -266,6 +300,26 @@ export const updateMemberRole = createAsyncThunk<
     }
   }
 );
+
+// Add this new async thunk
+export const getHouseholdDetails = createAsyncThunk<
+  Household,
+  string,
+  { rejectValue: string }
+>("household/getHouseholdDetails", async (householdId, thunkAPI) => {
+  try {
+    const household = await apiClient.household.getHouseholdDetails(
+      householdId
+    );
+    return household;
+  } catch (error: any) {
+    const message =
+      error.response?.data?.message ||
+      error.message ||
+      "Failed to fetch household details";
+    return thunkAPI.rejectWithValue(message);
+  }
+});
 
 const householdSlice = createSlice({
   name: "household",
@@ -535,10 +589,7 @@ const householdSlice = createSlice({
         (state, action: PayloadAction<Household[]>) => {
           state.isLoading = false;
           state.isSuccess = true;
-          // Assuming you want to handle selected households separately,
-          // but since the state doesn't have a separate field,
-          // you might need to adjust the state structure accordingly.
-          state.userHouseholds = action.payload;
+          state.selectedHouseholds = action.payload;
         }
       )
       .addCase(
@@ -601,6 +652,56 @@ const householdSlice = createSlice({
           state.isLoading = false;
           state.isError = true;
           state.message = action.payload || "Failed to accept invitation";
+        }
+      )
+
+      // Add these new cases for getHouseholdDetails
+      .addCase(getHouseholdDetails.pending, (state) => {
+        state.isLoading = true;
+        state.isError = false;
+        state.message = "";
+      })
+      .addCase(
+        getHouseholdDetails.fulfilled,
+        (state, action: PayloadAction<Household>) => {
+          state.isLoading = false;
+          state.isSuccess = true;
+          // Update the currentHousehold with the fetched details
+          state.currentHousehold = action.payload;
+          // Also update the household in the userHouseholds array if it exists
+          const index = state.userHouseholds.findIndex(
+            (h) => h.id === action.payload.id
+          );
+          if (index !== -1) {
+            state.userHouseholds[index] = action.payload;
+          }
+        }
+      )
+      .addCase(
+        getHouseholdDetails.rejected,
+        (state, action: PayloadAction<string | undefined>) => {
+          state.isLoading = false;
+          state.isError = true;
+          state.message = action.payload || "Failed to fetch household details";
+        }
+      )
+
+      // Reject Invitation
+      .addCase(rejectInvitation.pending, (state) => {
+        state.isLoading = true;
+        state.isError = false;
+        state.message = "";
+      })
+      .addCase(rejectInvitation.fulfilled, (state) => {
+        state.isLoading = false;
+        state.isSuccess = true;
+      })
+      .addCase(
+        rejectInvitation.rejected,
+        (state, action: PayloadAction<string | undefined>) => {
+          state.isLoading = false;
+          state.isError = true;
+          state.message = action.payload || "Failed to reject invitation";
         }
       );
   },

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useHousehold } from "../../hooks/useHousehold"; // Corrected import path
+import { useHousehold } from "../../hooks";
 import { User } from "../../types/user";
 import Button from "../common/Button";
 import { useTheme } from "../../contexts/ThemeContext";
@@ -7,30 +7,31 @@ import { HouseholdMember } from "../../types/household";
 
 const HouseholdSelector: React.FC<{ user: User }> = ({ user }) => {
   const {
-    households, // Expected to be Household[]
+    households,
     currentHousehold,
     isLoading,
     isError,
     fetchHouseholds,
     setCurrent,
+    getHouseholdDetails,
+    toggleHouseholdSelection,
   } = useHousehold();
   const [isOpen, setIsOpen] = useState(false);
   const { theme } = useTheme();
 
   useEffect(() => {
-    console.log("Households:", households);
-    console.log("User ID:", user?.id);
-    console.log("Is Loading:", isLoading);
-
-    if (user?.id && households && households.length === 0 && !isLoading) {
+    if (user?.id && (!households || households.length === 0) && !isLoading) {
       fetchHouseholds();
     }
   }, [user?.id, fetchHouseholds, households, isLoading]);
 
-  const handleHouseholdSelect = (householdId: string) => {
+  const handleHouseholdSelect = async (householdId: string) => {
     const selectedHousehold = households.find((h) => h.id === householdId);
     if (selectedHousehold) {
+      await getHouseholdDetails(householdId);
       setCurrent(selectedHousehold);
+      // Toggle the selection for this household
+      await toggleHouseholdSelection(householdId, user.id, true);
     }
     setIsOpen(false);
   };

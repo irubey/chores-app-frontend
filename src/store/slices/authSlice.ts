@@ -62,14 +62,18 @@ export const logout = createAsyncThunk<void, void, { rejectValue: string }>(
 );
 
 export const initializeAuth = createAsyncThunk<
-  User | null,
+  { user: User | null; isAuthenticated: boolean },
   void,
   { rejectValue: string }
 >("auth/initialize", async (_, thunkAPI) => {
   try {
     const user = await apiClient.auth.initializeAuth();
-    return user;
+    return { user, isAuthenticated: !!user };
   } catch (error: any) {
+    if (error.response?.status === 401) {
+      // Return a successful result with null user for unauthenticated state
+      return { user: null, isAuthenticated: false };
+    }
     return thunkAPI.rejectWithValue("Failed to initialize auth");
   }
 });
@@ -99,9 +103,11 @@ const authSlice = createSlice({
   name: "auth",
   initialState,
   reducers: {
-    reset: (state) => {
+    reset(state) {
+      state.user = null;
       state.status = "idle";
       state.error = null;
+      state.isAuthenticated = false;
     },
   },
   extraReducers: (builder) => {
@@ -158,17 +164,21 @@ const authSlice = createSlice({
       })
       .addCase(
         initializeAuth.fulfilled,
-        (state, action: PayloadAction<User | null>) => {
+        (
+          state,
+          action: PayloadAction<{ user: User | null; isAuthenticated: boolean }>
+        ) => {
           state.status = "succeeded";
-          state.user = action.payload;
-          state.isAuthenticated = !!action.payload;
+          state.user = action.payload.user;
+          state.isAuthenticated = action.payload.isAuthenticated;
           state.error = null;
         }
       )
-      .addCase(initializeAuth.rejected, (state) => {
+      .addCase(initializeAuth.rejected, (state, action) => {
         state.status = "failed";
         state.user = null;
         state.isAuthenticated = false;
+        state.error = action.payload as string;
       })
       // Refresh Auth Cases
       .addCase(refreshAuth.pending, (state) => {

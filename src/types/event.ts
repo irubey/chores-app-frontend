@@ -1,7 +1,7 @@
 export enum EventStatus {
-  SCHEDULED = 'SCHEDULED',
-  CANCELLED = 'CANCELLED',
-  COMPLETED = 'COMPLETED'
+  SCHEDULED = "SCHEDULED",
+  CANCELLED = "CANCELLED",
+  COMPLETED = "COMPLETED",
 }
 
 export interface Event {
@@ -25,27 +25,32 @@ export interface Event {
 }
 
 export enum EventRecurrence {
-  NONE = 'NONE',
-  DAILY = 'DAILY',
-  WEEKLY = 'WEEKLY',
-  MONTHLY = 'MONTHLY',
-  YEARLY = 'YEARLY',
-  CUSTOM = 'CUSTOM'
+  NONE = "NONE",
+  DAILY = "DAILY",
+  WEEKLY = "WEEKLY",
+  MONTHLY = "MONTHLY",
+  YEARLY = "YEARLY",
+  CUSTOM = "CUSTOM",
 }
 
 export enum EventCategory {
-  CHORE = 'CHORE',
-  MEETING = 'MEETING',
-  SOCIAL = 'SOCIAL',
-  OTHER = 'OTHER'
+  CHORE = "CHORE",
+  MEETING = "MEETING",
+  SOCIAL = "SOCIAL",
+  OTHER = "OTHER",
 }
 
 export enum DaysOfWeek {
-  SUNDAY = 'SUNDAY',
-  MONDAY = 'MONDAY',
-  TUESDAY = 'TUESDAY',
-  WEDNESDAY = 'WEDNESDAY',
-  THURSDAY = 'THURSDAY',
-  FRIDAY = 'FRIDAY',
-  SATURDAY = 'SATURDAY'
+  SUNDAY = "SUNDAY",
+  MONDAY = "MONDAY",
+  TUESDAY = "TUESDAY",
+  WEDNESDAY = "WEDNESDAY",
+  THURSDAY = "THURSDAY",
+  FRIDAY = "FRIDAY",
+  SATURDAY = "SATURDAY",
+}
+
+export interface ChoreEvent extends Event {
+  choreId: string;
+  // Add any additional fields specific to chore events if needed
 }

@@ -1,21 +1,25 @@
+import { User } from "./user";
+
 export interface Chore {
   id: string;
   householdId: string;
   title: string;
   description?: string;
+  createdAt: string; // ISO string format
+  updatedAt: string; // ISO string format
   dueDate?: string; // ISO string format
   status: ChoreStatus;
   recurrence?: string;
   priority?: number;
-  assignedUserIds?: string[]; 
-  subtasks?: Subtask[];       
+  assignedUsers: User[];
+  subtasks?: Subtask[];
   swapRequests?: ChoreSwapRequest[];
 }
 
 export enum ChoreStatus {
-  PENDING = 'PENDING',
-  IN_PROGRESS = 'IN_PROGRESS',
-  COMPLETED = 'COMPLETED',
+  PENDING = "PENDING",
+  IN_PROGRESS = "IN_PROGRESS",
+  COMPLETED = "COMPLETED",
 }
 
 export interface Subtask {
@@ -26,8 +30,8 @@ export interface Subtask {
 }
 
 export enum SubtaskStatus {
-  PENDING = 'PENDING',
-  COMPLETED = 'COMPLETED',
+  PENDING = "PENDING",
+  COMPLETED = "COMPLETED",
 }
 
 export interface CreateSubtaskDTO {
@@ -64,9 +68,9 @@ export interface UpdateSubtaskDTO {
 }
 
 export enum ChoreSwapRequestStatus {
-  PENDING = 'PENDING',
-  APPROVED = 'APPROVED',
-  REJECTED = 'REJECTED',
+  PENDING = "PENDING",
+  APPROVED = "APPROVED",
+  REJECTED = "REJECTED",
 }
 
 export interface ChoreSwapRequest {

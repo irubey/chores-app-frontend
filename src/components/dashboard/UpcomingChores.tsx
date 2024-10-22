@@ -24,7 +24,7 @@ const UpcomingChores: React.FC = () => {
     .filter(
       (chore) =>
         chore.status !== ChoreStatus.COMPLETED &&
-        chore.assignedUserIds?.includes(user?.id || "")
+        chore.assignedUsers.some((user) => user.id === user?.id)
     )
     .sort(
       (a, b) =>

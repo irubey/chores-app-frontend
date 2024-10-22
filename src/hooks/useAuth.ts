@@ -31,8 +31,11 @@ export const useAuth = () => {
 
   const resetAuth = useCallback(() => dispatch(reset()), [dispatch]);
 
-  const initAuth = useCallback(() => dispatch(initializeAuth()), [dispatch]);
-
+  const initAuth = useCallback(() => {
+    if (authState.status === "idle") {
+      dispatch(initializeAuth());
+    }
+  }, [dispatch, authState.status]);
   return {
     ...authState,
     loginUser,
