@@ -1,27 +1,15 @@
 {
   "compilerOptions": {
-    // ... existing options ...
-    "types": [
-      "node"
-    ], // Add "node" to include Node.js type definitions
-    "typeRoots": [
-      "./node_modules/@types"
-    ], // Ensure TypeScript looks for types here
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ], // Include DOM libraries if not already present
-    "esModuleInterop": true, // Allows default imports from modules with no default export
-    "jsx": "preserve", // Enables JSX syntax
-    "baseUrl": ".", // Sets the base directory for resolving non-relative module names
+    "types": ["node"],
+    "typeRoots": ["./node_modules/@types"],
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "esModuleInterop": true,
+    "jsx": "preserve",
+    "baseUrl": ".",
     "paths": {
-      "@/*": [
-        "src/*"
-      ] // Defines path aliases
-    }
-    // ... other options ...
-    ,
+      "@/*": ["src/*"],
+      "@shared/*": ["node_modules/@irubey/chores-app-shared/dist/*"]
+    },
     "allowJs": true,
     "skipLibCheck": true,
     "strict": false,
@@ -37,13 +25,6 @@
       }
     ]
   },
-  "include": [
-    "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts"
-  ],
-  "exclude": [
-    "node_modules"
-  ]
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
 }

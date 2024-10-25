@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import { apiClient } from "../../lib/apiClient";
-import { User } from "../../types/user";
+import { User } from "@shared/types";
 import type { RootState } from "../store";
 
 interface AuthState {
@@ -17,97 +17,69 @@ const initialState: AuthState = {
   isAuthenticated: false,
 };
 
-// Async Thunks
 export const login = createAsyncThunk<
   User,
-  { email: string; password: string },
-  { rejectValue: string }
->("auth/login", async (credentials, thunkAPI) => {
-  try {
-    const user = await apiClient.auth.login(credentials);
-    return user;
-  } catch (error: any) {
-    const message =
-      error.response?.data?.message || error.message || "Login failed";
-    return thunkAPI.rejectWithValue(message);
-  }
+  { email: string; password: string }
+>("auth/login", async (credentials) => {
+  return await apiClient.auth.login(credentials);
 });
 
 export const register = createAsyncThunk<
   User,
-  { email: string; password: string; name: string },
-  { rejectValue: string }
->("auth/register", async (userData, thunkAPI) => {
+  { email: string; password: string; name: string }
+>("auth/register", async (userData) => {
+  return await apiClient.auth.register(userData);
+});
+
+export const logout = createAsyncThunk<void, void>("auth/logout", async () => {
   try {
-    const user = await apiClient.auth.register(userData);
-    return user;
-  } catch (error: any) {
-    const message =
-      error.response?.data?.message || error.message || "Registration failed";
-    return thunkAPI.rejectWithValue(message);
+    await apiClient.auth.logout();
+  } finally {
+    // Always cleanup even if logout fails
+    apiClient.cleanup();
   }
 });
 
-export const logout = createAsyncThunk<void, void, { rejectValue: string }>(
-  "auth/logout",
-  async (_, thunkAPI) => {
+export const initializeAuth = createAsyncThunk<User | null>(
+  "auth/initialize",
+  async (_, { rejectWithValue }) => {
     try {
-      await apiClient.auth.logout();
-    } catch (error: any) {
-      const message =
-        error.response?.data?.message || error.message || "Logout failed";
-      return thunkAPI.rejectWithValue(message);
+      return await apiClient.auth.initializeAuth();
+    } catch (error) {
+      if (error?.response?.status === 401) {
+        apiClient.cleanup();
+        return null;
+      }
+      return rejectWithValue("Failed to initialize authentication.");
     }
   }
 );
 
-export const initializeAuth = createAsyncThunk<
-  { user: User | null; isAuthenticated: boolean },
-  void,
-  { rejectValue: string }
->("auth/initialize", async (_, thunkAPI) => {
-  try {
-    const user = await apiClient.auth.initializeAuth();
-    return { user, isAuthenticated: !!user };
-  } catch (error: any) {
-    if (error.response?.status === 401) {
-      // Return a successful result with null user for unauthenticated state
-      return { user: null, isAuthenticated: false };
+export const refreshAuth = createAsyncThunk<User>(
+  "auth/refresh",
+  async (_, { rejectWithValue }) => {
+    try {
+      await apiClient.auth.refreshToken();
+      return await apiClient.user.getProfile();
+    } catch (error) {
+      // Cleanup on refresh failure
+      apiClient.cleanup();
+      return rejectWithValue("Session expired. Please login again.");
     }
-    return thunkAPI.rejectWithValue("Failed to initialize auth");
   }
-});
+);
 
-// Revised refreshAuth Thunk
-export const refreshAuth = createAsyncThunk<
-  User | null,
-  void,
-  { rejectValue: string }
->("auth/refresh", async (_, thunkAPI) => {
-  try {
-    // Call the dedicated refresh-token endpoint
-    await apiClient.auth.refreshToken();
-
-    // After refreshing, fetch the updated user data
-    const user = await apiClient.auth.initializeAuth();
-    return user;
-  } catch (error: any) {
-    const message =
-      error.response?.data?.message || error.message || "Token refresh failed";
-    return thunkAPI.rejectWithValue(message);
-  }
-});
-
-// Create Slice
 const authSlice = createSlice({
   name: "auth",
   initialState,
   reducers: {
-    reset(state) {
+    reset: (state) => {
       state.user = null;
       state.status = "idle";
       state.error = null;
       state.isAuthenticated = false;
+      // Cleanup API client state when resetting auth
+      apiClient.cleanup();
     },
   },
   extraReducers: (builder) => {
@@ -115,8 +87,9 @@ const authSlice = createSlice({
       // Login Cases
       .addCase(login.pending, (state) => {
         state.status = "loading";
+        state.error = null;
       })
-      .addCase(login.fulfilled, (state, action: PayloadAction<User>) => {
+      .addCase(login.fulfilled, (state, action) => {
         state.status = "succeeded";
         state.user = action.payload;
         state.isAuthenticated = true;
@@ -124,15 +97,17 @@ const authSlice = createSlice({
       })
       .addCase(login.rejected, (state, action) => {
         state.status = "failed";
-        state.error = action.payload as string;
+        state.error = action.error.message || "Login failed";
         state.user = null;
         state.isAuthenticated = false;
+        // Cleanup on login failure
+        apiClient.cleanup();
       })
       // Register Cases
       .addCase(register.pending, (state) => {
         state.status = "loading";
       })
-      .addCase(register.fulfilled, (state, action: PayloadAction<User>) => {
+      .addCase(register.fulfilled, (state, action) => {
         state.status = "succeeded";
         state.user = action.payload;
         state.isAuthenticated = true;
@@ -140,7 +115,7 @@ const authSlice = createSlice({
       })
       .addCase(register.rejected, (state, action) => {
         state.status = "failed";
-        state.error = action.payload as string;
+        state.error = action.error.message || "Registration failed";
         state.user = null;
         state.isAuthenticated = false;
       })
@@ -149,64 +124,55 @@ const authSlice = createSlice({
         state.status = "loading";
       })
       .addCase(logout.fulfilled, (state) => {
+        state.status = "succeeded";
         state.user = null;
         state.isAuthenticated = false;
-        state.status = "succeeded";
         state.error = null;
       })
       .addCase(logout.rejected, (state, action) => {
         state.status = "failed";
-        state.error = action.payload as string;
+        state.error = action.error.message || "Logout failed";
+        // Still reset auth state even if logout fails
+        state.user = null;
+        state.isAuthenticated = false;
       })
       // Initialize Auth Cases
       .addCase(initializeAuth.pending, (state) => {
         state.status = "loading";
+        state.error = null;
       })
-      .addCase(
-        initializeAuth.fulfilled,
-        (
-          state,
-          action: PayloadAction<{ user: User | null; isAuthenticated: boolean }>
-        ) => {
-          state.status = "succeeded";
-          state.user = action.payload.user;
-          state.isAuthenticated = action.payload.isAuthenticated;
-          state.error = null;
-        }
-      )
+      .addCase(initializeAuth.fulfilled, (state, action) => {
+        state.status = "succeeded";
+        state.user = action.payload;
+        state.isAuthenticated = !!action.payload;
+        state.error = null;
+      })
       .addCase(initializeAuth.rejected, (state, action) => {
         state.status = "failed";
+        state.error = action.error.message || "Auth initialization failed";
         state.user = null;
         state.isAuthenticated = false;
-        state.error = action.payload as string;
       })
       // Refresh Auth Cases
       .addCase(refreshAuth.pending, (state) => {
         state.status = "loading";
+        state.error = null;
       })
-      .addCase(
-        refreshAuth.fulfilled,
-        (state, action: PayloadAction<User | null>) => {
-          state.status = "succeeded";
-          state.user = action.payload;
-          state.isAuthenticated = !!action.payload;
-          state.error = null;
-        }
-      )
+      .addCase(refreshAuth.fulfilled, (state, action) => {
+        state.status = "succeeded";
+        state.user = action.payload;
+        state.isAuthenticated = true;
+        state.error = null;
+      })
       .addCase(refreshAuth.rejected, (state, action) => {
         state.status = "failed";
-        state.error = action.payload as string;
+        state.error = action.error.message || "Token refresh failed";
         state.user = null;
         state.isAuthenticated = false;
       });
   },
 });
 
-// Export Actions
 export const { reset } = authSlice.actions;
-
-// Export Reducer
 export default authSlice.reducer;
-
-// Export the `selectAuth` Selector
 export const selectAuth = (state: RootState) => state.auth;
