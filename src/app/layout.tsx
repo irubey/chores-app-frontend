@@ -1,44 +1,98 @@
 "use client";
 
-import React from "react";
-import { Provider } from "react-redux";
+import React, { useEffect, useState } from "react";
+import { Provider, useDispatch } from "react-redux";
 import { useAuth } from "../hooks/useAuth";
 import { ThemeProvider } from "../contexts/ThemeContext";
 import { SocketProvider } from "../contexts/SocketContext";
 import Header from "../components/layout/Header";
 import Footer from "../components/layout/Footer";
 import store from "../store/store";
-import "../styles/globals.css";
 import LoadingSpinner from "../components/common/LoadingSpinner";
 import { useRouter, usePathname } from "next/navigation";
 import Head from "next/head";
+import { tokenService } from "../lib/api/services/tokenService";
+import { reset } from "../store/slices/authSlice";
 
-function AppContent({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, status, initAuth } = useAuth();
+// Define public routes
+const PUBLIC_ROUTES = [
+  "/login",
+  "/register",
+  "/",
+  "/forgot-password",
+  "/reset-password",
+] as const;
+
+interface AppContentProps {
+  children: React.ReactNode;
+}
+
+function AppContent({ children }: AppContentProps) {
+  const dispatch = useDispatch();
+  const { isAuthenticated, isLoading, user, error, initAuth } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  const publicRoutes = ["/login", "/register", "/"];
+  const isPublicRoute = PUBLIC_ROUTES.includes(
+    pathname as (typeof PUBLIC_ROUTES)[number]
+  );
 
-  React.useEffect(() => {
-    initAuth();
-  }, [initAuth]);
-
-  React.useEffect(() => {
-    if (status === "succeeded") {
-      if (!publicRoutes.includes(pathname) && !isAuthenticated) {
-        router.push("/login");
-      } else if (
-        publicRoutes.includes(pathname) &&
-        isAuthenticated &&
-        pathname !== "/dashboard"
-      ) {
-        router.push("/dashboard");
+  // Initialize authentication state on component mount
+  useEffect(() => {
+    const initialize = async () => {
+      try {
+        await initAuth();
+      } catch (error) {
+        console.error("Auth initialization failed:", error);
+      } finally {
+        setIsInitialized(true);
       }
-    }
-  }, [status, isAuthenticated, router, pathname]);
+    };
 
-  if (status === "loading" || status === "idle") {
+    if (!isInitialized) {
+      initialize();
+    }
+  }, [initAuth, isInitialized]);
+
+  // Set up authentication error handler to reset auth state and redirect
+  useEffect(() => {
+    tokenService.setAuthErrorHandler(() => {
+      dispatch(reset());
+      router.push("/login");
+    });
+  }, [dispatch, router]);
+
+  // Handle routing based on authentication state
+  useEffect(() => {
+    if (!isInitialized || isLoading) return;
+
+    const handleRouting = () => {
+      if (!isPublicRoute && !isAuthenticated) {
+        // Save the attempted route for post-login redirect
+        sessionStorage.setItem("redirectAfterLogin", pathname);
+        router.push("/login");
+      } else if (isPublicRoute && isAuthenticated) {
+        // Redirect to saved route or dashboard
+        const redirectPath =
+          sessionStorage.getItem("redirectAfterLogin") || "/dashboard";
+        sessionStorage.removeItem("redirectAfterLogin");
+        router.push(redirectPath);
+      }
+    };
+
+    handleRouting();
+  }, [
+    isAuthenticated,
+    isLoading,
+    router,
+    pathname,
+    isPublicRoute,
+    isInitialized,
+  ]);
+
+  // Show loading state
+  if (!isInitialized || isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <LoadingSpinner />
@@ -46,15 +100,24 @@ function AppContent({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // Show error state for protected routes
+  if (error && !isPublicRoute) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-red-500">{error}</div>
+      </div>
+    );
+  }
+
   return (
     <ThemeProvider>
-      <SocketProvider>
+      <SocketProvider isAuthenticated={isAuthenticated} user={user}>
         <div className="flex flex-col min-h-screen">
-          <Header />
+          {isAuthenticated && <Header user={user} />}
           <div className="flex flex-1">
             <main className="flex-1 p-4">{children}</main>
           </div>
-          <Footer />
+          {isAuthenticated && <Footer />}
         </div>
       </SocketProvider>
     </ThemeProvider>
@@ -69,7 +132,6 @@ export default function RootLayout({
   return (
     <html lang="en">
       <Head>
-        {/* Inline Script for Early Theme Initialization */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
@@ -79,15 +141,9 @@ export default function RootLayout({
                   if (storedTheme === 'light' || storedTheme === 'dark') {
                     return storedTheme;
                   }
-                  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                  return prefersDark ? 'dark' : 'light';
+                  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
                 }
-                const theme = getInitialTheme();
-                if (theme === 'dark') {
-                  document.documentElement.classList.add('dark');
-                } else {
-                  document.documentElement.classList.remove('dark');
-                }
+                document.documentElement.classList.toggle('dark', getInitialTheme() === 'dark');
               })();
             `,
           }}

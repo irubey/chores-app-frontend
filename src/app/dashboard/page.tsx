@@ -16,7 +16,7 @@ export default function DashboardPage() {
     <div>
       <h1>Dashboard</h1>
       <div>
-        <h2>Households</h2>
+        <h2>Households from {user?.name}</h2>
         <ul>
           {households.map((household) => (
             <li key={household.id}>{household.name}</li>

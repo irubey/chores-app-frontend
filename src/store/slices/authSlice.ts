@@ -1,7 +1,9 @@
-import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
-import { apiClient } from "../../lib/apiClient";
+import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import { apiClient } from "../../lib/api/apiClient";
 import { User } from "@shared/types";
 import type { RootState } from "../store";
+import { tokenService } from "../../lib/api/services/tokenService";
+import { ApiError } from "@/lib/api/errors";
 
 interface AuthState {
   user: User | null;
@@ -20,51 +22,59 @@ const initialState: AuthState = {
 export const login = createAsyncThunk<
   User,
   { email: string; password: string }
->("auth/login", async (credentials) => {
-  return await apiClient.auth.login(credentials);
+>("auth/login", async (credentials, { rejectWithValue }) => {
+  try {
+    const user = await apiClient.auth.login(credentials);
+    return user;
+  } catch (error: any) {
+    if (error instanceof ApiError) {
+      return rejectWithValue(error.message);
+    }
+    return rejectWithValue("Login failed");
+  }
 });
 
 export const register = createAsyncThunk<
   User,
   { email: string; password: string; name: string }
->("auth/register", async (userData) => {
-  return await apiClient.auth.register(userData);
-});
-
-export const logout = createAsyncThunk<void, void>("auth/logout", async () => {
+>("auth/register", async (userData, { rejectWithValue }) => {
   try {
-    await apiClient.auth.logout();
-  } finally {
-    // Always cleanup even if logout fails
-    apiClient.cleanup();
+    const user = await apiClient.auth.register(userData);
+    return user;
+  } catch (error: any) {
+    if (error instanceof ApiError) {
+      return rejectWithValue(error.message);
+    }
+    return rejectWithValue("Registration failed");
   }
 });
+
+export const logout = createAsyncThunk<void, void>(
+  "auth/logout",
+  async (_, { rejectWithValue }) => {
+    try {
+      await apiClient.auth.logout();
+      tokenService.cleanup();
+    } catch (error: any) {
+      if (error instanceof ApiError) {
+        return rejectWithValue(error.message);
+      }
+      return rejectWithValue("Logout failed");
+    }
+  }
+);
 
 export const initializeAuth = createAsyncThunk<User | null>(
   "auth/initialize",
   async (_, { rejectWithValue }) => {
     try {
-      return await apiClient.auth.initializeAuth();
-    } catch (error) {
-      if (error?.response?.status === 401) {
-        apiClient.cleanup();
+      const user = await apiClient.user.getProfile();
+      return user;
+    } catch (error: any) {
+      if (error instanceof ApiError && error.status === 401) {
         return null;
       }
       return rejectWithValue("Failed to initialize authentication.");
-    }
-  }
-);
-
-export const refreshAuth = createAsyncThunk<User>(
-  "auth/refresh",
-  async (_, { rejectWithValue }) => {
-    try {
-      await apiClient.auth.refreshToken();
-      return await apiClient.user.getProfile();
-    } catch (error) {
-      // Cleanup on refresh failure
-      apiClient.cleanup();
-      return rejectWithValue("Session expired. Please login again.");
     }
   }
 );
@@ -78,8 +88,7 @@ const authSlice = createSlice({
       state.status = "idle";
       state.error = null;
       state.isAuthenticated = false;
-      // Cleanup API client state when resetting auth
-      apiClient.cleanup();
+      tokenService.cleanup();
     },
   },
   extraReducers: (builder) => {
@@ -97,15 +106,14 @@ const authSlice = createSlice({
       })
       .addCase(login.rejected, (state, action) => {
         state.status = "failed";
-        state.error = action.error.message || "Login failed";
+        state.error = (action.payload as string) || "Login failed";
         state.user = null;
         state.isAuthenticated = false;
-        // Cleanup on login failure
-        apiClient.cleanup();
       })
       // Register Cases
       .addCase(register.pending, (state) => {
         state.status = "loading";
+        state.error = null;
       })
       .addCase(register.fulfilled, (state, action) => {
         state.status = "succeeded";
@@ -115,13 +123,14 @@ const authSlice = createSlice({
       })
       .addCase(register.rejected, (state, action) => {
         state.status = "failed";
-        state.error = action.error.message || "Registration failed";
+        state.error = (action.payload as string) || "Registration failed";
         state.user = null;
         state.isAuthenticated = false;
       })
       // Logout Cases
       .addCase(logout.pending, (state) => {
         state.status = "loading";
+        state.error = null;
       })
       .addCase(logout.fulfilled, (state) => {
         state.status = "succeeded";
@@ -131,8 +140,7 @@ const authSlice = createSlice({
       })
       .addCase(logout.rejected, (state, action) => {
         state.status = "failed";
-        state.error = action.error.message || "Logout failed";
-        // Still reset auth state even if logout fails
+        state.error = (action.payload as string) || "Logout failed";
         state.user = null;
         state.isAuthenticated = false;
       })
@@ -149,24 +157,8 @@ const authSlice = createSlice({
       })
       .addCase(initializeAuth.rejected, (state, action) => {
         state.status = "failed";
-        state.error = action.error.message || "Auth initialization failed";
-        state.user = null;
-        state.isAuthenticated = false;
-      })
-      // Refresh Auth Cases
-      .addCase(refreshAuth.pending, (state) => {
-        state.status = "loading";
-        state.error = null;
-      })
-      .addCase(refreshAuth.fulfilled, (state, action) => {
-        state.status = "succeeded";
-        state.user = action.payload;
-        state.isAuthenticated = true;
-        state.error = null;
-      })
-      .addCase(refreshAuth.rejected, (state, action) => {
-        state.status = "failed";
-        state.error = action.error.message || "Token refresh failed";
+        state.error =
+          (action.payload as string) || "Auth initialization failed";
         state.user = null;
         state.isAuthenticated = false;
       });

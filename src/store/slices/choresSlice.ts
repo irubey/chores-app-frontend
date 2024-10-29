@@ -4,7 +4,7 @@ import {
   PayloadAction,
   createSelector,
 } from "@reduxjs/toolkit";
-import { apiClient } from "../../lib/apiClient";
+import { apiClient } from "../../lib/api/apiClient";
 import {
   Chore,
   CreateChoreDTO,

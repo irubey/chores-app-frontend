@@ -1,7 +1,7 @@
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import { RootState } from "../store";
 import { Household, HouseholdMember } from "../../types/household";
-import { apiClient } from "../../lib/apiClient";
+import { apiClient } from "../../lib/api/apiClient";
 
 interface HouseholdState {
   userHouseholds: Household[];
