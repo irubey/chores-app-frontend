@@ -43,9 +43,16 @@ export class AuthService extends BaseApiClient {
         credentials,
         { signal }
       );
-      return this.extractData(response);
+      const userData = this.extractData(response);
+      if (!userData) {
+        throw new ApiError("Login failed - No user data received", 401);
+      }
+      return userData;
     } catch (error) {
-      throw error;
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw new ApiError("Login failed", 401);
     }
   }
 

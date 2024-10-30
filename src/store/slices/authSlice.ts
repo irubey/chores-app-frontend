@@ -30,7 +30,7 @@ export const login = createAsyncThunk<
     if (error instanceof ApiError) {
       return rejectWithValue(error.message);
     }
-    return rejectWithValue("Login failed");
+    return rejectWithValue("Login failed - Please try again");
   }
 });
 
@@ -45,7 +45,7 @@ export const register = createAsyncThunk<
     if (error instanceof ApiError) {
       return rejectWithValue(error.message);
     }
-    return rejectWithValue("Registration failed");
+    return rejectWithValue("Registration failed - Please try again");
   }
 });
 
@@ -59,22 +59,22 @@ export const logout = createAsyncThunk<void, void>(
       if (error instanceof ApiError) {
         return rejectWithValue(error.message);
       }
-      return rejectWithValue("Logout failed");
+      return rejectWithValue("Logout failed - Please try again");
     }
   }
 );
 
-export const initializeAuth = createAsyncThunk<User | null>(
+export const initializeAuth = createAsyncThunk<User | null, void>(
   "auth/initialize",
   async (_, { rejectWithValue }) => {
     try {
-      const user = await apiClient.user.getProfile();
+      const user = await apiClient.auth.initializeAuth();
       return user;
-    } catch (error: any) {
-      if (error instanceof ApiError && error.status === 401) {
-        return null;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return rejectWithValue(error.message);
       }
-      return rejectWithValue("Failed to initialize authentication.");
+      return rejectWithValue("An unexpected error occurred");
     }
   }
 );
@@ -88,7 +88,6 @@ const authSlice = createSlice({
       state.status = "idle";
       state.error = null;
       state.isAuthenticated = false;
-      tokenService.cleanup();
     },
   },
   extraReducers: (builder) => {
@@ -158,7 +157,9 @@ const authSlice = createSlice({
       .addCase(initializeAuth.rejected, (state, action) => {
         state.status = "failed";
         state.error =
-          (action.payload as string) || "Auth initialization failed";
+          action.payload === "Unauthorized"
+            ? null
+            : (action.payload as string) || "Auth initialization failed";
         state.user = null;
         state.isAuthenticated = false;
       });

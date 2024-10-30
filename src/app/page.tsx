@@ -1,7 +1,4 @@
 "use client";
-
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   FaMoneyBillWave,
@@ -9,31 +6,10 @@ import {
   FaClipboardList,
   FaCalendarAlt,
 } from "react-icons/fa";
-import { useAuth } from "../hooks/useAuth";
-import LoadingSpinner from "../components/common/LoadingSpinner";
 
-function LandingPage() {
-  const router = useRouter();
-  const { isAuthenticated, status } = useAuth();
-
-  useEffect(() => {
-    if (status === "succeeded" && isAuthenticated) {
-      router.push("/dashboard");
-    }
-  }, [status, isAuthenticated, router]);
-
-  // Display spinner when initialization is pending or loading
-  if (status === "idle" || status === "loading") {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <LoadingSpinner />
-      </div>
-    );
-  }
-
+export default function LandingPage() {
   return (
     <div className="min-h-screen flex flex-col bg-background-light dark:bg-background-dark text-text-primary font-sans">
-      {/* Landing Page Content */}
       <main>
         {/* Welcome Section */}
         <section className="container mx-auto py-20 px-4 text-center">
@@ -45,10 +21,18 @@ function LandingPage() {
             harmonious living.
           </p>
           <div className="flex justify-center space-x-4">
-            <Link href="/login" className="btn btn-primary px-6 py-3 text-lg">
+            <Link
+              href="/login"
+              className="btn btn-primary px-6 py-3 text-lg"
+              prefetch={false}
+            >
               Login
             </Link>
-            <Link href="/register" className="btn btn-accent px-6 py-3 text-lg">
+            <Link
+              href="/register"
+              className="btn btn-accent px-6 py-3 text-lg"
+              prefetch={false}
+            >
               Get Started
             </Link>
           </div>
@@ -56,8 +40,8 @@ function LandingPage() {
 
         {/* Features Section */}
         <section className="container mx-auto py-16 px-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Messaging Forum */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Feature cards remain the same as your original code */}
             <div className="card bg-white dark:bg-neutral-dark p-6 rounded-lg shadow-md">
               <h3 className="text-2xl mb-4 font-serif text-primary flex items-center">
                 <FaComments className="mr-2 text-accent" />
@@ -70,7 +54,6 @@ function LandingPage() {
               </p>
             </div>
 
-            {/* Chores Management */}
             <div className="card bg-white dark:bg-neutral-dark p-6 rounded-lg shadow-md">
               <h3 className="text-2xl mb-4 font-serif text-primary flex items-center">
                 <FaClipboardList className="mr-2 text-accent" />
@@ -83,7 +66,6 @@ function LandingPage() {
               </p>
             </div>
 
-            {/* Shared Calendar */}
             <div className="card bg-white dark:bg-neutral-dark p-6 rounded-lg shadow-md">
               <h3 className="text-2xl mb-4 font-serif text-primary flex items-center">
                 <FaCalendarAlt className="mr-2 text-accent" />
@@ -95,7 +77,6 @@ function LandingPage() {
               </p>
             </div>
 
-            {/* Finances Management */}
             <div className="card bg-white dark:bg-neutral-dark p-6 rounded-lg shadow-md">
               <h3 className="text-2xl mb-4 font-serif text-primary flex items-center">
                 <FaMoneyBillWave className="mr-2 text-accent" />
@@ -120,10 +101,18 @@ function LandingPage() {
             experience with your roommates.
           </p>
           <div className="flex justify-center space-x-4">
-            <Link href="/login" className="btn btn-primary px-6 py-3 text-lg">
+            <Link
+              href="/login"
+              className="btn btn-primary px-6 py-3 text-lg"
+              prefetch={false}
+            >
               Login
             </Link>
-            <Link href="/register" className="btn btn-accent px-6 py-3 text-lg">
+            <Link
+              href="/register"
+              className="btn btn-accent px-6 py-3 text-lg"
+              prefetch={false}
+            >
               Get Started
             </Link>
           </div>
@@ -132,5 +121,3 @@ function LandingPage() {
     </div>
   );
 }
-
-export default LandingPage;

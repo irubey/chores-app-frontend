@@ -10,9 +10,11 @@ export class BaseApiClient {
   }
 
   protected extractData<T>(response: AxiosResponse<ApiResponse<T>>): T {
+    console.log("BaseClient received response:", response.data);
     if (response.data && response.data.data !== undefined) {
       return response.data.data;
     }
+    console.error("Invalid response structure:", response.data);
     throw new Error("Invalid API response structure");
   }
 }

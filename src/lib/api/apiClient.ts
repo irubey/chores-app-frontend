@@ -19,9 +19,6 @@ export class ApiClient {
   public readonly notifications: NotificationService;
 
   constructor() {
-    // Initialize interceptors once
-    setupInterceptors();
-
     // Initialize all services
     this.auth = new AuthService();
     this.user = new UserService();

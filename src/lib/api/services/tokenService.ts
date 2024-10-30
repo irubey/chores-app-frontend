@@ -1,53 +1,58 @@
+import {
+  shouldSkipTokenRefresh,
+  RetryableAxiosRequestConfig,
+} from "../interceptors";
+import { ApiError, AuthenticationError } from "../errors";
 import { axiosInstance } from "../axiosInstance";
-import { AuthenticationError } from "../errors";
 
 class TokenService {
   private isRefreshing: boolean = false;
-  private refreshSubscribers: Array<() => void> = [];
-  private onAuthError?: () => void; // Callback for authentication errors
+  private refreshSubscribers: Array<(error?: Error) => void> = [];
+  private onAuthError?: () => void;
 
   /**
-   * Subscribe to token refresh event.
-   * @param callback - Function to execute once token is refreshed.
+   * Subscribes to token refresh events.
+   * @param callback - Function to call when token refresh is done or fails.
    */
-  public subscribeTokenRefresh(callback: () => void): void {
+  public subscribeTokenRefresh(callback: (error?: Error) => void): void {
     this.refreshSubscribers.push(callback);
   }
 
   /**
-   * Notify all subscribers that the token has been refreshed.
+   * Notifies all subscribers about the token refresh result.
+   * @param error - Optional error if token refresh failed.
    */
-  private notifyRefreshSubscribers(): void {
-    this.refreshSubscribers.forEach((callback) => callback());
+  private notifyRefreshSubscribers(error?: Error): void {
+    this.refreshSubscribers.forEach((callback) => callback(error));
     this.refreshSubscribers = [];
   }
 
   /**
-   * Set the authentication error handler callback.
-   * @param callback - Function to execute on authentication error.
+   * Sets a handler for authentication errors.
+   * @param callback - Function to call on auth errors.
    */
   public setAuthErrorHandler(callback: () => void): void {
     this.onAuthError = callback;
   }
 
   /**
-   * Refresh the authentication token.
+   * Refreshes the authentication token.
    */
   public async refreshToken(): Promise<void> {
     if (this.isRefreshing) return;
 
     this.isRefreshing = true;
     try {
-      await axiosInstance.post("/auth/refresh-token");
+      const response = await axiosInstance.post("/auth/refresh-token");
+      if (!response.data) {
+        throw new Error("No data received from refresh token request");
+      }
       this.notifyRefreshSubscribers();
     } catch (error) {
       console.error("Token refresh failed:", error);
-      this.notifyRefreshSubscribers();
-
-      if (this.onAuthError) {
-        this.onAuthError(); // Invoke the callback on authentication error
-      }
-
+      this.notifyRefreshSubscribers(
+        error instanceof Error ? error : new Error("Token refresh failed")
+      );
       throw new AuthenticationError("Session expired. Please login again.");
     } finally {
       this.isRefreshing = false;
@@ -59,12 +64,22 @@ class TokenService {
    * @param originalRequest - The original Axios request configuration.
    * @returns The Axios response promise.
    */
-  public async handle401Error(originalRequest: any): Promise<any> {
+  public async handle401Error(
+    originalRequest: RetryableAxiosRequestConfig
+  ): Promise<any> {
+    if (originalRequest._retry || shouldSkipTokenRefresh(originalRequest)) {
+      this.cleanup();
+      throw new ApiError("Unauthorized", 401);
+    }
+
     if (this.isRefreshing) {
       return new Promise((resolve, reject) => {
-        this.subscribeTokenRefresh(() => {
-          // Retry the original request after token refresh
-          axiosInstance(originalRequest).then(resolve).catch(reject);
+        this.subscribeTokenRefresh((error) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve(axiosInstance(originalRequest));
+          }
         });
       });
     }
@@ -74,7 +89,11 @@ class TokenService {
       await this.refreshToken();
       return axiosInstance(originalRequest);
     } catch (error) {
-      return Promise.reject(error);
+      this.cleanup();
+      if (originalRequest.url?.includes("/users/profile")) {
+        throw new ApiError("Unauthorized", 401);
+      }
+      throw error;
     }
   }
 

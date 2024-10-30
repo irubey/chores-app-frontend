@@ -21,7 +21,7 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ user }) => {
   const { logoutUser } = useAuth();
-  const { theme, toggleTheme } = useTheme();
+  // const { theme, toggleTheme } = useTheme();
   const { notifications } = useNotifications();
 
   // Helper function to count unseen notifications per feature
@@ -108,22 +108,6 @@ const Header: React.FC<HeaderProps> = ({ user }) => {
               label="Settings"
             />
 
-            {/* Theme Toggle */}
-            <button
-              onClick={toggleTheme}
-              className="flex flex-col items-center hover:text-secondary-light transition-colors duration-200"
-              aria-label={`Switch to ${
-                theme === "dark" ? "light" : "dark"
-              } mode`}
-            >
-              {theme === "dark" ? (
-                <FaSun className="text-xl" />
-              ) : (
-                <FaMoon className="text-xl" />
-              )}
-              <span className="mt-1 text-sm">Theme</span>
-            </button>
-
             {/* User Profile */}
             <div className="flex items-center space-x-2">
               <span className="text-sm">{user.name}</span>
@@ -150,19 +134,6 @@ const Header: React.FC<HeaderProps> = ({ user }) => {
             >
               Register
             </Link>
-            <button
-              onClick={toggleTheme}
-              className="p-2 rounded-full hover:bg-primary-dark transition-colors duration-200"
-              aria-label={`Switch to ${
-                theme === "dark" ? "light" : "dark"
-              } mode`}
-            >
-              {theme === "dark" ? (
-                <FaSun className="text-xl" />
-              ) : (
-                <FaMoon className="text-xl" />
-              )}
-            </button>
           </div>
         )}
       </div>

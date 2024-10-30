@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Provider, useDispatch } from "react-redux";
 import { useAuth } from "../hooks/useAuth";
 import { ThemeProvider } from "../contexts/ThemeContext";
@@ -33,94 +33,62 @@ function AppContent({ children }: AppContentProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [isInitialized, setIsInitialized] = useState(false);
-
+  const hasInitializedAuth = useRef(false);
   const isPublicRoute = PUBLIC_ROUTES.includes(
     pathname as (typeof PUBLIC_ROUTES)[number]
   );
 
-  // Initialize authentication state on component mount
   useEffect(() => {
     const initialize = async () => {
+      if (hasInitializedAuth.current) return;
+      hasInitializedAuth.current = true;
+
       try {
         await initAuth();
-      } catch (error) {
-        console.error("Auth initialization failed:", error);
+        // After successful auth, redirect from home to dashboard
+        if (
+          isAuthenticated &&
+          pathname === "/" &&
+          !window.location.search.includes("from=redirect")
+        ) {
+          router.replace("/dashboard?from=redirect");
+        }
+      } catch (err) {
+        console.error("Auth initialization failed:", err);
+        // Only redirect to login for non-public routes
+        if (!isPublicRoute && pathname !== "/login") {
+          router.replace("/login?from=redirect");
+        }
       } finally {
         setIsInitialized(true);
       }
     };
 
-    if (!isInitialized) {
-      initialize();
+    initialize();
+  }, [isPublicRoute, initAuth, router, pathname, isAuthenticated]);
+
+  // Add a separate effect for handling authenticated state changes
+  useEffect(() => {
+    if (
+      isInitialized &&
+      isAuthenticated &&
+      pathname === "/" &&
+      !window.location.search.includes("from=redirect")
+    ) {
+      router.replace("/dashboard?from=redirect");
     }
-  }, [initAuth, isInitialized]);
+  }, [isAuthenticated, pathname, router, isInitialized]);
 
-  // Set up authentication error handler to reset auth state and redirect
-  useEffect(() => {
-    tokenService.setAuthErrorHandler(() => {
-      dispatch(reset());
-      router.push("/login");
-    });
-  }, [dispatch, router]);
-
-  // Handle routing based on authentication state
-  useEffect(() => {
-    if (!isInitialized || isLoading) return;
-
-    const handleRouting = () => {
-      if (!isPublicRoute && !isAuthenticated) {
-        // Save the attempted route for post-login redirect
-        sessionStorage.setItem("redirectAfterLogin", pathname);
-        router.push("/login");
-      } else if (isPublicRoute && isAuthenticated) {
-        // Redirect to saved route or dashboard
-        const redirectPath =
-          sessionStorage.getItem("redirectAfterLogin") || "/dashboard";
-        sessionStorage.removeItem("redirectAfterLogin");
-        router.push(redirectPath);
-      }
-    };
-
-    handleRouting();
-  }, [
-    isAuthenticated,
-    isLoading,
-    router,
-    pathname,
-    isPublicRoute,
-    isInitialized,
-  ]);
-
-  // Show loading state
-  if (!isInitialized || isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <LoadingSpinner />
-      </div>
-    );
-  }
-
-  // Show error state for protected routes
-  if (error && !isPublicRoute) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-red-500">{error}</div>
-      </div>
-    );
+  if (!isInitialized) {
+    return <LoadingSpinner />;
   }
 
   return (
-    <ThemeProvider>
-      <SocketProvider isAuthenticated={isAuthenticated} user={user}>
-        <div className="flex flex-col min-h-screen">
-          {isAuthenticated && <Header user={user} />}
-          <div className="flex flex-1">
-            <main className="flex-1 p-4">{children}</main>
-          </div>
-          {isAuthenticated && <Footer />}
-        </div>
-      </SocketProvider>
-    </ThemeProvider>
+    <div className="min-h-screen flex flex-col bg-background-light dark:bg-background-dark text-text-primary font-sans">
+      {isPublicRoute || isAuthenticated ? <Header user={user} /> : null}
+      <main>{children}</main>
+      {isAuthenticated && <Footer />}
+    </div>
   );
 }
 
