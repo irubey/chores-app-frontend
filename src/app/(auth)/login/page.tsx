@@ -39,75 +39,102 @@ const LoginPage: React.FC = () => {
 
   return (
     <AuthLayout>
-      <h2 className="text-2xl font-semibold text-center mb-8">
-        Login to Your Account
+      <h2 className="text-h2 text-primary-dark dark:text-primary-light text-center mb-8">
+        Welcome back
       </h2>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+        <div className="mb-4 p-4 bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-800 text-red-700 dark:text-red-400 rounded-md">
           {error}
         </div>
       )}
 
       <form onSubmit={onSubmit} className="space-y-6">
         <div className="space-y-4">
-          <div>
-            <Input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              required
-              placeholder="Email address"
-              value={email}
-              onChange={onChange}
-              label="Email address"
-              disabled={isLoading}
-            />
-          </div>
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            required
+            placeholder="Email address"
+            value={email}
+            onChange={onChange}
+            label="Email address"
+            disabled={isLoading}
+            variant="filled"
+            fullWidth
+            startIcon={
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"
+                />
+              </svg>
+            }
+          />
 
-          <div>
-            <Input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              required
-              placeholder="Password"
-              value={password}
-              onChange={onChange}
-              label="Password"
-              disabled={isLoading}
-            />
-          </div>
+          <Input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            placeholder="Password"
+            value={password}
+            onChange={onChange}
+            label="Password"
+            disabled={isLoading}
+            variant="filled"
+            fullWidth
+            startIcon={
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                />
+              </svg>
+            }
+          />
         </div>
 
-        <Button type="submit" className="w-full" disabled={isLoading}>
-          {isLoading ? "Signing In..." : "Sign In"}
+        <Button
+          type="submit"
+          variant="primary"
+          size="lg"
+          fullWidth
+          isLoading={isLoading}
+          className="btn-primary"
+        >
+          Sign in
         </Button>
       </form>
 
-      <div className="mt-6 text-center space-y-2">
-        <p className="text-sm">
-          Don't have an account?{" "}
-          <Link
-            href="/register"
-            className="text-primary hover:text-primary-dark transition-colors"
-            prefetch={false}
-          >
-            Register here
-          </Link>
-        </p>
-        <p className="text-sm">
-          <Link
-            href="/forgot-password"
-            className="text-primary hover:text-primary-dark transition-colors"
-            prefetch={false}
-          >
-            Forgot your password?
-          </Link>
-        </p>
-      </div>
+      <p className="text-center text-sm text-text-secondary">
+        Don't have an account?{" "}
+        <a
+          href="/register"
+          className="text-primary hover:text-primary-dark dark:hover:text-primary-light"
+        >
+          Create one
+        </a>
+      </p>
     </AuthLayout>
   );
 };

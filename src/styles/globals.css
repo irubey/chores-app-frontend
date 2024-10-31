@@ -1,73 +1,53 @@
-@import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;700&family=Playfair+Display:wght@400;600;700&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Lato:wght@400;700&family=Playfair+Display:wght@400;600;700&display=swap");
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  /* Primary Colors */
-  --color-primary: #219EBC;
-  --color-primary-light: #8ECAE6;
-  --color-primary-dark: #023047;
-
-  /* Secondary Colors */
-  --color-secondary: #95D5B2;
-  --color-secondary-light: #B8E0D2;
-  --color-secondary-dark: #74C69D;
-
-  /* Accent Colors */
-  --color-accent: #EEB62B;
-  --color-accent-light: #FFD166;
-  --color-accent-dark: #CB9D06;
-
-  /* Neutral Colors */
-  --color-background-light: #F8F9FA;
-  --color-background-dark: #212529;
-  --color-text-primary: #343A40;
-  --color-text-secondary: #6C757D;
-
-  /* Fonts */
-  --font-sans: 'Lato', sans-serif;
-  --font-heading: 'Playfair Display', serif;
-
-  /* Spacing Scale */
-  --spacing-1: 4px;
-  --spacing-2: 8px;
-  --spacing-3: 12px;
-  --spacing-4: 16px;
-  --spacing-5: 20px;
-  --spacing-6: 24px;
-  --spacing-8: 32px;
-  --spacing-10: 40px;
-  --spacing-12: 48px;
+  /* These CSS variables can be removed since we're using Tailwind's color system */
+  /* Instead, use the colors directly from your Tailwind config */
 }
 
 @layer base {
   body {
-    @apply font-sans text-text-primary;
-    background-color: var(--color-background-light);
-    background-image: var(--tw-gradient-to-bottom);
+    @apply font-sans text-text-primary bg-background-light dark:bg-background-dark;
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     @apply font-heading font-semibold;
   }
 
-  h1 { @apply text-h1 mb-6 text-primary-dark dark:text-primary-light; }
-  h2 { @apply text-h2 mb-5 text-primary-dark dark:text-primary-light; }
-  h3 { @apply text-h3 mb-4 text-primary dark:text-primary-light; }
-  h4 { @apply text-h4 mb-3 text-primary dark:text-primary-light; }
-  h5 { @apply text-h5 mb-2 text-secondary-dark dark:text-secondary-light; }
-  h6 { @apply text-h6 mb-2 text-secondary-dark dark:text-secondary-light; }
-
-  /* Body Text */
-  p {
-    @apply text-body text-text-primary;
+  h1 {
+    @apply text-h1 mb-6 text-primary-dark dark:text-primary-light;
+  }
+  h2 {
+    @apply text-h2 mb-5 text-primary-dark dark:text-primary-light;
+  }
+  h3 {
+    @apply text-h3 mb-4 text-primary dark:text-primary-light;
+  }
+  h4 {
+    @apply text-h4 mb-3 text-primary dark:text-primary-light;
+  }
+  h5 {
+    @apply text-h5 mb-2 text-secondary-dark dark:text-secondary-light;
+  }
+  h6 {
+    @apply text-h6 mb-2 text-secondary-dark dark:text-secondary-light;
   }
 
-  /* Links */
+  p {
+    @apply text-body text-text-primary dark:text-text-secondary;
+  }
+
   a {
-    @apply text-primary hover:underline;
+    @apply text-primary hover:text-primary-dark dark:hover:text-primary-light transition-colors duration-200;
   }
 }
 
@@ -77,38 +57,32 @@
   }
 
   .btn-primary {
-    @apply btn bg-primary text-white hover:bg-primary-dark;
+    @apply btn bg-primary text-white hover:bg-primary-dark dark:bg-primary-light dark:hover:bg-primary;
   }
 
   .btn-secondary {
-    @apply btn bg-secondary text-text-primary hover:bg-secondary-dark;
+    @apply btn bg-secondary text-text-primary hover:bg-secondary-dark dark:bg-secondary-light dark:hover:bg-secondary;
   }
 
   .btn-accent {
-    @apply btn bg-accent text-text-primary hover:bg-accent-dark;
+    @apply btn bg-accent text-text-primary hover:bg-accent-dark dark:bg-accent-light dark:hover:bg-accent;
   }
 
   .input {
-    @apply px-3 py-2 border border-neutral-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-white;
+    @apply px-3 py-2 border border-neutral-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-white dark:bg-background-dark dark:border-neutral-700;
   }
 
   .card {
-    @apply bg-white rounded-lg shadow-md p-6 border border-neutral-200;
+    @apply bg-white dark:bg-background-dark rounded-lg shadow-md p-6 border border-neutral-200 dark:border-neutral-700;
   }
 }
 
 @layer utilities {
-  .sr-only {
-    @apply absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0;
-  }
-
-  /* Custom Utilities */
   .container-custom {
-    @apply mx-auto px-4;
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
   }
 
-  /* Gradient Utility */
   .gradient-to-bottom {
-    background-image: linear-gradient(to bottom, rgba(142, 202, 230, 0.1), rgba(255, 209, 102, 0.1));
+    @apply bg-gradient-to-bottom;
   }
 }

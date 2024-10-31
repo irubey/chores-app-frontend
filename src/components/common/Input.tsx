@@ -1,67 +1,108 @@
-'use client'
+import React, { forwardRef } from "react";
+import { twMerge } from "tailwind-merge";
 
-import React, { forwardRef, InputHTMLAttributes, ReactNode } from 'react';
-import { FaExclamationCircle } from 'react-icons/fa';
-
-export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
-  label: string;
-  id: string;
+interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+  label?: string;
   error?: string;
-  helpText?: string;
-  leftIcon?: ReactNode;
-  rightIcon?: ReactNode;
-  containerClassName?: string;
+  helperText?: string;
+  startIcon?: React.ReactNode;
+  endIcon?: React.ReactNode;
+  fullWidth?: boolean;
+  variant?: "outlined" | "filled";
 }
 
-export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, id, error, helpText, leftIcon, rightIcon, containerClassName = '', className = '', ...props }, ref) => {
-    const baseInputClasses = 'w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 transition-colors duration-200';
-    const inputClasses = `
-      ${baseInputClasses}
-      ${error ? 'border-red-500 text-red-900 placeholder-red-300 focus:ring-red-500 focus:border-red-500' : 'border-neutral-300 focus:ring-primary focus:border-primary'}
-      ${leftIcon ? 'pl-10' : ''}
-      ${rightIcon ? 'pr-10' : ''}
-      ${className}
-    `;
+const Input = forwardRef<HTMLInputElement, InputProps>(
+  (
+    {
+      label,
+      error,
+      helperText,
+      startIcon,
+      endIcon,
+      className,
+      fullWidth = false,
+      variant = "outlined",
+      disabled,
+      required,
+      ...props
+    },
+    ref
+  ) => {
+    const baseInputStyles = "input transition-all duration-200 w-full";
+    const variantStyles = {
+      outlined: `
+        border-neutral-300 bg-transparent
+        focus:border-primary focus:ring-primary/20
+        dark:border-neutral-700 dark:focus:border-primary-light
+      `,
+      filled: `
+        border-transparent bg-neutral-100 
+        focus:bg-neutral-50 focus:ring-primary/20
+        dark:bg-neutral-800 dark:focus:bg-neutral-700
+      `,
+    };
+
+    const inputWrapperStyles = twMerge(
+      "relative flex flex-col gap-1",
+      fullWidth ? "w-full" : "w-auto",
+      className
+    );
+
+    const inputStyles = twMerge(
+      baseInputStyles,
+      variantStyles[variant],
+      error && "border-red-500 focus:border-red-500 focus:ring-red-200",
+      startIcon && "pl-10",
+      endIcon && "pr-10",
+      disabled &&
+        "opacity-50 cursor-not-allowed bg-neutral-100 dark:bg-neutral-800"
+    );
+
+    const labelStyles = twMerge(
+      "text-sm font-medium text-neutral-700 dark:text-neutral-300",
+      disabled && "opacity-50",
+      error && "text-red-500"
+    );
 
     return (
-      <div className={`mb-4 ${containerClassName}`}>
-        <label htmlFor={id} className="block text-sm font-semibold text-text-primary mb-1">
-          {label}
-        </label>
+      <div className={inputWrapperStyles}>
+        {label && (
+          <label className={labelStyles}>
+            {label}
+            {required && <span className="text-red-500 ml-1">*</span>}
+          </label>
+        )}
+
         <div className="relative">
-          {leftIcon && (
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              {leftIcon}
+          {startIcon && (
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500">
+              {startIcon}
             </div>
           )}
+
           <input
             ref={ref}
-            id={id}
-            className={inputClasses}
-            aria-invalid={error ? 'true' : 'false'}
-            aria-describedby={`${id}-error ${id}-help`}
+            disabled={disabled}
+            required={required}
+            className={inputStyles}
             {...props}
           />
-          {rightIcon && (
-            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-              {rightIcon}
-            </div>
-          )}
-          {error && (
-            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-              <FaExclamationCircle className="h-5 w-5 text-red-500" aria-hidden="true" />
+
+          {endIcon && (
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500">
+              {endIcon}
             </div>
           )}
         </div>
-        {error && (
-          <p className="mt-2 text-sm text-red-600" id={`${id}-error`}>
-            {error}
-          </p>
-        )}
-        {helpText && (
-          <p className="mt-2 text-sm text-text-secondary" id={`${id}-help`}>
-            {helpText}
+
+        {(error || helperText) && (
+          <p
+            className={twMerge(
+              "text-xs mt-1",
+              error ? "text-red-500" : "text-neutral-500 dark:text-neutral-400"
+            )}
+          >
+            {error || helperText}
           </p>
         )}
       </div>
@@ -69,6 +110,6 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
   }
 );
 
-Input.displayName = 'Input';
+Input.displayName = "Input";
 
 export default Input;

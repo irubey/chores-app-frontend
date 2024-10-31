@@ -21,8 +21,8 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ user }) => {
   const { logoutUser } = useAuth();
-  // const { theme, toggleTheme } = useTheme();
   const { notifications } = useNotifications();
+  const { theme, toggleTheme } = useTheme();
 
   // Helper function to count unseen notifications per feature
   const countUnseen = (type: string) => {
@@ -63,16 +63,14 @@ const Header: React.FC<HeaderProps> = ({ user }) => {
   return (
     <header className="bg-primary dark:bg-primary-dark text-white shadow-md">
       <div className="container-custom flex items-center justify-between py-4">
-        {/* Logo or App Name */}
         <Link
-          href="/"
-          className="text-2xl font-heading hover:text-secondary-light transition-colors duration-200"
+          href={user ? "/dashboard" : "/"}
+          className="text-2xl font-heading text-white hover:text-secondary-light transition-colors duration-200"
         >
           roomies
         </Link>
 
         {user ? (
-          // Navigation Icons for logged-in users
           <nav className="flex items-center space-x-6">
             <NavigationLink
               href="/messages"
@@ -108,32 +106,53 @@ const Header: React.FC<HeaderProps> = ({ user }) => {
               label="Settings"
             />
 
-            {/* User Profile */}
-            <div className="flex items-center space-x-2">
-              <span className="text-sm">{user.name}</span>
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-full hover:bg-primary-dark dark:hover:bg-primary-light transition-colors duration-200"
+              aria-label="Toggle theme"
+            >
+              {theme === "dark" ? (
+                <FaSun className="text-xl" />
+              ) : (
+                <FaMoon className="text-xl" />
+              )}
+            </button>
+
+            <div className="flex items-center space-x-4">
+              <span className="text-sm font-medium">{user.name}</span>
               <button
                 onClick={handleLogout}
-                className="btn-accent hover:bg-accent-dark transition-colors duration-200"
+                className="px-4 py-2 text-sm font-medium text-white bg-accent hover:bg-accent-dark dark:bg-accent-light dark:hover:bg-accent transition-colors duration-200 rounded-md"
               >
                 Logout
               </button>
             </div>
           </nav>
         ) : (
-          // If Not Authenticated
           <div className="flex items-center space-x-4">
             <Link
               href="/login"
-              className="btn-primary hover:bg-primary-dark transition-colors duration-200"
+              className="px-4 py-2 text-sm font-medium text-white bg-primary-dark hover:bg-primary-light transition-colors duration-200 rounded-md"
             >
               Login
             </Link>
             <Link
               href="/register"
-              className="btn-secondary hover:bg-secondary-dark transition-colors duration-200"
+              className="px-4 py-2 text-sm font-medium bg-secondary hover:bg-secondary-dark transition-colors duration-200 rounded-md"
             >
               Register
             </Link>
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-full hover:bg-primary-dark dark:hover:bg-primary-light transition-colors duration-200"
+              aria-label="Toggle theme"
+            >
+              {theme === "dark" ? (
+                <FaSun className="text-xl" />
+              ) : (
+                <FaMoon className="text-xl" />
+              )}
+            </button>
           </div>
         )}
       </div>

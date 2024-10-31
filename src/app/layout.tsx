@@ -8,11 +8,11 @@ import { SocketProvider } from "../contexts/SocketContext";
 import Header from "../components/layout/Header";
 import Footer from "../components/layout/Footer";
 import store from "../store/store";
-import LoadingSpinner from "../components/common/LoadingSpinner";
+import Spinner from "../components/common/Spinner";
 import { useRouter, usePathname } from "next/navigation";
-import Head from "next/head";
 import { tokenService } from "../lib/api/services/tokenService";
 import { reset } from "../store/slices/authSlice";
+import "../styles/globals.css";
 
 // Define public routes
 const PUBLIC_ROUTES = [
@@ -55,8 +55,8 @@ function AppContent({ children }: AppContentProps) {
         }
       } catch (err) {
         console.error("Auth initialization failed:", err);
-        // Only redirect to login for non-public routes
-        if (!isPublicRoute && pathname !== "/login") {
+        dispatch(reset()); // Reset auth state
+        if (!isPublicRoute) {
           router.replace("/login?from=redirect");
         }
       } finally {
@@ -65,28 +65,43 @@ function AppContent({ children }: AppContentProps) {
     };
 
     initialize();
-  }, [isPublicRoute, initAuth, router, pathname, isAuthenticated]);
+  }, [isPublicRoute, initAuth, router, pathname, isAuthenticated, dispatch]);
 
-  // Add a separate effect for handling authenticated state changes
+  // Add effect to handle auth state changes
   useEffect(() => {
-    if (
-      isInitialized &&
-      isAuthenticated &&
-      pathname === "/" &&
-      !window.location.search.includes("from=redirect")
-    ) {
-      router.replace("/dashboard?from=redirect");
+    if (isInitialized) {
+      if (!isAuthenticated && !isPublicRoute) {
+        router.replace("/login?from=redirect");
+      } else if (
+        isAuthenticated &&
+        pathname === "/" &&
+        !window.location.search.includes("from=redirect")
+      ) {
+        router.replace("/dashboard?from=redirect");
+      }
     }
-  }, [isAuthenticated, pathname, router, isInitialized]);
+  }, [isAuthenticated, isInitialized, isPublicRoute, pathname, router]);
 
   if (!isInitialized) {
-    return <LoadingSpinner />;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background-light dark:bg-background-dark">
+        <Spinner />
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-background-light dark:bg-background-dark text-text-primary font-sans">
+    <div className="min-h-screen flex flex-col bg-background-light dark:bg-background-dark">
       {isPublicRoute || isAuthenticated ? <Header user={user} /> : null}
-      <main>{children}</main>
+      <main className="flex-grow container-custom py-8">
+        {!isPublicRoute && !isAuthenticated ? (
+          <div className="h-full flex items-center justify-center">
+            <Spinner />
+          </div>
+        ) : (
+          children
+        )}
+      </main>
       {isAuthenticated && <Footer />}
     </div>
   );
@@ -98,28 +113,33 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <Head>
+    <html lang="en" suppressHydrationWarning className="h-full">
+      <head>
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              (function() {
-                function getInitialTheme() {
-                  const storedTheme = window.localStorage.getItem('theme');
-                  if (storedTheme === 'light' || storedTheme === 'dark') {
-                    return storedTheme;
-                  }
-                  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+              try {
+                let isDark = false;
+                const storedTheme = localStorage.getItem('theme');
+                if (storedTheme === 'dark') {
+                  isDark = true;
+                } else if (!storedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                  isDark = true;
                 }
-                document.documentElement.classList.toggle('dark', getInitialTheme() === 'dark');
-              })();
+                if (isDark) {
+                  document.documentElement.classList.add('dark');
+                }
+              } catch (e) {}
             `,
           }}
         />
-      </Head>
-      <body>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+      </head>
+      <body className="h-full antialiased">
         <Provider store={store}>
-          <AppContent>{children}</AppContent>
+          <ThemeProvider>
+            <AppContent>{children}</AppContent>
+          </ThemeProvider>
         </Provider>
       </body>
     </html>
