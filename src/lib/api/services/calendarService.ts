@@ -1,6 +1,7 @@
 import { ApiResponse } from "@shared/interfaces";
 import {
   Event,
+  EventWithDetails,
   CreateEventDTO,
   UpdateEventDTO,
   CreateReminderDTO,
@@ -18,11 +19,10 @@ export class CalendarService extends BaseApiClient {
     getEvents: async (
       householdId: string,
       signal?: AbortSignal
-    ): Promise<Event[]> => {
-      const response = await this.axiosInstance.get<ApiResponse<Event[]>>(
-        `/households/${householdId}/calendar/events`,
-        { signal }
-      );
+    ): Promise<EventWithDetails[]> => {
+      const response = await this.axiosInstance.get<
+        ApiResponse<EventWithDetails[]>
+      >(`/households/${householdId}/calendar/events`, { signal });
       return this.extractData(response);
     },
 
@@ -33,12 +33,10 @@ export class CalendarService extends BaseApiClient {
       householdId: string,
       eventData: CreateEventDTO,
       signal?: AbortSignal
-    ): Promise<Event> => {
-      const response = await this.axiosInstance.post<ApiResponse<Event>>(
-        `/households/${householdId}/calendar/events`,
-        eventData,
-        { signal }
-      );
+    ): Promise<EventWithDetails> => {
+      const response = await this.axiosInstance.post<
+        ApiResponse<EventWithDetails>
+      >(`/households/${householdId}/calendar/events`, eventData, { signal });
       return this.extractData(response);
     },
 
@@ -49,11 +47,10 @@ export class CalendarService extends BaseApiClient {
       householdId: string,
       eventId: string,
       signal?: AbortSignal
-    ): Promise<Event> => {
-      const response = await this.axiosInstance.get<ApiResponse<Event>>(
-        `/households/${householdId}/calendar/events/${eventId}`,
-        { signal }
-      );
+    ): Promise<EventWithDetails> => {
+      const response = await this.axiosInstance.get<
+        ApiResponse<EventWithDetails>
+      >(`/households/${householdId}/calendar/events/${eventId}`, { signal });
       return this.extractData(response);
     },
 
@@ -65,12 +62,12 @@ export class CalendarService extends BaseApiClient {
       eventId: string,
       eventData: UpdateEventDTO,
       signal?: AbortSignal
-    ): Promise<Event> => {
-      const response = await this.axiosInstance.patch<ApiResponse<Event>>(
-        `/households/${householdId}/calendar/events/${eventId}`,
-        eventData,
-        { signal }
-      );
+    ): Promise<EventWithDetails> => {
+      const response = await this.axiosInstance.patch<
+        ApiResponse<EventWithDetails>
+      >(`/households/${householdId}/calendar/events/${eventId}`, eventData, {
+        signal,
+      });
       return this.extractData(response);
     },
 
@@ -95,11 +92,10 @@ export class CalendarService extends BaseApiClient {
       householdId: string,
       date: string, // ISO date string YYYY-MM-DD
       signal?: AbortSignal
-    ): Promise<Event[]> => {
-      const response = await this.axiosInstance.get<ApiResponse<Event[]>>(
-        `/households/${householdId}/calendar/events/date/${date}`,
-        { signal }
-      );
+    ): Promise<EventWithDetails[]> => {
+      const response = await this.axiosInstance.get<
+        ApiResponse<EventWithDetails[]>
+      >(`/households/${householdId}/calendar/events/date/${date}`, { signal });
       return this.extractData(response);
     },
 
@@ -111,8 +107,10 @@ export class CalendarService extends BaseApiClient {
       eventId: string,
       reminderData: CreateReminderDTO,
       signal?: AbortSignal
-    ): Promise<Event> => {
-      const response = await this.axiosInstance.post<ApiResponse<Event>>(
+    ): Promise<EventWithDetails> => {
+      const response = await this.axiosInstance.post<
+        ApiResponse<EventWithDetails>
+      >(
         `/households/${householdId}/calendar/events/${eventId}/reminders`,
         reminderData,
         { signal }
@@ -147,11 +145,10 @@ export class CalendarService extends BaseApiClient {
       householdId: string,
       choreId: string,
       signal?: AbortSignal
-    ): Promise<Event[]> => {
-      const response = await this.axiosInstance.get<ApiResponse<Event[]>>(
-        `/households/${householdId}/chores/${choreId}/events`,
-        { signal }
-      );
+    ): Promise<EventWithDetails[]> => {
+      const response = await this.axiosInstance.get<
+        ApiResponse<EventWithDetails[]>
+      >(`/households/${householdId}/chores/${choreId}/events`, { signal });
       return this.extractData(response);
     },
 
@@ -163,12 +160,12 @@ export class CalendarService extends BaseApiClient {
       choreId: string,
       eventData: CreateEventDTO,
       signal?: AbortSignal
-    ): Promise<Event> => {
-      const response = await this.axiosInstance.post<ApiResponse<Event>>(
-        `/households/${householdId}/chores/${choreId}/events`,
-        eventData,
-        { signal }
-      );
+    ): Promise<EventWithDetails> => {
+      const response = await this.axiosInstance.post<
+        ApiResponse<EventWithDetails>
+      >(`/households/${householdId}/chores/${choreId}/events`, eventData, {
+        signal,
+      });
       return this.extractData(response);
     },
 
@@ -180,11 +177,12 @@ export class CalendarService extends BaseApiClient {
       choreId: string,
       eventId: string,
       signal?: AbortSignal
-    ): Promise<Event> => {
-      const response = await this.axiosInstance.get<ApiResponse<Event>>(
-        `/households/${householdId}/chores/${choreId}/events/${eventId}`,
-        { signal }
-      );
+    ): Promise<EventWithDetails> => {
+      const response = await this.axiosInstance.get<
+        ApiResponse<EventWithDetails>
+      >(`/households/${householdId}/chores/${choreId}/events/${eventId}`, {
+        signal,
+      });
       return this.extractData(response);
     },
 
@@ -197,8 +195,10 @@ export class CalendarService extends BaseApiClient {
       eventId: string,
       eventData: UpdateEventDTO,
       signal?: AbortSignal
-    ): Promise<Event> => {
-      const response = await this.axiosInstance.patch<ApiResponse<Event>>(
+    ): Promise<EventWithDetails> => {
+      const response = await this.axiosInstance.patch<
+        ApiResponse<EventWithDetails>
+      >(
         `/households/${householdId}/chores/${choreId}/events/${eventId}`,
         eventData,
         { signal }
@@ -229,8 +229,10 @@ export class CalendarService extends BaseApiClient {
       choreId: string,
       eventId: string,
       signal?: AbortSignal
-    ): Promise<Event> => {
-      const response = await this.axiosInstance.post<ApiResponse<Event>>(
+    ): Promise<EventWithDetails> => {
+      const response = await this.axiosInstance.post<
+        ApiResponse<EventWithDetails>
+      >(
         `/households/${householdId}/chores/${choreId}/events/${eventId}/complete`,
         { signal }
       );
@@ -246,8 +248,10 @@ export class CalendarService extends BaseApiClient {
       eventId: string,
       newDate: string,
       signal?: AbortSignal
-    ): Promise<Event> => {
-      const response = await this.axiosInstance.post<ApiResponse<Event>>(
+    ): Promise<EventWithDetails> => {
+      const response = await this.axiosInstance.post<
+        ApiResponse<EventWithDetails>
+      >(
         `/households/${householdId}/chores/${choreId}/events/${eventId}/reschedule`,
         { date: newDate },
         { signal }
@@ -262,11 +266,12 @@ export class CalendarService extends BaseApiClient {
       householdId: string,
       choreId: string,
       signal?: AbortSignal
-    ): Promise<Event[]> => {
-      const response = await this.axiosInstance.get<ApiResponse<Event[]>>(
-        `/households/${householdId}/chores/${choreId}/events/upcoming`,
-        { signal }
-      );
+    ): Promise<EventWithDetails[]> => {
+      const response = await this.axiosInstance.get<
+        ApiResponse<EventWithDetails[]>
+      >(`/households/${householdId}/chores/${choreId}/events/upcoming`, {
+        signal,
+      });
       return this.extractData(response);
     },
   };

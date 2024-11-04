@@ -2,17 +2,14 @@ import { ApiResponse } from "@shared/interfaces";
 import { User } from "@shared/types";
 import { BaseApiClient } from "../baseClient";
 import { ApiError } from "../errors";
+import { RegisterUserDTO, LoginCredentials } from "@shared/types/user";
 
 export class AuthService extends BaseApiClient {
   /**
    * Register a new user
    */
   public async register(
-    data: {
-      email: string;
-      password: string;
-      name: string;
-    },
+    data: RegisterUserDTO,
     signal?: AbortSignal
   ): Promise<User> {
     try {
@@ -31,10 +28,7 @@ export class AuthService extends BaseApiClient {
    * Login with email and password
    */
   public async login(
-    credentials: {
-      email: string;
-      password: string;
-    },
+    credentials: LoginCredentials,
     signal?: AbortSignal
   ): Promise<User> {
     try {

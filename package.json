@@ -14,7 +14,7 @@
     "@fullcalendar/interaction": "^6.1.15",
     "@fullcalendar/react": "^6.1.15",
     "@fullcalendar/timegrid": "^6.1.15",
-    "@irubey/chores-app-shared": "^1.0.2",
+    "@irubey/chores-app-shared": "^1.0.12",
     "@reduxjs/toolkit": "^2.2.7",
     "@typescript-eslint/typescript-estree": "^3.10.1",
     "antd": "^5.21.2",

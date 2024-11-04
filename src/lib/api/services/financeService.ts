@@ -7,6 +7,9 @@ import {
   CreateTransactionDTO,
   UpdateTransactionDTO,
   Attachment,
+  ExpenseWithSplitsAndPaidBy,
+  TransactionWithDetails,
+  UpdateExpenseSplitDTO,
 } from "@shared/types";
 import { BaseApiClient } from "../baseClient";
 
@@ -21,11 +24,10 @@ export class FinanceService extends BaseApiClient {
     getExpenses: async (
       householdId: string,
       signal?: AbortSignal
-    ): Promise<Expense[]> => {
-      const response = await this.axiosInstance.get<ApiResponse<Expense[]>>(
-        `/households/${householdId}/expenses`,
-        { signal }
-      );
+    ): Promise<ExpenseWithSplitsAndPaidBy[]> => {
+      const response = await this.axiosInstance.get<
+        ApiResponse<ExpenseWithSplitsAndPaidBy[]>
+      >(`/households/${householdId}/expenses`, { signal });
       return this.extractData(response);
     },
 
@@ -36,12 +38,10 @@ export class FinanceService extends BaseApiClient {
       householdId: string,
       expenseData: CreateExpenseDTO,
       signal?: AbortSignal
-    ): Promise<Expense> => {
-      const response = await this.axiosInstance.post<ApiResponse<Expense>>(
-        `/households/${householdId}/expenses`,
-        expenseData,
-        { signal }
-      );
+    ): Promise<ExpenseWithSplitsAndPaidBy> => {
+      const response = await this.axiosInstance.post<
+        ApiResponse<ExpenseWithSplitsAndPaidBy>
+      >(`/households/${householdId}/expenses`, expenseData, { signal });
       return this.extractData(response);
     },
 
@@ -52,11 +52,10 @@ export class FinanceService extends BaseApiClient {
       householdId: string,
       expenseId: string,
       signal?: AbortSignal
-    ): Promise<Expense> => {
-      const response = await this.axiosInstance.get<ApiResponse<Expense>>(
-        `/households/${householdId}/expenses/${expenseId}`,
-        { signal }
-      );
+    ): Promise<ExpenseWithSplitsAndPaidBy> => {
+      const response = await this.axiosInstance.get<
+        ApiResponse<ExpenseWithSplitsAndPaidBy>
+      >(`/households/${householdId}/expenses/${expenseId}`, { signal });
       return this.extractData(response);
     },
 
@@ -68,12 +67,12 @@ export class FinanceService extends BaseApiClient {
       expenseId: string,
       expenseData: UpdateExpenseDTO,
       signal?: AbortSignal
-    ): Promise<Expense> => {
-      const response = await this.axiosInstance.patch<ApiResponse<Expense>>(
-        `/households/${householdId}/expenses/${expenseId}`,
-        expenseData,
-        { signal }
-      );
+    ): Promise<ExpenseWithSplitsAndPaidBy> => {
+      const response = await this.axiosInstance.patch<
+        ApiResponse<ExpenseWithSplitsAndPaidBy>
+      >(`/households/${householdId}/expenses/${expenseId}`, expenseData, {
+        signal,
+      });
       return this.extractData(response);
     },
 
@@ -167,10 +166,12 @@ export class FinanceService extends BaseApiClient {
     updateExpenseSplits: async (
       householdId: string,
       expenseId: string,
-      splits: { userId: string; amount: number }[],
+      splits: UpdateExpenseSplitDTO[],
       signal?: AbortSignal
-    ): Promise<Expense> => {
-      const response = await this.axiosInstance.patch<ApiResponse<Expense>>(
+    ): Promise<ExpenseWithSplitsAndPaidBy> => {
+      const response = await this.axiosInstance.patch<
+        ApiResponse<ExpenseWithSplitsAndPaidBy>
+      >(
         `/households/${householdId}/expenses/${expenseId}/splits`,
         { splits },
         { signal }
@@ -189,11 +190,10 @@ export class FinanceService extends BaseApiClient {
     getTransactions: async (
       householdId: string,
       signal?: AbortSignal
-    ): Promise<Transaction[]> => {
-      const response = await this.axiosInstance.get<ApiResponse<Transaction[]>>(
-        `/households/${householdId}/transactions`,
-        { signal }
-      );
+    ): Promise<TransactionWithDetails[]> => {
+      const response = await this.axiosInstance.get<
+        ApiResponse<TransactionWithDetails[]>
+      >(`/households/${householdId}/transactions`, { signal });
       return this.extractData(response);
     },
 
@@ -204,12 +204,10 @@ export class FinanceService extends BaseApiClient {
       householdId: string,
       transactionData: CreateTransactionDTO,
       signal?: AbortSignal
-    ): Promise<Transaction> => {
-      const response = await this.axiosInstance.post<ApiResponse<Transaction>>(
-        `/households/${householdId}/transactions`,
-        transactionData,
-        { signal }
-      );
+    ): Promise<TransactionWithDetails> => {
+      const response = await this.axiosInstance.post<
+        ApiResponse<TransactionWithDetails>
+      >(`/households/${householdId}/transactions`, transactionData, { signal });
       return this.extractData(response);
     },
 
@@ -221,8 +219,10 @@ export class FinanceService extends BaseApiClient {
       transactionId: string,
       statusData: UpdateTransactionDTO,
       signal?: AbortSignal
-    ): Promise<Transaction> => {
-      const response = await this.axiosInstance.patch<ApiResponse<Transaction>>(
+    ): Promise<TransactionWithDetails> => {
+      const response = await this.axiosInstance.patch<
+        ApiResponse<TransactionWithDetails>
+      >(
         `/households/${householdId}/transactions/${transactionId}`,
         statusData,
         { signal }

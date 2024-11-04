@@ -8,7 +8,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
-      "@shared/*": ["node_modules/@irubey/chores-app-shared/dist/*"]
+      "@shared/*": ["node_modules/@irubey/chores-app-shared/dist/*"],
+      "@api/*": ["src/lib/api/*"]
     },
     "allowJs": true,
     "skipLibCheck": true,

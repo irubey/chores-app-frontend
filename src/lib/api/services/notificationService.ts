@@ -68,11 +68,17 @@ export class NotificationService extends BaseApiClient {
      * Get notification settings for the current user
      */
     getSettings: async (
+      userId?: string,
+      householdId?: string,
       signal?: AbortSignal
     ): Promise<NotificationSettings> => {
+      const params = new URLSearchParams();
+      if (userId) params.append("userId", userId);
+      if (householdId) params.append("householdId", householdId);
+
       const response = await this.axiosInstance.get<
         ApiResponse<NotificationSettings>
-      >("/notifications/settings", { signal });
+      >(`/notifications/settings?${params.toString()}`, { signal });
       return this.extractData(response);
     },
 
@@ -81,7 +87,7 @@ export class NotificationService extends BaseApiClient {
      */
     updateSettings: async (
       settingsId: string,
-      settingsData: UpdateNotificationSettingsDTO,
+      settingsData: Partial<NotificationSettings>,
       signal?: AbortSignal
     ): Promise<NotificationSettings> => {
       const response = await this.axiosInstance.patch<

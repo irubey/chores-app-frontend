@@ -1,107 +1,80 @@
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
-import { apiClient } from "../../lib/api/apiClient";
+import { apiClient } from "@api/apiClient";
 import {
   Message,
   CreateMessageDTO,
   UpdateMessageDTO,
-  Thread,
   Attachment,
-} from "../../types/message";
-import { RootState } from "../store";
+} from "@shared/types";
+import type { RootState } from "../store";
+import { ApiError } from "@api/errors";
 
-interface MessagesState {
+interface MessageState {
   messages: Message[];
-  threads: Thread[];
-  isLoading: boolean;
-  isSuccess: boolean;
-  isError: boolean;
+  status: {
+    list: "idle" | "loading" | "succeeded" | "failed";
+    create: "idle" | "loading" | "succeeded" | "failed";
+    update: "idle" | "loading" | "succeeded" | "failed";
+    delete: "idle" | "loading" | "succeeded" | "failed";
+    attachment: "idle" | "loading" | "succeeded" | "failed";
+  };
   error: string | null;
 }
 
-const initialState: MessagesState = {
+const initialState: MessageState = {
   messages: [],
-  threads: [],
-  isLoading: false,
-  isSuccess: false,
-  isError: false,
+  status: {
+    list: "idle",
+    create: "idle",
+    update: "idle",
+    delete: "idle",
+    attachment: "idle",
+  },
   error: null,
 };
 
-// Async thunks
-export const fetchThreads = createAsyncThunk<
-  Thread[],
-  string,
-  { rejectValue: string }
->("messages/fetchThreads", async (householdId, thunkAPI) => {
-  try {
-    const response = await apiClient.messages.getThreads(householdId);
-    return response;
-  } catch (error: any) {
-    const message =
-      error.response?.data?.message ||
-      error.message ||
-      "Failed to fetch threads";
-    return thunkAPI.rejectWithValue(message);
-  }
-});
-
-export const createThread = createAsyncThunk<
-  Thread,
-  { householdId: string; data: { title: string; participants: string[] } },
-  { rejectValue: string }
->("messages/createThread", async ({ householdId, data }, thunkAPI) => {
-  try {
-    const response = await apiClient.messages.createThread(householdId, data);
-    return response;
-  } catch (error: any) {
-    const message =
-      error.response?.data?.message ||
-      error.message ||
-      "Failed to create thread";
-    return thunkAPI.rejectWithValue(message);
-  }
-});
-
+// Async Thunks
 export const fetchMessages = createAsyncThunk<
   Message[],
   { householdId: string; threadId: string },
   { rejectValue: string }
->("messages/fetchMessages", async ({ householdId, threadId }, thunkAPI) => {
-  try {
-    const response = await apiClient.messages.getMessages(
-      householdId,
-      threadId
-    );
-    return response;
-  } catch (error: any) {
-    const message =
-      error.response?.data?.message ||
-      error.message ||
-      "Failed to fetch messages";
-    return thunkAPI.rejectWithValue(message);
+>(
+  "messages/fetchMessages",
+  async ({ householdId, threadId }, { rejectWithValue }) => {
+    try {
+      const messages = await apiClient.threads.messages.getMessages(
+        householdId,
+        threadId
+      );
+      return messages;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return rejectWithValue(error.message);
+      }
+      return rejectWithValue("Failed to fetch messages");
+    }
   }
-});
+);
 
-export const sendMessage = createAsyncThunk<
+export const createMessage = createAsyncThunk<
   Message,
   { householdId: string; threadId: string; messageData: CreateMessageDTO },
   { rejectValue: string }
 >(
-  "messages/sendMessage",
-  async ({ householdId, threadId, messageData }, thunkAPI) => {
+  "messages/createMessage",
+  async ({ householdId, threadId, messageData }, { rejectWithValue }) => {
     try {
-      const response = await apiClient.messages.sendMessage(
+      const message = await apiClient.threads.messages.createMessage(
         householdId,
         threadId,
         messageData
       );
-      return response;
-    } catch (error: any) {
-      const message =
-        error.response?.data?.message ||
-        error.message ||
-        "Failed to send message";
-      return thunkAPI.rejectWithValue(message);
+      return message;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return rejectWithValue(error.message);
+      }
+      return rejectWithValue("Failed to create message");
     }
   }
 );
@@ -117,169 +90,209 @@ export const updateMessage = createAsyncThunk<
   { rejectValue: string }
 >(
   "messages/updateMessage",
-  async ({ householdId, threadId, messageId, messageData }, thunkAPI) => {
+  async (
+    { householdId, threadId, messageId, messageData },
+    { rejectWithValue }
+  ) => {
     try {
-      const response = await apiClient.messages.updateMessage(
+      const message = await apiClient.threads.messages.updateMessage(
         householdId,
         threadId,
         messageId,
         messageData
       );
-      return response;
-    } catch (error: any) {
-      const message =
-        error.response?.data?.message ||
-        error.message ||
-        "Failed to update message";
-      return thunkAPI.rejectWithValue(message);
+      return message;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return rejectWithValue(error.message);
+      }
+      return rejectWithValue("Failed to update message");
     }
   }
 );
 
 export const deleteMessage = createAsyncThunk<
-  void,
+  string,
   { householdId: string; threadId: string; messageId: string },
   { rejectValue: string }
 >(
   "messages/deleteMessage",
-  async ({ householdId, threadId, messageId }, thunkAPI) => {
+  async ({ householdId, threadId, messageId }, { rejectWithValue }) => {
     try {
-      await apiClient.messages.deleteMessage(householdId, threadId, messageId);
-    } catch (error: any) {
-      const message =
-        error.response?.data?.message ||
-        error.message ||
-        "Failed to delete message";
-      return thunkAPI.rejectWithValue(message);
+      await apiClient.threads.messages.deleteMessage(
+        householdId,
+        threadId,
+        messageId
+      );
+      return messageId;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return rejectWithValue(error.message);
+      }
+      return rejectWithValue("Failed to delete message");
     }
   }
 );
 
-// Slice
+export const addAttachment = createAsyncThunk<
+  Attachment,
+  { householdId: string; threadId: string; messageId: string; file: File },
+  { rejectValue: string }
+>(
+  "messages/addAttachment",
+  async ({ householdId, threadId, messageId, file }, { rejectWithValue }) => {
+    try {
+      const attachment =
+        await apiClient.threads.messages.attachments.addAttachment(
+          householdId,
+          threadId,
+          messageId,
+          file
+        );
+      return attachment;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return rejectWithValue(error.message);
+      }
+      return rejectWithValue("Failed to add attachment");
+    }
+  }
+);
+
+export const deleteAttachment = createAsyncThunk<
+  void,
+  {
+    householdId: string;
+    threadId: string;
+    messageId: string;
+    attachmentId: string;
+  },
+  { rejectValue: string }
+>(
+  "messages/deleteAttachment",
+  async (
+    { householdId, threadId, messageId, attachmentId },
+    { rejectWithValue }
+  ) => {
+    try {
+      await apiClient.threads.messages.attachments.deleteAttachment(
+        householdId,
+        threadId,
+        messageId,
+        attachmentId
+      );
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return rejectWithValue(error.message);
+      }
+      return rejectWithValue("Failed to delete attachment");
+    }
+  }
+);
+
 const messagesSlice = createSlice({
   name: "messages",
   initialState,
   reducers: {
-    reset: (state) => {
-      state.isLoading = false;
-      state.isSuccess = false;
-      state.isError = false;
+    resetMessages: (state) => {
+      return initialState;
+    },
+    clearMessageError: (state) => {
       state.error = null;
     },
   },
   extraReducers: (builder) => {
     builder
-      // Fetch Threads
-      .addCase(fetchThreads.pending, (state) => {
-        state.isLoading = true;
-      })
-      .addCase(
-        fetchThreads.fulfilled,
-        (state, action: PayloadAction<Thread[]>) => {
-          state.isLoading = false;
-          state.isSuccess = true;
-          state.threads = action.payload;
-        }
-      )
-      .addCase(fetchThreads.rejected, (state, action) => {
-        state.isLoading = false;
-        state.isError = true;
-        state.error = action.payload || "Failed to fetch threads";
-      })
-      // Create Thread
-      .addCase(createThread.pending, (state) => {
-        state.isLoading = true;
-      })
-      .addCase(
-        createThread.fulfilled,
-        (state, action: PayloadAction<Thread>) => {
-          state.isLoading = false;
-          state.isSuccess = true;
-          state.threads.push(action.payload);
-        }
-      )
-      .addCase(createThread.rejected, (state, action) => {
-        state.isLoading = false;
-        state.isError = true;
-        state.error = action.payload || "Failed to create thread";
-      })
       // Fetch Messages
       .addCase(fetchMessages.pending, (state) => {
-        state.isLoading = true;
+        state.status.list = "loading";
+        state.error = null;
       })
-      .addCase(
-        fetchMessages.fulfilled,
-        (state, action: PayloadAction<Message[]>) => {
-          state.isLoading = false;
-          state.isSuccess = true;
-          state.messages = action.payload;
-        }
-      )
+      .addCase(fetchMessages.fulfilled, (state, action) => {
+        state.status.list = "succeeded";
+        state.messages = action.payload;
+      })
       .addCase(fetchMessages.rejected, (state, action) => {
-        state.isLoading = false;
-        state.isError = true;
-        state.error = action.payload || "Failed to fetch messages";
+        state.status.list = "failed";
+        state.error = action.payload as string;
       })
-      // Send Message
-      .addCase(sendMessage.pending, (state) => {
-        state.isLoading = true;
+      // Create Message
+      .addCase(createMessage.pending, (state) => {
+        state.status.create = "loading";
+        state.error = null;
       })
-      .addCase(
-        sendMessage.fulfilled,
-        (state, action: PayloadAction<Message>) => {
-          state.isLoading = false;
-          state.isSuccess = true;
-          state.messages.push(action.payload);
-        }
-      )
-      .addCase(sendMessage.rejected, (state, action) => {
-        state.isLoading = false;
-        state.isError = true;
-        state.error = action.payload || "Failed to send message";
+      .addCase(createMessage.fulfilled, (state, action) => {
+        state.status.create = "succeeded";
+        state.messages.push(action.payload);
+      })
+      .addCase(createMessage.rejected, (state, action) => {
+        state.status.create = "failed";
+        state.error = action.payload as string;
       })
       // Update Message
       .addCase(updateMessage.pending, (state) => {
-        state.isLoading = true;
+        state.status.update = "loading";
+        state.error = null;
       })
-      .addCase(
-        updateMessage.fulfilled,
-        (state, action: PayloadAction<Message>) => {
-          state.isLoading = false;
-          state.isSuccess = true;
-          const index = state.messages.findIndex(
-            (msg) => msg.id === action.payload.id
-          );
-          if (index !== -1) {
-            state.messages[index] = action.payload;
-          }
+      .addCase(updateMessage.fulfilled, (state, action) => {
+        state.status.update = "succeeded";
+        const index = state.messages.findIndex(
+          (m) => m.id === action.payload.id
+        );
+        if (index !== -1) {
+          state.messages[index] = action.payload;
         }
-      )
+      })
       .addCase(updateMessage.rejected, (state, action) => {
-        state.isLoading = false;
-        state.isError = true;
-        state.error = action.payload || "Failed to update message";
+        state.status.update = "failed";
+        state.error = action.payload as string;
       })
       // Delete Message
       .addCase(deleteMessage.pending, (state) => {
-        state.isLoading = true;
+        state.status.delete = "loading";
+        state.error = null;
       })
       .addCase(deleteMessage.fulfilled, (state, action) => {
-        state.isLoading = false;
-        state.isSuccess = true;
+        state.status.delete = "succeeded";
         state.messages = state.messages.filter(
-          (msg) => msg.id !== action.meta.arg.messageId
+          (message) => message.id !== action.payload
         );
       })
       .addCase(deleteMessage.rejected, (state, action) => {
-        state.isLoading = false;
-        state.isError = true;
-        state.error = action.payload || "Failed to delete message";
+        state.status.delete = "failed";
+        state.error = action.payload as string;
+      })
+      // Add Attachment
+      .addCase(addAttachment.pending, (state) => {
+        state.status.attachment = "loading";
+        state.error = null;
+      })
+      .addCase(addAttachment.fulfilled, (state) => {
+        state.status.attachment = "succeeded";
+      })
+      .addCase(addAttachment.rejected, (state, action) => {
+        state.status.attachment = "failed";
+        state.error = action.payload as string;
+      })
+      // Delete Attachment
+      .addCase(deleteAttachment.pending, (state) => {
+        state.status.attachment = "loading";
+        state.error = null;
+      })
+      .addCase(deleteAttachment.fulfilled, (state) => {
+        state.status.attachment = "succeeded";
+      })
+      .addCase(deleteAttachment.rejected, (state, action) => {
+        state.status.attachment = "failed";
+        state.error = action.payload as string;
       });
   },
 });
 
-export const { reset } = messagesSlice.actions;
-
-export const selectMessages = (state: RootState) => state.messages;
-
+export const { resetMessages, clearMessageError } = messagesSlice.actions;
 export default messagesSlice.reducer;
+
+// Selectors
+export const selectMessages = (state: RootState) => state.messages.messages;
+export const selectMessageStatus = (state: RootState) => state.messages.status;
+export const selectMessageError = (state: RootState) => state.messages.error;

@@ -1,6 +1,7 @@
-'use client'
+"use client";
 
-import React from 'react';
+import { useMessages } from "@/hooks/useMessages";
+import React from "react";
 
 const MessagesPage: React.FC = () => {
   return (

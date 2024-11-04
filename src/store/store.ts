@@ -6,11 +6,13 @@ import choresReducer from "./slices/choresSlice";
 import calendarReducer from "./slices/calendarSlice";
 import notificationsReducer from "./slices/notificationsSlice";
 import householdReducer from "./slices/householdSlice";
+import threadReducer from "./slices/threadSlice";
 import { setAppDispatch } from "./storeDispatch";
 
 const store = configureStore({
   reducer: {
     auth: authReducer,
+    threads: threadReducer,
     messages: messagesReducer,
     finances: financesReducer,
     chores: choresReducer,
