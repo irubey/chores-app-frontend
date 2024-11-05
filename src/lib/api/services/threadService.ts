@@ -1,4 +1,4 @@
-import { ApiResponse } from "@shared/interfaces";
+import { ApiResponse, PaginationOptions } from "@shared/interfaces";
 import {
   Thread,
   UpdateThreadDTO,
@@ -14,6 +14,7 @@ import {
   CreateReactionDTO,
   MentionWithUser,
   CreateMentionDTO,
+  PollWithDetails,
 } from "@shared/types";
 import { ReactionType } from "@shared/enums";
 import { BaseApiClient } from "../baseClient";
@@ -122,14 +123,16 @@ export class ThreadService extends BaseApiClient {
     getMessages: async (
       householdId: string,
       threadId: string,
-      signal?: AbortSignal
-    ): Promise<MessageWithDetails[]> => {
+      signal?: AbortSignal,
+      options?: PaginationOptions
+    ): Promise<ApiResponse<MessageWithDetails[]>> => {
       const response = await this.axiosInstance.get<
         ApiResponse<MessageWithDetails[]>
       >(`/households/${householdId}/threads/${threadId}/messages`, {
+        params: options,
         signal,
       });
-      return this.extractData(response);
+      return response.data;
     },
 
     /**
@@ -146,26 +149,6 @@ export class ThreadService extends BaseApiClient {
       >(
         `/households/${householdId}/threads/${threadId}/messages`,
         messageData,
-        {
-          signal,
-        }
-      );
-      return this.extractData(response);
-    },
-
-    /**
-     * Get details of a specific message
-     */
-    getMessageDetails: async (
-      householdId: string,
-      threadId: string,
-      messageId: string,
-      signal?: AbortSignal
-    ): Promise<MessageWithDetails> => {
-      const response = await this.axiosInstance.get<
-        ApiResponse<MessageWithDetails>
-      >(
-        `/households/${householdId}/threads/${threadId}/messages/${messageId}`,
         {
           signal,
         }
@@ -500,6 +483,105 @@ export class ThreadService extends BaseApiClient {
           { signal }
         );
       },
+    },
+
+    /**
+     * Get unread mention count
+     */
+    getUnreadMentionsCount: async (
+      householdId: string,
+      signal?: AbortSignal
+    ): Promise<number> => {
+      const response = await this.axiosInstance.get<ApiResponse<number>>(
+        `/households/${householdId}/messages/unread-mentions-count`,
+        { signal }
+      );
+      return this.extractData(response);
+    },
+
+    /**
+     * Get reaction analytics
+     */
+    getReactionAnalytics: async (
+      householdId: string,
+      signal?: AbortSignal
+    ): Promise<Record<ReactionType, number>> => {
+      const response = await this.axiosInstance.get<
+        ApiResponse<Record<ReactionType, number>>
+      >(`/households/${householdId}/messages/reaction-analytics`, { signal });
+      return this.extractData(response);
+    },
+
+    /**
+     * Get reactions by type
+     */
+    getReactionsByType: async (
+      householdId: string,
+      type: ReactionType,
+      signal?: AbortSignal
+    ): Promise<ReactionWithUser[]> => {
+      const response = await this.axiosInstance.get<
+        ApiResponse<ReactionWithUser[]>
+      >(`/households/${householdId}/messages/reactions-by-type`, {
+        params: { type },
+        signal,
+      });
+      return this.extractData(response);
+    },
+
+    /**
+     * Get polls in thread
+     */
+    getPollsInThread: async (
+      householdId: string,
+      threadId: string,
+      messageId: string,
+      signal?: AbortSignal
+    ): Promise<PollWithDetails[]> => {
+      const response = await this.axiosInstance.get<
+        ApiResponse<PollWithDetails[]>
+      >(
+        `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls`,
+        { signal }
+      );
+      return this.extractData(response);
+    },
+
+    /**
+     * Get poll analytics
+     */
+    getPollAnalytics: async (
+      householdId: string,
+      threadId: string,
+      messageId: string,
+      pollId: string,
+      signal?: AbortSignal
+    ): Promise<any> => {
+      const response = await this.axiosInstance.get<ApiResponse<any>>(
+        `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls/${pollId}/analytics`,
+        { signal }
+      );
+      return this.extractData(response);
+    },
+
+    /**
+     * Remove poll vote
+     */
+    removePollVote: async (
+      householdId: string,
+      threadId: string,
+      messageId: string,
+      pollId: string,
+      voteId: string,
+      signal?: AbortSignal
+    ): Promise<void> => {
+      await this.axiosInstance.delete(
+        `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls/${pollId}/vote`,
+        {
+          data: { voteId },
+          signal,
+        }
+      );
     },
   };
 }
