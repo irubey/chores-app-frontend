@@ -20,12 +20,7 @@ const config: Config = {
           DEFAULT: "#EEB62B",
           dark: "#CB9D06",
         },
-        neutral: {
-          light: "#F8F9FA",
-          dark: "#212529",
-        },
         background: {
-          // Added background color
           light: "#F8F9FA",
           dark: "#212529",
         },
@@ -39,8 +34,8 @@ const config: Config = {
         heading: ["Playfair Display", "serif"],
       },
       fontSize: {
-        h1: ["2.25rem", { lineHeight: "2.75rem" }],
-        h2: ["1.875rem", { lineHeight: "2.25rem" }],
+        h1: ["2.25rem", { lineHeight: "2.75rem", letterSpacing: "-0.02em" }],
+        h2: ["1.875rem", { lineHeight: "2.25rem", letterSpacing: "-0.01em" }],
         h3: ["1.5rem", { lineHeight: "2rem" }],
         h4: ["1.25rem", { lineHeight: "1.75rem" }],
         h5: ["1rem", { lineHeight: "1.5rem" }],
@@ -49,41 +44,92 @@ const config: Config = {
         sm: ["0.875rem", { lineHeight: "1.25rem" }],
         xs: ["0.75rem", { lineHeight: "1rem" }],
       },
-      boxShadow: {
-        sm: "0 1px 2px 0 rgba(0, 0, 0, 0.05)",
-        DEFAULT:
-          "0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)",
-        md: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
-        lg: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
-        xl: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
-      },
-      spacing: {
-        "1": "4px",
-        "2": "8px",
-        "3": "12px",
-        "4": "16px",
-        "5": "20px",
-        "6": "24px",
-        "8": "32px",
-        "10": "40px",
-        "12": "48px",
-      },
-      // Additional enhancements for accessibility and design harmony
-      backgroundImage: {
-        "gradient-to-bottom":
-          "linear-gradient(to bottom, rgba(142, 202, 230, 0.1), rgba(255, 209, 102, 0.1))",
-      },
       animation: {
-        spin: "spin 1s linear infinite",
+        "fade-in": "fadeIn 0.3s ease-in-out",
+        "slide-up": "slideUp 0.4s ease-out",
+        "slide-down": "slideDown 0.4s ease-out",
+        "bounce-subtle": "bounce-subtle 1s ease-in-out infinite",
+        "pulse-subtle": "pulse-subtle 2s ease-in-out infinite",
+        "slide-in-right": "slide-in-right 0.3s ease-out",
+        "slide-in-left": "slide-in-left 0.3s ease-out",
+        "slide-in-bottom": "slide-in-bottom 0.3s ease-out",
+        scale: "scale 0.2s ease-in-out",
       },
       keyframes: {
-        spin: {
-          "0%": { transform: "rotate(0deg)" },
-          "100%": { transform: "rotate(360deg)" },
+        fadeIn: {
+          "0%": { opacity: "0" },
+          "100%": { opacity: "1" },
+        },
+        slideUp: {
+          "0%": { transform: "translateY(10px)", opacity: "0" },
+          "100%": { transform: "translateY(0)", opacity: "1" },
+        },
+        slideDown: {
+          "0%": { transform: "translateY(-10px)", opacity: "0" },
+          "100%": { transform: "translateY(0)", opacity: "1" },
+        },
+        "bounce-subtle": {
+          "0%, 100%": { transform: "translateY(-5%)" },
+          "50%": { transform: "translateY(0)" },
+        },
+        "pulse-subtle": {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0.85" },
+        },
+        "slide-in-right": {
+          "0%": { transform: "translateX(100%)", opacity: "0" },
+          "100%": { transform: "translateX(0)", opacity: "1" },
+        },
+        "slide-in-left": {
+          "0%": { transform: "translateX(-100%)", opacity: "0" },
+          "100%": { transform: "translateX(0)", opacity: "1" },
+        },
+        "slide-in-bottom": {
+          "0%": { transform: "translateY(100%)", opacity: "0" },
+          "100%": { transform: "translateY(0)", opacity: "1" },
+        },
+        scale: {
+          "0%": { transform: "scale(0.95)" },
+          "100%": { transform: "scale(1)" },
         },
       },
-      borderWidth: {
-        "3": "3px",
+      transitionProperty: {
+        height: "height",
+        spacing: "margin, padding",
+      },
+      spacing: {
+        "4xs": "0.125rem", // 2px
+        "3xs": "0.25rem", // 4px
+        "2xs": "0.375rem", // 6px
+        xs: "0.5rem", // 8px
+        sm: "0.75rem", // 12px
+        md: "1rem", // 16px
+        lg: "1.25rem", // 20px
+        xl: "1.5rem", // 24px
+        "2xl": "2rem", // 32px
+        "3xl": "2.5rem", // 40px
+        "4xl": "3rem", // 48px
+      },
+      borderRadius: {
+        xs: "0.125rem", // 2px
+        sm: "0.25rem", // 4px
+        DEFAULT: "0.375rem", // 6px
+        md: "0.5rem", // 8px
+        lg: "0.75rem", // 12px
+        xl: "1rem", // 16px
+        "2xl": "1.5rem", // 24px
+        full: "9999px",
+      },
+      zIndex: {
+        behind: "-1",
+        default: "1",
+        dropdown: "1000",
+        sticky: "1020",
+        fixed: "1030",
+        "modal-backdrop": "1040",
+        modal: "1050",
+        popover: "1060",
+        tooltip: "1070",
       },
     },
   },

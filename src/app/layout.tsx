@@ -85,18 +85,18 @@ function AppContent({ children }: AppContentProps) {
   if (!isInitialized) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background-light dark:bg-background-dark">
-        <Spinner />
+        <Spinner className="h-8 w-8" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-background-light dark:bg-background-dark">
+    <div className="min-h-screen flex flex-col bg-background-light dark:bg-background-dark text-text-primary dark:text-text-secondary">
       {isPublicRoute || isAuthenticated ? <Header user={user} /> : null}
-      <main className="flex-grow container-custom py-8">
+      <main className="flex-grow container-custom py-8 space-y-6">
         {!isPublicRoute && !isAuthenticated ? (
           <div className="h-full flex items-center justify-center">
-            <Spinner />
+            <Spinner className="h-8 w-8" />
           </div>
         ) : (
           children
@@ -135,10 +135,12 @@ export default function RootLayout({
         />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
-      <body className="h-full antialiased">
+      <body className="h-full antialiased font-sans">
         <Provider store={store}>
           <ThemeProvider>
-            <AppContent>{children}</AppContent>
+            <SocketProvider isAuthenticated={isAuthenticated} user={user}>
+              <AppContent>{children}</AppContent>
+            </SocketProvider>
           </ThemeProvider>
         </Provider>
       </body>

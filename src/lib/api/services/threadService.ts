@@ -15,116 +15,124 @@ import {
   MentionWithUser,
   CreateMentionDTO,
   PollWithDetails,
+  CreatePollDTO,
+  UpdatePollDTO,
+  CreatePollVoteDTO,
+  PollVoteWithUser,
 } from "@shared/types";
-import { ReactionType } from "@shared/enums";
 import { BaseApiClient } from "../baseClient";
 
 export class ThreadService extends BaseApiClient {
   /**
-   * Get all threads for a household
+   * Thread Management
    */
-  public async getThreads(
-    householdId: string,
-    signal?: AbortSignal
-  ): Promise<ThreadWithMessages[]> {
-    const response = await this.axiosInstance.get<
-      ApiResponse<ThreadWithMessages[]>
-    >(`/households/${householdId}/threads`, { signal });
-    return this.extractData(response);
-  }
+  public readonly threads = {
+    /**
+     * Get all threads for a household
+     */
+    getThreads: async (
+      householdId: string,
+      signal?: AbortSignal
+    ): Promise<ThreadWithMessages[]> => {
+      const response = await this.axiosInstance.get<
+        ApiResponse<ThreadWithMessages[]>
+      >(`/households/${householdId}/threads`, { signal });
+      return this.extractData(response);
+    },
+
+    /**
+     * Create a new thread
+     */
+    createThread: async (
+      householdId: string,
+      threadData: CreateThreadDTO,
+      signal?: AbortSignal
+    ): Promise<ThreadWithParticipants> => {
+      const response = await this.axiosInstance.post<
+        ApiResponse<ThreadWithParticipants>
+      >(`/households/${householdId}/threads`, threadData, { signal });
+      return this.extractData(response);
+    },
+
+    /**
+     * Get details of a specific thread
+     */
+    getThreadDetails: async (
+      householdId: string,
+      threadId: string,
+      signal?: AbortSignal
+    ): Promise<ThreadWithMessages> => {
+      const response = await this.axiosInstance.get<
+        ApiResponse<ThreadWithMessages>
+      >(`/households/${householdId}/threads/${threadId}`, { signal });
+      return this.extractData(response);
+    },
+
+    /**
+     * Update a thread
+     */
+    updateThread: async (
+      householdId: string,
+      threadId: string,
+      threadData: UpdateThreadDTO,
+      signal?: AbortSignal
+    ): Promise<Thread> => {
+      const response = await this.axiosInstance.patch<ApiResponse<Thread>>(
+        `/households/${householdId}/threads/${threadId}`,
+        threadData,
+        { signal }
+      );
+      return this.extractData(response);
+    },
+
+    /**
+     * Delete a thread
+     */
+    deleteThread: async (
+      householdId: string,
+      threadId: string,
+      signal?: AbortSignal
+    ): Promise<void> => {
+      await this.axiosInstance.delete(
+        `/households/${householdId}/threads/${threadId}`,
+        {
+          signal,
+        }
+      );
+    },
+
+    /**
+     * Invite users to a thread
+     */
+    inviteUsers: async (
+      householdId: string,
+      threadId: string,
+      userIds: string[],
+      signal?: AbortSignal
+    ): Promise<ThreadWithParticipants> => {
+      const response = await this.axiosInstance.post<
+        ApiResponse<ThreadWithParticipants>
+      >(
+        `/households/${householdId}/threads/${threadId}/invite`,
+        { userIds },
+        { signal }
+      );
+      return this.extractData(response);
+    },
+  };
 
   /**
-   * Create a new thread
-   */
-  public async createThread(
-    householdId: string,
-    threadData: CreateThreadDTO,
-    signal?: AbortSignal
-  ): Promise<ThreadWithParticipants> {
-    const response = await this.axiosInstance.post<
-      ApiResponse<ThreadWithParticipants>
-    >(`/households/${householdId}/threads`, threadData, { signal });
-    return this.extractData(response);
-  }
-
-  /**
-   * Get details of a specific thread
-   */
-  public async getThreadDetails(
-    householdId: string,
-    threadId: string,
-    signal?: AbortSignal
-  ): Promise<ThreadWithMessages> {
-    const response = await this.axiosInstance.get<
-      ApiResponse<ThreadWithMessages>
-    >(`/households/${householdId}/threads/${threadId}`, { signal });
-    return this.extractData(response);
-  }
-
-  /**
-   * Update a thread
-   */
-  public async updateThread(
-    householdId: string,
-    threadId: string,
-    threadData: UpdateThreadDTO,
-    signal?: AbortSignal
-  ): Promise<Thread> {
-    const response = await this.axiosInstance.patch<ApiResponse<Thread>>(
-      `/households/${householdId}/threads/${threadId}`,
-      threadData,
-      { signal }
-    );
-    return this.extractData(response);
-  }
-
-  /**
-   * Delete a thread
-   */
-  public async deleteThread(
-    householdId: string,
-    threadId: string,
-    signal?: AbortSignal
-  ): Promise<void> {
-    await this.axiosInstance.delete(
-      `/households/${householdId}/threads/${threadId}`,
-      { signal }
-    );
-  }
-
-  /**
-   * Invite users to a thread
-   */
-  public async inviteUsers(
-    householdId: string,
-    threadId: string,
-    userIds: string[],
-    signal?: AbortSignal
-  ): Promise<ThreadWithParticipants> {
-    const response = await this.axiosInstance.post<
-      ApiResponse<ThreadWithParticipants>
-    >(
-      `/households/${householdId}/threads/${threadId}/invite`,
-      {
-        userIds,
-      },
-      { signal }
-    );
-    return this.extractData(response);
-  }
-
-  /**
-   * Messages management
+   * Message Management
    */
   public readonly messages = {
     /**
-     * Get all messages in a thread
+     * Get all messages in a thread with pagination
      */
     getMessages: async (
       householdId: string,
       threadId: string,
-      signal?: AbortSignal,
-      options?: PaginationOptions
+      options?: PaginationOptions,
+      signal?: AbortSignal
     ): Promise<ApiResponse<MessageWithDetails[]>> => {
       const response = await this.axiosInstance.get<
         ApiResponse<MessageWithDetails[]>
@@ -149,9 +157,7 @@ export class ThreadService extends BaseApiClient {
       >(
         `/households/${householdId}/threads/${threadId}/messages`,
         messageData,
-        {
-          signal,
-        }
+        { signal }
       );
       return this.extractData(response);
     },
@@ -192,41 +198,46 @@ export class ThreadService extends BaseApiClient {
     },
 
     /**
-     * Mark a message as read
+     * Message Read Status
      */
-    markAsRead: async (
-      householdId: string,
-      threadId: string,
-      messageId: string,
-      signal?: AbortSignal
-    ): Promise<void> => {
-      await this.axiosInstance.patch(
-        `/households/${householdId}/threads/${threadId}/messages/${messageId}/read`,
-        {},
-        { signal }
-      );
+    readStatus: {
+      /**
+       * Mark a message as read
+       */
+      markAsRead: async (
+        householdId: string,
+        threadId: string,
+        messageId: string,
+        signal?: AbortSignal
+      ): Promise<void> => {
+        await this.axiosInstance.patch(
+          `/households/${householdId}/threads/${threadId}/messages/${messageId}/read`,
+          {},
+          { signal }
+        );
+      },
+
+      /**
+       * Get read status of a message
+       */
+      getReadStatus: async (
+        householdId: string,
+        threadId: string,
+        messageId: string,
+        signal?: AbortSignal
+      ): Promise<MessageReadStatus> => {
+        const response = await this.axiosInstance.get<
+          ApiResponse<MessageReadStatus>
+        >(
+          `/households/${householdId}/threads/${threadId}/messages/${messageId}/read-status`,
+          { signal }
+        );
+        return this.extractData(response);
+      },
     },
 
     /**
-     * Get read status of a message
-     */
-    getReadStatus: async (
-      householdId: string,
-      threadId: string,
-      messageId: string,
-      signal?: AbortSignal
-    ): Promise<MessageReadStatus> => {
-      const response = await this.axiosInstance.get<
-        ApiResponse<MessageReadStatus>
-      >(
-        `/households/${householdId}/threads/${threadId}/messages/${messageId}/read-status`,
-        { signal }
-      );
-      return this.extractData(response);
-    },
-
-    /**
-     * Reactions management
+     * Reactions Management
      */
     reactions: {
       /**
@@ -284,46 +295,40 @@ export class ThreadService extends BaseApiClient {
       },
 
       /**
-       * Get reaction analytics for a message
+       * Get reaction analytics
        */
-      getAnalytics: async (
+      getReactionAnalytics: async (
         householdId: string,
-        threadId: string,
-        messageId: string,
         signal?: AbortSignal
-      ): Promise<Record<ReactionType, number>> => {
-        const response = await this.axiosInstance.get<
-          ApiResponse<Record<ReactionType, number>>
-        >(`/households/${householdId}/messages/reaction-analytics`, { signal });
+      ): Promise<any> => {
+        const response = await this.axiosInstance.get<ApiResponse<any>>(
+          `/households/${householdId}/messages/reaction-analytics`,
+          { signal }
+        );
         return this.extractData(response);
       },
 
       /**
-       * Get reactions by type for a message
+       * Get reactions by type
        */
-      getByType: async (
+      getReactionsByType: async (
         householdId: string,
-        threadId: string,
-        messageId: string,
-        type: ReactionType,
         signal?: AbortSignal
-      ): Promise<ReactionWithUser[]> => {
-        const response = await this.axiosInstance.get<
-          ApiResponse<ReactionWithUser[]>
-        >(`/households/${householdId}/messages/reactions-by-type`, {
-          signal,
-          params: { type },
-        });
+      ): Promise<any> => {
+        const response = await this.axiosInstance.get<ApiResponse<any>>(
+          `/households/${householdId}/messages/reactions-by-type`,
+          { signal }
+        );
         return this.extractData(response);
       },
     },
 
     /**
-     * Mentions management
+     * Mentions Management
      */
     mentions: {
       /**
-       * Create a mention for a message
+       * Create a mention
        */
       createMention: async (
         householdId: string,
@@ -390,9 +395,9 @@ export class ThreadService extends BaseApiClient {
       },
 
       /**
-       * Get unread mention count
+       * Get unread mentions count
        */
-      getUnreadCount: async (
+      getUnreadMentionsCount: async (
         householdId: string,
         signal?: AbortSignal
       ): Promise<number> => {
@@ -405,7 +410,164 @@ export class ThreadService extends BaseApiClient {
     },
 
     /**
-     * Attachments management
+     * Polls Management
+     */
+    polls: {
+      /**
+       * Get polls in thread
+       */
+      getPollsInThread: async (
+        householdId: string,
+        threadId: string,
+        messageId: string,
+        signal?: AbortSignal
+      ): Promise<PollWithDetails[]> => {
+        const response = await this.axiosInstance.get<
+          ApiResponse<PollWithDetails[]>
+        >(
+          `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls`,
+          { signal }
+        );
+        return this.extractData(response);
+      },
+
+      /**
+       * Get a specific poll
+       */
+      getPoll: async (
+        householdId: string,
+        threadId: string,
+        messageId: string,
+        pollId: string,
+        signal?: AbortSignal
+      ): Promise<PollWithDetails> => {
+        const response = await this.axiosInstance.get<
+          ApiResponse<PollWithDetails>
+        >(
+          `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls/${pollId}`,
+          { signal }
+        );
+        return this.extractData(response);
+      },
+
+      /**
+       * Create a poll
+       */
+      createPoll: async (
+        householdId: string,
+        threadId: string,
+        messageId: string,
+        pollData: CreatePollDTO,
+        signal?: AbortSignal
+      ): Promise<PollWithDetails> => {
+        const response = await this.axiosInstance.post<
+          ApiResponse<PollWithDetails>
+        >(
+          `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls`,
+          pollData,
+          { signal }
+        );
+        return this.extractData(response);
+      },
+
+      /**
+       * Update a poll
+       */
+      updatePoll: async (
+        householdId: string,
+        threadId: string,
+        messageId: string,
+        pollId: string,
+        pollData: UpdatePollDTO,
+        signal?: AbortSignal
+      ): Promise<PollWithDetails> => {
+        const response = await this.axiosInstance.patch<
+          ApiResponse<PollWithDetails>
+        >(
+          `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls/${pollId}`,
+          pollData,
+          { signal }
+        );
+        return this.extractData(response);
+      },
+
+      /**
+       * Delete a poll
+       */
+      deletePoll: async (
+        householdId: string,
+        threadId: string,
+        messageId: string,
+        pollId: string,
+        signal?: AbortSignal
+      ): Promise<void> => {
+        await this.axiosInstance.delete(
+          `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls/${pollId}`,
+          { signal }
+        );
+      },
+
+      /**
+       * Vote on a poll
+       */
+      votePoll: async (
+        householdId: string,
+        threadId: string,
+        messageId: string,
+        pollId: string,
+        voteData: CreatePollVoteDTO,
+        signal?: AbortSignal
+      ): Promise<PollVoteWithUser> => {
+        const response = await this.axiosInstance.post<
+          ApiResponse<PollVoteWithUser>
+        >(
+          `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls/${pollId}/vote`,
+          voteData,
+          { signal }
+        );
+        return this.extractData(response);
+      },
+
+      /**
+       * Remove a vote from a poll
+       */
+      removePollVote: async (
+        householdId: string,
+        threadId: string,
+        messageId: string,
+        pollId: string,
+        voteId: string,
+        signal?: AbortSignal
+      ): Promise<void> => {
+        await this.axiosInstance.delete(
+          `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls/${pollId}/vote`,
+          {
+            data: { voteId },
+            signal,
+          }
+        );
+      },
+
+      /**
+       * Get poll analytics
+       */
+      getPollAnalytics: async (
+        householdId: string,
+        threadId: string,
+        messageId: string,
+        pollId: string,
+        signal?: AbortSignal
+      ): Promise<any> => {
+        const response = await this.axiosInstance.get<ApiResponse<any>>(
+          `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls/${pollId}/analytics`,
+          { signal }
+        );
+        return this.extractData(response);
+      },
+    },
+
+    /**
+     * Attachments Management
      */
     attachments: {
       /**
@@ -454,7 +616,7 @@ export class ThreadService extends BaseApiClient {
       /**
        * Get details of a specific attachment
        */
-      getAttachmentDetails: async (
+      getAttachment: async (
         householdId: string,
         threadId: string,
         messageId: string,
@@ -483,105 +645,6 @@ export class ThreadService extends BaseApiClient {
           { signal }
         );
       },
-    },
-
-    /**
-     * Get unread mention count
-     */
-    getUnreadMentionsCount: async (
-      householdId: string,
-      signal?: AbortSignal
-    ): Promise<number> => {
-      const response = await this.axiosInstance.get<ApiResponse<number>>(
-        `/households/${householdId}/messages/unread-mentions-count`,
-        { signal }
-      );
-      return this.extractData(response);
-    },
-
-    /**
-     * Get reaction analytics
-     */
-    getReactionAnalytics: async (
-      householdId: string,
-      signal?: AbortSignal
-    ): Promise<Record<ReactionType, number>> => {
-      const response = await this.axiosInstance.get<
-        ApiResponse<Record<ReactionType, number>>
-      >(`/households/${householdId}/messages/reaction-analytics`, { signal });
-      return this.extractData(response);
-    },
-
-    /**
-     * Get reactions by type
-     */
-    getReactionsByType: async (
-      householdId: string,
-      type: ReactionType,
-      signal?: AbortSignal
-    ): Promise<ReactionWithUser[]> => {
-      const response = await this.axiosInstance.get<
-        ApiResponse<ReactionWithUser[]>
-      >(`/households/${householdId}/messages/reactions-by-type`, {
-        params: { type },
-        signal,
-      });
-      return this.extractData(response);
-    },
-
-    /**
-     * Get polls in thread
-     */
-    getPollsInThread: async (
-      householdId: string,
-      threadId: string,
-      messageId: string,
-      signal?: AbortSignal
-    ): Promise<PollWithDetails[]> => {
-      const response = await this.axiosInstance.get<
-        ApiResponse<PollWithDetails[]>
-      >(
-        `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls`,
-        { signal }
-      );
-      return this.extractData(response);
-    },
-
-    /**
-     * Get poll analytics
-     */
-    getPollAnalytics: async (
-      householdId: string,
-      threadId: string,
-      messageId: string,
-      pollId: string,
-      signal?: AbortSignal
-    ): Promise<any> => {
-      const response = await this.axiosInstance.get<ApiResponse<any>>(
-        `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls/${pollId}/analytics`,
-        { signal }
-      );
-      return this.extractData(response);
-    },
-
-    /**
-     * Remove poll vote
-     */
-    removePollVote: async (
-      householdId: string,
-      threadId: string,
-      messageId: string,
-      pollId: string,
-      voteId: string,
-      signal?: AbortSignal
-    ): Promise<void> => {
-      await this.axiosInstance.delete(
-        `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls/${pollId}/vote`,
-        {
-          data: { voteId },
-          signal,
-        }
-      );
     },
   };
 }
