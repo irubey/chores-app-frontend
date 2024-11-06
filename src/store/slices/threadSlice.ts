@@ -7,17 +7,9 @@ import {
   ThreadWithParticipants,
   CreateThreadDTO,
   UpdateThreadDTO,
-  InviteUsersDTO,
 } from "@shared/types";
 import type { RootState } from "../store";
 import { ApiError } from "@api/errors";
-
-// TODO: Add these interfaces when implementing pagination and filtering
-// interface ThreadFilters {
-//   search?: string;
-//   sortBy?: 'createdAt' | 'updatedAt' | 'title';
-//   sortOrder?: 'asc' | 'desc';
-// }
 
 interface ThreadState {
   threads: ThreadWithMessages[];
@@ -28,6 +20,7 @@ interface ThreadState {
     update: "idle" | "loading" | "succeeded" | "failed";
     delete: "idle" | "loading" | "succeeded" | "failed";
     invite: "idle" | "loading" | "succeeded" | "failed";
+    details: "idle" | "loading" | "succeeded" | "failed";
   };
   error: string | null;
 }
@@ -41,18 +34,20 @@ const initialState: ThreadState = {
     update: "idle",
     delete: "idle",
     invite: "idle",
+    details: "idle",
   },
   error: null,
 };
 
+// Async Thunks
 export const fetchThreads = createAsyncThunk<
   ThreadWithMessages[],
   { householdId: string },
   { rejectValue: string }
 >("threads/fetchThreads", async ({ householdId }, { rejectWithValue }) => {
   try {
-    const threads = await apiClient.threads.getThreads(householdId);
-    return threads;
+    const response = await apiClient.threads.threads.getThreads(householdId);
+    return response;
   } catch (error) {
     if (error instanceof ApiError) {
       return rejectWithValue(error.message);
@@ -62,21 +57,18 @@ export const fetchThreads = createAsyncThunk<
 });
 
 export const createThread = createAsyncThunk<
-  ThreadWithMessages,
+  ThreadWithParticipants,
   { householdId: string; threadData: CreateThreadDTO },
   { rejectValue: string }
 >(
   "threads/createThread",
   async ({ householdId, threadData }, { rejectWithValue }) => {
     try {
-      const thread = await apiClient.threads.createThread(
+      const thread = await apiClient.threads.threads.createThread(
         householdId,
         threadData
       );
-      return {
-        ...thread,
-        messages: [],
-      };
+      return thread;
     } catch (error) {
       if (error instanceof ApiError) {
         return rejectWithValue(error.message);
@@ -94,7 +86,7 @@ export const fetchThreadDetails = createAsyncThunk<
   "threads/fetchThreadDetails",
   async ({ householdId, threadId }, { rejectWithValue }) => {
     try {
-      const thread = await apiClient.threads.getThreadDetails(
+      const thread = await apiClient.threads.threads.getThreadDetails(
         householdId,
         threadId
       );
@@ -116,7 +108,7 @@ export const updateThread = createAsyncThunk<
   "threads/updateThread",
   async ({ householdId, threadId, threadData }, { rejectWithValue }) => {
     try {
-      const thread = await apiClient.threads.updateThread(
+      const thread = await apiClient.threads.threads.updateThread(
         householdId,
         threadId,
         threadData
@@ -131,6 +123,25 @@ export const updateThread = createAsyncThunk<
   }
 );
 
+export const deleteThread = createAsyncThunk<
+  string,
+  { householdId: string; threadId: string },
+  { rejectValue: string }
+>(
+  "threads/deleteThread",
+  async ({ householdId, threadId }, { rejectWithValue }) => {
+    try {
+      await apiClient.threads.threads.deleteThread(householdId, threadId);
+      return threadId;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return rejectWithValue(error.message);
+      }
+      return rejectWithValue("Failed to delete thread");
+    }
+  }
+);
+
 export const inviteUsersToThread = createAsyncThunk<
   ThreadWithParticipants,
   { householdId: string; threadId: string; userIds: string[] },
@@ -139,7 +150,7 @@ export const inviteUsersToThread = createAsyncThunk<
   "threads/inviteUsers",
   async ({ householdId, threadId, userIds }, { rejectWithValue }) => {
     try {
-      const thread = await apiClient.threads.inviteUsers(
+      const thread = await apiClient.threads.threads.inviteUsers(
         householdId,
         threadId,
         userIds
@@ -158,9 +169,7 @@ const threadSlice = createSlice({
   name: "threads",
   initialState,
   reducers: {
-    resetThreads: (state) => {
-      return initialState;
-    },
+    resetThreads: () => initialState,
     selectThread: (state, action: PayloadAction<ThreadWithMessages | null>) => {
       state.selectedThread = action.payload;
     },
@@ -183,6 +192,7 @@ const threadSlice = createSlice({
         state.status.list = "failed";
         state.error = action.payload as string;
       })
+
       // Create Thread
       .addCase(createThread.pending, (state) => {
         state.status.create = "loading";
@@ -190,13 +200,37 @@ const threadSlice = createSlice({
       })
       .addCase(createThread.fulfilled, (state, action) => {
         state.status.create = "succeeded";
-        // Add the new thread to the list
-        state.threads.unshift(action.payload as ThreadWithMessages);
+        state.threads.unshift({
+          ...action.payload,
+          messages: [],
+        });
       })
       .addCase(createThread.rejected, (state, action) => {
         state.status.create = "failed";
         state.error = action.payload || "Failed to create thread";
       })
+
+      // Fetch Thread Details
+      .addCase(fetchThreadDetails.pending, (state) => {
+        state.status.details = "loading";
+        state.error = null;
+      })
+      .addCase(fetchThreadDetails.fulfilled, (state, action) => {
+        state.status.details = "succeeded";
+        state.selectedThread = action.payload;
+        // Update thread in list if exists
+        const index = state.threads.findIndex(
+          (t) => t.id === action.payload.id
+        );
+        if (index !== -1) {
+          state.threads[index] = action.payload;
+        }
+      })
+      .addCase(fetchThreadDetails.rejected, (state, action) => {
+        state.status.details = "failed";
+        state.error = action.payload || "Failed to fetch thread details";
+      })
+
       // Update Thread
       .addCase(updateThread.pending, (state) => {
         state.status.update = "loading";
@@ -211,13 +245,34 @@ const threadSlice = createSlice({
           state.threads[index] = { ...state.threads[index], ...action.payload };
         }
         if (state.selectedThread?.id === action.payload.id) {
-          state.selectedThread = { ...state.selectedThread, ...action.payload };
+          state.selectedThread = {
+            ...state.selectedThread,
+            ...action.payload,
+          };
         }
       })
       .addCase(updateThread.rejected, (state, action) => {
         state.status.update = "failed";
         state.error = action.payload || "Failed to update thread";
       })
+
+      // Delete Thread
+      .addCase(deleteThread.pending, (state) => {
+        state.status.delete = "loading";
+        state.error = null;
+      })
+      .addCase(deleteThread.fulfilled, (state, action) => {
+        state.status.delete = "succeeded";
+        state.threads = state.threads.filter((t) => t.id !== action.payload);
+        if (state.selectedThread?.id === action.payload) {
+          state.selectedThread = null;
+        }
+      })
+      .addCase(deleteThread.rejected, (state, action) => {
+        state.status.delete = "failed";
+        state.error = action.payload || "Failed to delete thread";
+      })
+
       // Invite Users
       .addCase(inviteUsersToThread.pending, (state) => {
         state.status.invite = "loading";
@@ -232,14 +287,12 @@ const threadSlice = createSlice({
           state.threads[index] = {
             ...state.threads[index],
             ...action.payload,
-            messages: state.threads[index].messages,
           };
         }
         if (state.selectedThread?.id === action.payload.id) {
           state.selectedThread = {
             ...state.selectedThread,
             ...action.payload,
-            messages: state.selectedThread.messages,
           };
         }
       })
@@ -250,14 +303,11 @@ const threadSlice = createSlice({
   },
 });
 
-// Actions and Reducer
-
 export const { resetThreads, selectThread, clearThreadError } =
   threadSlice.actions;
 export default threadSlice.reducer;
 
-// Selector
-
+// Selectors
 export const selectThreads = (state: RootState) => state.threads.threads;
 export const selectSelectedThread = (state: RootState) =>
   state.threads.selectedThread;

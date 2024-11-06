@@ -6,7 +6,9 @@ import {
   CreateHouseholdDTO,
   UpdateHouseholdDTO,
   AddMemberDTO,
+  HouseholdMemberWithUser,
 } from "@shared/types";
+import { ApiError } from "../errors";
 
 export class HouseholdService extends BaseApiClient {
   /**
@@ -80,29 +82,16 @@ export class HouseholdService extends BaseApiClient {
    */
   public async getSelectedHouseholds(
     signal?: AbortSignal
-  ): Promise<Household[]> {
-    const response = await this.axiosInstance.get<ApiResponse<Household[]>>(
-      `/households/selected`,
-      { signal }
-    );
-    return this.extractData(response);
-  }
-
-  /**
-   * Send an invitation to join the household
-   */
-  public async sendInvitation(
-    householdId: string,
-    email: string,
-    signal?: AbortSignal
-  ): Promise<void> {
-    await this.axiosInstance.post(
-      `/households/${householdId}/invitations`,
-      {
-        email,
+  ): Promise<HouseholdMemberWithUser[]> {
+    const response = await this.axiosInstance.get<
+      ApiResponse<HouseholdMemberWithUser[]>
+    >("/households/selected", {
+      signal,
+      params: {
+        include: "household",
       },
-      { signal }
-    );
+    });
+    return this.extractData(response);
   }
 
   /**
@@ -151,9 +140,72 @@ export class HouseholdService extends BaseApiClient {
     },
 
     /**
+     * Update a member's role in the household
+     */
+    updateMemberRole: async (
+      householdId: string,
+      memberId: string,
+      role: HouseholdRole,
+      signal?: AbortSignal
+    ): Promise<HouseholdMember> => {
+      try {
+        const response = await this.axiosInstance.patch<
+          ApiResponse<HouseholdMember>
+        >(
+          `/households/${householdId}/members/${memberId}/role`,
+          { role },
+          { signal }
+        );
+        return this.extractData(response);
+      } catch (error) {
+        if (error instanceof ApiError) {
+          throw error;
+        }
+        throw new ApiError("Failed to update member role", 500);
+      }
+    },
+
+    /**
+     * Update the selection status of a member
+     */
+    updateSelection: async (
+      householdId: string,
+      memberId: string,
+      isSelected: boolean,
+      signal?: AbortSignal
+    ): Promise<HouseholdMember> => {
+      const response = await this.axiosInstance.patch<
+        ApiResponse<HouseholdMember>
+      >(
+        `/households/${householdId}/members/${memberId}/selection`,
+        { isSelected },
+        { signal }
+      );
+      return this.extractData(response);
+    },
+  };
+
+  // Update the invitations namespace to use the existing endpoint
+  public invitations = {
+    /**
+     * Send an invitation to join the household
+     */
+    sendInvitation: async (
+      householdId: string,
+      email: string,
+      signal?: AbortSignal
+    ): Promise<void> => {
+      await this.axiosInstance.post(
+        `/households/${householdId}/invitations`,
+        { email },
+        { signal }
+      );
+    },
+
+    /**
      * Update a member's status (accept/reject invitation)
      */
-    updateMemberStatus: async (
+    updateMemberInvitationStatus: async (
       householdId: string,
       memberId: string,
       accept: boolean,
@@ -170,35 +222,14 @@ export class HouseholdService extends BaseApiClient {
     },
 
     /**
-     * Update a member's role in the household
+     * Get all pending invitations for the current user
      */
-    updateMemberRole: async (
-      householdId: string,
-      memberId: string,
-      role: HouseholdRole,
+    getInvitations: async (
       signal?: AbortSignal
-    ): Promise<HouseholdMember> => {
-      const response = await this.axiosInstance.patch<
-        ApiResponse<HouseholdMember>
-      >(
-        `/households/${householdId}/members/${memberId}/role`,
-        { role },
-        { signal }
-      );
-      return this.extractData(response);
-    },
-
-    /**
-     * Update the selected household for a member
-     */
-    updateSelectedHousehold: async (
-      householdId: string,
-      isSelected: boolean,
-      signal?: AbortSignal
-    ): Promise<HouseholdMember> => {
-      const response = await this.axiosInstance.patch<
-        ApiResponse<HouseholdMember>
-      >(`/households/${householdId}/selection`, { isSelected }, { signal });
+    ): Promise<HouseholdMember[]> => {
+      const response = await this.axiosInstance.get<
+        ApiResponse<HouseholdMember[]>
+      >(`/households/invitations`, { signal });
       return this.extractData(response);
     },
   };

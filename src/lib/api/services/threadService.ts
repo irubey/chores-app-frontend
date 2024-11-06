@@ -19,6 +19,7 @@ import {
   UpdatePollDTO,
   CreatePollVoteDTO,
   PollVoteWithUser,
+  MessageReadWithUser,
 } from "@shared/types";
 import { BaseApiClient } from "../baseClient";
 
@@ -209,12 +210,14 @@ export class ThreadService extends BaseApiClient {
         threadId: string,
         messageId: string,
         signal?: AbortSignal
-      ): Promise<void> => {
-        await this.axiosInstance.patch(
-          `/households/${householdId}/threads/${threadId}/messages/${messageId}/read`,
-          {},
+      ): Promise<MessageReadStatus> => {
+        const response = await this.axiosInstance.get<
+          ApiResponse<MessageReadStatus>
+        >(
+          `/households/${householdId}/threads/${threadId}/messages/${messageId}/read-status`,
           { signal }
         );
+        return this.extractData(response);
       },
 
       /**
@@ -645,6 +648,25 @@ export class ThreadService extends BaseApiClient {
           { signal }
         );
       },
+    },
+
+    /**
+     * Mark a message as read
+     */
+    markAsRead: async (
+      householdId: string,
+      threadId: string,
+      messageId: string,
+      signal?: AbortSignal
+    ): Promise<MessageReadWithUser> => {
+      const response = await this.axiosInstance.post<
+        ApiResponse<MessageReadWithUser>
+      >(
+        `/households/${householdId}/threads/${threadId}/messages/${messageId}/read`,
+        {},
+        { signal }
+      );
+      return this.extractData(response);
     },
   };
 }

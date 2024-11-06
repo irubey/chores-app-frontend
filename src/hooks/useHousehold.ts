@@ -1,57 +1,87 @@
 import { useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { AppDispatch, RootState } from "../store/store";
+import { AppDispatch } from "../store/store";
 import {
   fetchUserHouseholds,
-  createHousehold,
-  updateHousehold,
-  deleteHousehold,
+  fetchHousehold,
   fetchHouseholdMembers,
   inviteMember,
   removeMember,
-  rejectInvitation,
+  createHousehold,
+  updateHousehold,
+  deleteHousehold,
+  updateMemberInvitationStatus,
+  fetchSelectedHouseholds,
+  toggleHouseholdSelection,
+  updateMemberRole,
+  addMember,
+  getInvitations,
+  sendInvitation,
   setCurrentHousehold,
   reset,
   selectHousehold,
-  updateMemberRole,
-  updateMemberStatus,
-  fetchSelectedHouseholds,
-  toggleHouseholdSelection,
-  acceptInvitation,
-  getHouseholdDetails,
+  selectUserHouseholds,
+  selectSelectedHouseholds,
+  selectSelectedMembers,
+  selectCurrentHousehold,
+  selectHouseholdMembers,
+  selectHouseholdStatus,
+  selectHouseholdError,
 } from "../store/slices/householdSlice";
-import { Household, HouseholdMember } from "../types/household";
+import {
+  Household,
+  CreateHouseholdDTO,
+  UpdateHouseholdDTO,
+  AddMemberDTO,
+} from "@shared/types";
+import { HouseholdRole } from "@shared/enums";
 
 export const useHousehold = () => {
   const dispatch = useDispatch<AppDispatch>();
-  const householdState = useSelector(selectHousehold);
 
-  // Existing Actions
+  // Use individual selectors for better performance
+  const households = useSelector(selectUserHouseholds);
+  const currentHousehold = useSelector(selectCurrentHousehold);
+  const members = useSelector(selectHouseholdMembers);
+  const selectedHouseholds = useSelector(selectSelectedHouseholds);
+  const selectedMembers = useSelector(selectSelectedMembers);
+  const status = useSelector(selectHouseholdStatus);
+  const error = useSelector(selectHouseholdError);
+
+  // Household Actions
   const fetchHouseholds = useCallback(
     () => dispatch(fetchUserHouseholds()),
     [dispatch]
   );
-  const createNewHousehold = useCallback(
-    (data: { name: string; currency: string }) =>
-      dispatch(createHousehold(data)),
+
+  const fetchHouseholdDetails = useCallback(
+    (householdId: string) => dispatch(fetchHousehold(householdId)),
     [dispatch]
   );
+
+  const createNewHousehold = useCallback(
+    (data: CreateHouseholdDTO) => dispatch(createHousehold(data)),
+    [dispatch]
+  );
+
   const updateHouseholdDetails = useCallback(
-    (householdId: string, data: Partial<Omit<Household, "id" | "members">>) =>
+    (householdId: string, data: UpdateHouseholdDTO) =>
       dispatch(updateHousehold({ householdId, data })),
     [dispatch]
   );
+
   const removeHousehold = useCallback(
-    (id: string) => dispatch(deleteHousehold(id)),
+    (householdId: string) => dispatch(deleteHousehold(householdId)),
     [dispatch]
   );
+
+  // Member Actions
   const fetchMembers = useCallback(
     (householdId: string) => dispatch(fetchHouseholdMembers(householdId)),
     [dispatch]
   );
 
-  // Keep this more detailed version
-  const sendInvitation = useCallback(
+  const inviteNewMember = useCallback(
     (householdId: string, email: string) =>
       dispatch(inviteMember({ householdId, email })),
     [dispatch]
@@ -62,75 +92,92 @@ export const useHousehold = () => {
       dispatch(removeMember({ householdId, memberId })),
     [dispatch]
   );
-  const setCurrent = useCallback(
-    (household: Household) => dispatch(setCurrentHousehold(household)),
-    [dispatch]
-  );
-  const resetHouseholdState = () => dispatch(reset());
 
   const updateMemberRoleAction = useCallback(
-    (householdId: string, memberId: string, role: "ADMIN" | "MEMBER") =>
+    (householdId: string, memberId: string, role: HouseholdRole) =>
       dispatch(updateMemberRole({ householdId, memberId, role })),
     [dispatch]
   );
 
-  // Updated and New Actions
-  const getHouseholdDetailsAction = useCallback(
-    (householdId: string) => dispatch(getHouseholdDetails(householdId)),
-    [dispatch]
-  );
-  const updateMemberStatusAction = useCallback(
-    (householdId: string, memberId: string, status: "ACCEPTED" | "REJECTED") =>
-      dispatch(updateMemberStatus({ householdId, memberId, status })),
-    [dispatch]
-  );
+  // Selection Actions
   const getSelectedHouseholds = useCallback(
     () => dispatch(fetchSelectedHouseholds()),
     [dispatch]
   );
-  const toggleHouseholdSelectionAction = useCallback(
+
+  const toggleSelection = useCallback(
     (householdId: string, memberId: string, isSelected: boolean) =>
       dispatch(toggleHouseholdSelection({ householdId, memberId, isSelected })),
     [dispatch]
   );
-  const acceptInvitationAction = useCallback(
-    (token: string) => dispatch(acceptInvitation({ token })),
+
+  // Invitation Actions
+  const sendInvitationAction = useCallback(
+    (householdId: string, email: string) =>
+      dispatch(sendInvitation({ householdId, email })),
     [dispatch]
   );
 
-  const rejectInvitationAction = useCallback(
-    (token: string) => dispatch(rejectInvitation({ token })),
+  const updateInvitationStatus = useCallback(
+    (householdId: string, memberId: string, accept: boolean) =>
+      dispatch(updateMemberInvitationStatus({ householdId, memberId, accept })),
+    [dispatch]
+  );
+
+  const getInvitationsList = useCallback(
+    () => dispatch(getInvitations()),
+    [dispatch]
+  );
+
+  // State Management
+  const setCurrent = useCallback(
+    (household: Household) => dispatch(setCurrentHousehold(household)),
+    [dispatch]
+  );
+
+  const resetHouseholdState = useCallback(() => dispatch(reset()), [dispatch]);
+
+  const addNewMember = useCallback(
+    (householdId: string, data: AddMemberDTO) =>
+      dispatch(addMember({ householdId, data })),
     [dispatch]
   );
 
   return {
     // State
-    households: householdState.userHouseholds,
-    currentHousehold: householdState.currentHousehold,
-    members: householdState.members,
-    isLoading: householdState.isLoading,
-    isSuccess: householdState.isSuccess,
-    isError: householdState.isError,
-    message: householdState.message,
+    households,
+    currentHousehold,
+    members,
+    selectedHouseholds,
+    selectedMembers,
+    status,
+    error,
 
-    // Actions
+    // Household Actions
     fetchHouseholds,
+    fetchHouseholdDetails,
     createNewHousehold,
     updateHouseholdDetails,
     removeHousehold,
+
+    // Member Actions
     fetchMembers,
-    inviteMember: sendInvitation,
+    inviteMember: inviteNewMember,
     removeMember: removeMemberAction,
-    setCurrent,
-    resetHouseholdState,
     updateMemberRole: updateMemberRoleAction,
 
-    // New and Updated Actions
-    getHouseholdDetails: getHouseholdDetailsAction,
-    updateMemberStatus: updateMemberStatusAction,
+    // Selection Actions
     getSelectedHouseholds,
-    toggleHouseholdSelection: toggleHouseholdSelectionAction,
-    acceptInvitation: acceptInvitationAction,
-    rejectInvitation: rejectInvitationAction,
+    toggleHouseholdSelection: toggleSelection,
+
+    // Invitation Actions
+    sendInvitation: sendInvitationAction,
+    updateInvitationStatus,
+    getInvitations: getInvitationsList,
+
+    // State Management
+    setCurrent,
+    resetHouseholdState,
+    addMember: addNewMember,
   };
 };
