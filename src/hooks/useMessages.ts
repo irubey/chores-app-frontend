@@ -1,5 +1,6 @@
 "use client";
-import { useSelector, useDispatch } from "react-redux";
+import { useCallback } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import { AppDispatch } from "../store/store";
 import {
   fetchMessages,
@@ -62,7 +63,11 @@ import type {
   CreatePollVoteDTO,
   CreateMentionDTO,
   CreateAttachmentDTO,
+  CreateThreadDTO,
+  UpdateThreadDTO,
 } from "@shared/types";
+
+import { PaginationOptions } from "@shared/interfaces";
 
 export const useMessages = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -82,22 +87,16 @@ export const useMessages = () => {
   const threadError = useSelector(selectThreadError);
 
   // Thread actions
-  const getThreads = (householdId: string) =>
-    dispatch(fetchThreads({ householdId }));
+  const getThreads = useCallback(
+    (householdId: string) => dispatch(fetchThreads({ householdId })),
+    [dispatch]
+  );
 
-  const startNewThread = (
-    householdId: string,
-    threadData: { title?: string; participants: string[] }
-  ) =>
-    dispatch(
-      createThread({
-        householdId,
-        threadData: {
-          ...threadData,
-          householdId,
-        },
-      })
-    );
+  const startNewThread = useCallback(
+    (householdId: string, threadData: CreateThreadDTO) =>
+      dispatch(createThread({ householdId, threadData })),
+    [dispatch]
+  );
 
   const getThreadDetails = (householdId: string, threadId: string) =>
     dispatch(fetchThreadDetails({ householdId, threadId }));
@@ -118,14 +117,17 @@ export const useMessages = () => {
   ) => dispatch(inviteUsersToThread({ householdId, threadId, userIds }));
 
   // Message actions
-  const getMessages = (householdId: string, threadId: string) =>
-    dispatch(fetchMessages({ householdId, threadId }));
+  const getMessages = useCallback(
+    (householdId: string, threadId: string, options?: PaginationOptions) =>
+      dispatch(fetchMessages({ householdId, threadId, options })),
+    [dispatch]
+  );
 
-  const sendNewMessage = (
-    householdId: string,
-    threadId: string,
-    messageData: CreateMessageDTO
-  ) => dispatch(createMessage({ householdId, threadId, messageData }));
+  const sendMessage = useCallback(
+    (householdId: string, threadId: string, messageData: CreateMessageDTO) =>
+      dispatch(createMessage({ householdId, threadId, messageData })),
+    [dispatch]
+  );
 
   const editMessage = (
     householdId: string,
@@ -342,7 +344,7 @@ export const useMessages = () => {
 
     // Message actions
     getMessages,
-    sendNewMessage,
+    sendMessage,
     editMessage,
     removeMessage,
 

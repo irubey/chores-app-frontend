@@ -363,13 +363,12 @@ const householdSlice = createSlice({
   name: "household",
   initialState,
   reducers: {
-    reset: () => initialState,
-    setCurrentHousehold: (state, action: PayloadAction<Household>) => {
-      state.currentHousehold = action.payload;
+    reset: (state) => {
+      return initialState;
     },
-    selectHousehold: (state, action: PayloadAction<string>) => {
+    setCurrentHousehold: (state, action: PayloadAction<Household>) => {
       const household = state.userHouseholds.find(
-        (h) => h.id === action.payload
+        (h) => h.id === action.payload.id
       );
       if (household) {
         state.currentHousehold = household;
@@ -378,6 +377,20 @@ const householdSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
+      // Fetch User Households Cases
+      .addCase(fetchUserHouseholds.pending, (state) => {
+        state.status.list = "loading";
+        state.error = null;
+      })
+      .addCase(fetchUserHouseholds.fulfilled, (state, action) => {
+        state.status.list = "succeeded";
+        state.userHouseholds = action.payload;
+        state.error = null;
+      })
+      .addCase(fetchUserHouseholds.rejected, (state, action) => {
+        state.status.list = "failed";
+        state.error = action.payload || "Failed to fetch households";
+      })
       // Update Member Invitation Status
       .addCase(updateMemberInvitationStatus.pending, (state) => {
         state.status.member = "loading";

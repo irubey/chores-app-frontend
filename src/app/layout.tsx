@@ -10,9 +10,9 @@ import Footer from "../components/layout/Footer";
 import store from "../store/store";
 import Spinner from "../components/common/Spinner";
 import { useRouter, usePathname } from "next/navigation";
-import { tokenService } from "../lib/api/services/tokenService";
 import { reset } from "../store/slices/authSlice";
 import "../styles/globals.css";
+import { User } from "@shared/types";
 
 // Define public routes
 const PUBLIC_ROUTES = [
@@ -25,6 +25,11 @@ const PUBLIC_ROUTES = [
 
 interface AppContentProps {
   children: React.ReactNode;
+}
+
+// Add type for components that can receive user prop
+interface WithUserProp {
+  user?: User;
 }
 
 function AppContent({ children }: AppContentProps) {
@@ -99,7 +104,13 @@ function AppContent({ children }: AppContentProps) {
             <Spinner className="h-8 w-8" />
           </div>
         ) : (
-          children
+          React.Children.map(children, (child) =>
+            React.isValidElement(child)
+              ? React.cloneElement(child as React.ReactElement<WithUserProp>, {
+                  user,
+                })
+              : child
+          )
         )}
       </main>
       {isAuthenticated && <Footer />}
@@ -138,9 +149,7 @@ export default function RootLayout({
       <body className="h-full antialiased font-sans">
         <Provider store={store}>
           <ThemeProvider>
-            <SocketProvider isAuthenticated={isAuthenticated} user={user}>
-              <AppContent>{children}</AppContent>
-            </SocketProvider>
+            <AppContent>{children}</AppContent>
           </ThemeProvider>
         </Provider>
       </body>

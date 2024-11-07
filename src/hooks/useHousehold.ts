@@ -19,7 +19,6 @@ import {
   sendInvitation,
   setCurrentHousehold,
   reset,
-  selectHousehold,
   selectUserHouseholds,
   selectSelectedHouseholds,
   selectSelectedMembers,
