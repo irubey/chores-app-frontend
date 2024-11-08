@@ -2,6 +2,7 @@
 import { useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { AppDispatch } from "../store/store";
+import { logger } from "../lib/api/logger";
 import {
   fetchMessages,
   createMessage,
@@ -72,6 +73,10 @@ import { PaginationOptions } from "@shared/interfaces";
 export const useMessages = () => {
   const dispatch = useDispatch<AppDispatch>();
 
+  logger.info("useMessages hook initialized", {
+    timestamp: new Date().toISOString(),
+  });
+
   // Message selectors
   const messages = useSelector(selectMessages);
   const messageStatus = useSelector(selectMessageStatus);
@@ -88,7 +93,25 @@ export const useMessages = () => {
 
   // Thread actions
   const getThreads = useCallback(
-    (householdId: string) => dispatch(fetchThreads({ householdId })),
+    (householdId: string) => {
+      logger.info("Fetching threads", { householdId });
+      return dispatch(fetchThreads({ householdId }))
+        .then((result) => {
+          logger.info("Threads fetched successfully", {
+            householdId,
+            threadCount: result.payload?.length,
+          });
+          return result;
+        })
+        .catch((error) => {
+          logger.error("Failed to fetch threads", {
+            householdId,
+            error: error.message,
+            stack: error.stack,
+          });
+          throw error;
+        });
+    },
     [dispatch]
   );
 
@@ -124,8 +147,18 @@ export const useMessages = () => {
   );
 
   const sendMessage = useCallback(
-    (householdId: string, threadId: string, messageData: CreateMessageDTO) =>
-      dispatch(createMessage({ householdId, threadId, messageData })),
+    (householdId: string, threadId: string, messageData: CreateMessageDTO) => {
+      logger.info("Sending message", { householdId, threadId });
+      return dispatch(createMessage({ householdId, threadId, messageData }))
+        .then((result) => {
+          logger.info("Message sent successfully", { threadId });
+          return result;
+        })
+        .catch((error) => {
+          logger.error("Failed to send message", { threadId, error });
+          throw error;
+        });
+    },
     [dispatch]
   );
 
@@ -305,7 +338,10 @@ export const useMessages = () => {
     dispatch(getReactionsByType({ householdId }));
 
   // Reset action
-  const reset = () => dispatch(resetMessages());
+  const reset = useCallback(() => {
+    logger.info("Resetting messages state");
+    dispatch(resetMessages());
+  }, [dispatch]);
 
   return {
     // State
@@ -321,12 +357,19 @@ export const useMessages = () => {
     nextCursor,
 
     // State management
-    selectMessageById: (messageId: string) => {
-      const message = messages.find((m) => m.id === messageId);
-      if (message) {
-        dispatch(selectMessage(message));
-      }
-    },
+    selectMessageById: useCallback(
+      (messageId: string) => {
+        logger.info("Selecting message", { messageId });
+        const message = messages.find((m) => m.id === messageId);
+        if (message) {
+          dispatch(selectMessage(message));
+          logger.info("Message selected", { messageId });
+        } else {
+          logger.error("Message not found", { messageId });
+        }
+      },
+      [messages, dispatch]
+    ),
     selectThreadById: (threadId: string) => {
       const thread = threads.find((t) => t.id === threadId);
       if (thread) {

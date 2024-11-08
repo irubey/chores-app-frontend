@@ -35,10 +35,12 @@ export class ThreadService extends BaseApiClient {
       householdId: string,
       signal?: AbortSignal
     ): Promise<ThreadWithMessages[]> => {
-      const response = await this.axiosInstance.get<
-        ApiResponse<ThreadWithMessages[]>
-      >(`/households/${householdId}/threads`, { signal });
-      return this.extractData(response);
+      return this.handleRequest(() =>
+        this.axiosInstance.get<ApiResponse<ThreadWithMessages[]>>(
+          `/households/${householdId}/threads`,
+          { signal }
+        )
+      );
     },
 
     /**
@@ -49,10 +51,13 @@ export class ThreadService extends BaseApiClient {
       threadData: CreateThreadDTO,
       signal?: AbortSignal
     ): Promise<ThreadWithParticipants> => {
-      const response = await this.axiosInstance.post<
-        ApiResponse<ThreadWithParticipants>
-      >(`/households/${householdId}/threads`, threadData, { signal });
-      return this.extractData(response);
+      return this.handleRequest(() =>
+        this.axiosInstance.post<ApiResponse<ThreadWithParticipants>>(
+          `/households/${householdId}/threads`,
+          threadData,
+          { signal }
+        )
+      );
     },
 
     /**
@@ -63,10 +68,12 @@ export class ThreadService extends BaseApiClient {
       threadId: string,
       signal?: AbortSignal
     ): Promise<ThreadWithMessages> => {
-      const response = await this.axiosInstance.get<
-        ApiResponse<ThreadWithMessages>
-      >(`/households/${householdId}/threads/${threadId}`, { signal });
-      return this.extractData(response);
+      return this.handleRequest(() =>
+        this.axiosInstance.get<ApiResponse<ThreadWithMessages>>(
+          `/households/${householdId}/threads/${threadId}`,
+          { signal }
+        )
+      );
     },
 
     /**
@@ -78,12 +85,13 @@ export class ThreadService extends BaseApiClient {
       threadData: UpdateThreadDTO,
       signal?: AbortSignal
     ): Promise<Thread> => {
-      const response = await this.axiosInstance.patch<ApiResponse<Thread>>(
-        `/households/${householdId}/threads/${threadId}`,
-        threadData,
-        { signal }
+      return this.handleRequest(() =>
+        this.axiosInstance.patch<ApiResponse<Thread>>(
+          `/households/${householdId}/threads/${threadId}`,
+          threadData,
+          { signal }
+        )
       );
-      return this.extractData(response);
     },
 
     /**
@@ -94,11 +102,13 @@ export class ThreadService extends BaseApiClient {
       threadId: string,
       signal?: AbortSignal
     ): Promise<void> => {
-      await this.axiosInstance.delete(
-        `/households/${householdId}/threads/${threadId}`,
-        {
-          signal,
-        }
+      return this.handleRequest(() =>
+        this.axiosInstance.delete(
+          `/households/${householdId}/threads/${threadId}`,
+          {
+            signal,
+          }
+        )
       );
     },
 
@@ -111,14 +121,13 @@ export class ThreadService extends BaseApiClient {
       userIds: string[],
       signal?: AbortSignal
     ): Promise<ThreadWithParticipants> => {
-      const response = await this.axiosInstance.post<
-        ApiResponse<ThreadWithParticipants>
-      >(
-        `/households/${householdId}/threads/${threadId}/invite`,
-        { userIds },
-        { signal }
+      return this.handleRequest(() =>
+        this.axiosInstance.post<ApiResponse<ThreadWithParticipants>>(
+          `/households/${householdId}/threads/${threadId}/invite`,
+          { userIds },
+          { signal }
+        )
       );
-      return this.extractData(response);
     },
   };
 
@@ -134,14 +143,16 @@ export class ThreadService extends BaseApiClient {
       threadId: string,
       options?: PaginationOptions,
       signal?: AbortSignal
-    ): Promise<ApiResponse<MessageWithDetails[]>> => {
-      const response = await this.axiosInstance.get<
-        ApiResponse<MessageWithDetails[]>
-      >(`/households/${householdId}/threads/${threadId}/messages`, {
-        params: options,
-        signal,
-      });
-      return response.data;
+    ): Promise<MessageWithDetails[]> => {
+      return this.handleRequest(() =>
+        this.axiosInstance.get<ApiResponse<MessageWithDetails[]>>(
+          `/households/${householdId}/threads/${threadId}/messages`,
+          {
+            params: options,
+            signal,
+          }
+        )
+      );
     },
 
     /**
@@ -153,14 +164,13 @@ export class ThreadService extends BaseApiClient {
       messageData: CreateMessageDTO,
       signal?: AbortSignal
     ): Promise<MessageWithDetails> => {
-      const response = await this.axiosInstance.post<
-        ApiResponse<MessageWithDetails>
-      >(
-        `/households/${householdId}/threads/${threadId}/messages`,
-        messageData,
-        { signal }
+      return this.handleRequest(() =>
+        this.axiosInstance.post<ApiResponse<MessageWithDetails>>(
+          `/households/${householdId}/threads/${threadId}/messages`,
+          messageData,
+          { signal }
+        )
       );
-      return this.extractData(response);
     },
 
     /**
@@ -173,14 +183,13 @@ export class ThreadService extends BaseApiClient {
       messageData: UpdateMessageDTO,
       signal?: AbortSignal
     ): Promise<MessageWithDetails> => {
-      const response = await this.axiosInstance.patch<
-        ApiResponse<MessageWithDetails>
-      >(
-        `/households/${householdId}/threads/${threadId}/messages/${messageId}`,
-        messageData,
-        { signal }
+      return this.handleRequest(() =>
+        this.axiosInstance.patch<ApiResponse<MessageWithDetails>>(
+          `/households/${householdId}/threads/${threadId}/messages/${messageId}`,
+          messageData,
+          { signal }
+        )
       );
-      return this.extractData(response);
     },
 
     /**
@@ -192,9 +201,11 @@ export class ThreadService extends BaseApiClient {
       messageId: string,
       signal?: AbortSignal
     ): Promise<void> => {
-      await this.axiosInstance.delete(
-        `/households/${householdId}/threads/${threadId}/messages/${messageId}`,
-        { signal }
+      return this.handleRequest(() =>
+        this.axiosInstance.delete(
+          `/households/${householdId}/threads/${threadId}/messages/${messageId}`,
+          { signal }
+        )
       );
     },
 
@@ -211,13 +222,12 @@ export class ThreadService extends BaseApiClient {
         messageId: string,
         signal?: AbortSignal
       ): Promise<MessageReadStatus> => {
-        const response = await this.axiosInstance.get<
-          ApiResponse<MessageReadStatus>
-        >(
-          `/households/${householdId}/threads/${threadId}/messages/${messageId}/read-status`,
-          { signal }
+        return this.handleRequest(() =>
+          this.axiosInstance.get<ApiResponse<MessageReadStatus>>(
+            `/households/${householdId}/threads/${threadId}/messages/${messageId}/read-status`,
+            { signal }
+          )
         );
-        return this.extractData(response);
       },
 
       /**
@@ -229,13 +239,12 @@ export class ThreadService extends BaseApiClient {
         messageId: string,
         signal?: AbortSignal
       ): Promise<MessageReadStatus> => {
-        const response = await this.axiosInstance.get<
-          ApiResponse<MessageReadStatus>
-        >(
-          `/households/${householdId}/threads/${threadId}/messages/${messageId}/read-status`,
-          { signal }
+        return this.handleRequest(() =>
+          this.axiosInstance.get<ApiResponse<MessageReadStatus>>(
+            `/households/${householdId}/threads/${threadId}/messages/${messageId}/read-status`,
+            { signal }
+          )
         );
-        return this.extractData(response);
       },
     },
 
@@ -253,14 +262,13 @@ export class ThreadService extends BaseApiClient {
         reactionData: CreateReactionDTO,
         signal?: AbortSignal
       ): Promise<ReactionWithUser> => {
-        const response = await this.axiosInstance.post<
-          ApiResponse<ReactionWithUser>
-        >(
-          `/households/${householdId}/threads/${threadId}/messages/${messageId}/reactions`,
-          reactionData,
-          { signal }
+        return this.handleRequest(() =>
+          this.axiosInstance.post<ApiResponse<ReactionWithUser>>(
+            `/households/${householdId}/threads/${threadId}/messages/${messageId}/reactions`,
+            reactionData,
+            { signal }
+          )
         );
-        return this.extractData(response);
       },
 
       /**
@@ -273,9 +281,11 @@ export class ThreadService extends BaseApiClient {
         reactionId: string,
         signal?: AbortSignal
       ): Promise<void> => {
-        await this.axiosInstance.delete(
-          `/households/${householdId}/threads/${threadId}/messages/${messageId}/reactions/${reactionId}`,
-          { signal }
+        return this.handleRequest(() =>
+          this.axiosInstance.delete(
+            `/households/${householdId}/threads/${threadId}/messages/${messageId}/reactions/${reactionId}`,
+            { signal }
+          )
         );
       },
 
@@ -288,13 +298,12 @@ export class ThreadService extends BaseApiClient {
         messageId: string,
         signal?: AbortSignal
       ): Promise<ReactionWithUser[]> => {
-        const response = await this.axiosInstance.get<
-          ApiResponse<ReactionWithUser[]>
-        >(
-          `/households/${householdId}/threads/${threadId}/messages/${messageId}/reactions`,
-          { signal }
+        return this.handleRequest(() =>
+          this.axiosInstance.get<ApiResponse<ReactionWithUser[]>>(
+            `/households/${householdId}/threads/${threadId}/messages/${messageId}/reactions`,
+            { signal }
+          )
         );
-        return this.extractData(response);
       },
 
       /**
@@ -304,11 +313,12 @@ export class ThreadService extends BaseApiClient {
         householdId: string,
         signal?: AbortSignal
       ): Promise<any> => {
-        const response = await this.axiosInstance.get<ApiResponse<any>>(
-          `/households/${householdId}/messages/reaction-analytics`,
-          { signal }
+        return this.handleRequest(() =>
+          this.axiosInstance.get<ApiResponse<any>>(
+            `/households/${householdId}/messages/reaction-analytics`,
+            { signal }
+          )
         );
-        return this.extractData(response);
       },
 
       /**
@@ -318,11 +328,12 @@ export class ThreadService extends BaseApiClient {
         householdId: string,
         signal?: AbortSignal
       ): Promise<any> => {
-        const response = await this.axiosInstance.get<ApiResponse<any>>(
-          `/households/${householdId}/messages/reactions-by-type`,
-          { signal }
+        return this.handleRequest(() =>
+          this.axiosInstance.get<ApiResponse<any>>(
+            `/households/${householdId}/messages/reactions-by-type`,
+            { signal }
+          )
         );
-        return this.extractData(response);
       },
     },
 
@@ -340,14 +351,13 @@ export class ThreadService extends BaseApiClient {
         mentionData: CreateMentionDTO,
         signal?: AbortSignal
       ): Promise<MentionWithUser> => {
-        const response = await this.axiosInstance.post<
-          ApiResponse<MentionWithUser>
-        >(
-          `/households/${householdId}/threads/${threadId}/messages/${messageId}/mentions`,
-          mentionData,
-          { signal }
+        return this.handleRequest(() =>
+          this.axiosInstance.post<ApiResponse<MentionWithUser>>(
+            `/households/${householdId}/threads/${threadId}/messages/${messageId}/mentions`,
+            mentionData,
+            { signal }
+          )
         );
-        return this.extractData(response);
       },
 
       /**
@@ -357,10 +367,12 @@ export class ThreadService extends BaseApiClient {
         householdId: string,
         signal?: AbortSignal
       ): Promise<MentionWithUser[]> => {
-        const response = await this.axiosInstance.get<
-          ApiResponse<MentionWithUser[]>
-        >(`/households/${householdId}/messages/mentions`, { signal });
-        return this.extractData(response);
+        return this.handleRequest(() =>
+          this.axiosInstance.get<ApiResponse<MentionWithUser[]>>(
+            `/households/${householdId}/messages/mentions`,
+            { signal }
+          )
+        );
       },
 
       /**
@@ -372,13 +384,12 @@ export class ThreadService extends BaseApiClient {
         messageId: string,
         signal?: AbortSignal
       ): Promise<MentionWithUser[]> => {
-        const response = await this.axiosInstance.get<
-          ApiResponse<MentionWithUser[]>
-        >(
-          `/households/${householdId}/threads/${threadId}/messages/${messageId}/mentions`,
-          { signal }
+        return this.handleRequest(() =>
+          this.axiosInstance.get<ApiResponse<MentionWithUser[]>>(
+            `/households/${householdId}/threads/${threadId}/messages/${messageId}/mentions`,
+            { signal }
+          )
         );
-        return this.extractData(response);
       },
 
       /**
@@ -391,9 +402,11 @@ export class ThreadService extends BaseApiClient {
         mentionId: string,
         signal?: AbortSignal
       ): Promise<void> => {
-        await this.axiosInstance.delete(
-          `/households/${householdId}/threads/${threadId}/messages/${messageId}/mentions/${mentionId}`,
-          { signal }
+        return this.handleRequest(() =>
+          this.axiosInstance.delete(
+            `/households/${householdId}/threads/${threadId}/messages/${messageId}/mentions/${mentionId}`,
+            { signal }
+          )
         );
       },
 
@@ -404,11 +417,12 @@ export class ThreadService extends BaseApiClient {
         householdId: string,
         signal?: AbortSignal
       ): Promise<number> => {
-        const response = await this.axiosInstance.get<ApiResponse<number>>(
-          `/households/${householdId}/messages/unread-mentions-count`,
-          { signal }
+        return this.handleRequest(() =>
+          this.axiosInstance.get<ApiResponse<number>>(
+            `/households/${householdId}/messages/unread-mentions-count`,
+            { signal }
+          )
         );
-        return this.extractData(response);
       },
     },
 
@@ -425,13 +439,12 @@ export class ThreadService extends BaseApiClient {
         messageId: string,
         signal?: AbortSignal
       ): Promise<PollWithDetails[]> => {
-        const response = await this.axiosInstance.get<
-          ApiResponse<PollWithDetails[]>
-        >(
-          `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls`,
-          { signal }
+        return this.handleRequest(() =>
+          this.axiosInstance.get<ApiResponse<PollWithDetails[]>>(
+            `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls`,
+            { signal }
+          )
         );
-        return this.extractData(response);
       },
 
       /**
@@ -444,13 +457,12 @@ export class ThreadService extends BaseApiClient {
         pollId: string,
         signal?: AbortSignal
       ): Promise<PollWithDetails> => {
-        const response = await this.axiosInstance.get<
-          ApiResponse<PollWithDetails>
-        >(
-          `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls/${pollId}`,
-          { signal }
+        return this.handleRequest(() =>
+          this.axiosInstance.get<ApiResponse<PollWithDetails>>(
+            `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls/${pollId}`,
+            { signal }
+          )
         );
-        return this.extractData(response);
       },
 
       /**
@@ -463,14 +475,13 @@ export class ThreadService extends BaseApiClient {
         pollData: CreatePollDTO,
         signal?: AbortSignal
       ): Promise<PollWithDetails> => {
-        const response = await this.axiosInstance.post<
-          ApiResponse<PollWithDetails>
-        >(
-          `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls`,
-          pollData,
-          { signal }
+        return this.handleRequest(() =>
+          this.axiosInstance.post<ApiResponse<PollWithDetails>>(
+            `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls`,
+            pollData,
+            { signal }
+          )
         );
-        return this.extractData(response);
       },
 
       /**
@@ -484,14 +495,13 @@ export class ThreadService extends BaseApiClient {
         pollData: UpdatePollDTO,
         signal?: AbortSignal
       ): Promise<PollWithDetails> => {
-        const response = await this.axiosInstance.patch<
-          ApiResponse<PollWithDetails>
-        >(
-          `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls/${pollId}`,
-          pollData,
-          { signal }
+        return this.handleRequest(() =>
+          this.axiosInstance.patch<ApiResponse<PollWithDetails>>(
+            `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls/${pollId}`,
+            pollData,
+            { signal }
+          )
         );
-        return this.extractData(response);
       },
 
       /**
@@ -504,9 +514,11 @@ export class ThreadService extends BaseApiClient {
         pollId: string,
         signal?: AbortSignal
       ): Promise<void> => {
-        await this.axiosInstance.delete(
-          `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls/${pollId}`,
-          { signal }
+        return this.handleRequest(() =>
+          this.axiosInstance.delete(
+            `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls/${pollId}`,
+            { signal }
+          )
         );
       },
 
@@ -521,14 +533,13 @@ export class ThreadService extends BaseApiClient {
         voteData: CreatePollVoteDTO,
         signal?: AbortSignal
       ): Promise<PollVoteWithUser> => {
-        const response = await this.axiosInstance.post<
-          ApiResponse<PollVoteWithUser>
-        >(
-          `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls/${pollId}/vote`,
-          voteData,
-          { signal }
+        return this.handleRequest(() =>
+          this.axiosInstance.post<ApiResponse<PollVoteWithUser>>(
+            `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls/${pollId}/vote`,
+            voteData,
+            { signal }
+          )
         );
-        return this.extractData(response);
       },
 
       /**
@@ -542,12 +553,14 @@ export class ThreadService extends BaseApiClient {
         voteId: string,
         signal?: AbortSignal
       ): Promise<void> => {
-        await this.axiosInstance.delete(
-          `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls/${pollId}/vote`,
-          {
-            data: { voteId },
-            signal,
-          }
+        return this.handleRequest(() =>
+          this.axiosInstance.delete(
+            `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls/${pollId}/vote`,
+            {
+              data: { voteId },
+              signal,
+            }
+          )
         );
       },
 
@@ -561,11 +574,12 @@ export class ThreadService extends BaseApiClient {
         pollId: string,
         signal?: AbortSignal
       ): Promise<any> => {
-        const response = await this.axiosInstance.get<ApiResponse<any>>(
-          `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls/${pollId}/analytics`,
-          { signal }
+        return this.handleRequest(() =>
+          this.axiosInstance.get<ApiResponse<any>>(
+            `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls/${pollId}/analytics`,
+            { signal }
+          )
         );
-        return this.extractData(response);
       },
     },
 
@@ -582,13 +596,12 @@ export class ThreadService extends BaseApiClient {
         messageId: string,
         signal?: AbortSignal
       ): Promise<Attachment[]> => {
-        const response = await this.axiosInstance.get<
-          ApiResponse<Attachment[]>
-        >(
-          `/households/${householdId}/threads/${threadId}/messages/${messageId}/attachments`,
-          { signal }
+        return this.handleRequest(() =>
+          this.axiosInstance.get<ApiResponse<Attachment[]>>(
+            `/households/${householdId}/threads/${threadId}/messages/${messageId}/attachments`,
+            { signal }
+          )
         );
-        return this.extractData(response);
       },
 
       /**
@@ -603,17 +616,18 @@ export class ThreadService extends BaseApiClient {
       ): Promise<Attachment> => {
         const formData = new FormData();
         formData.append("file", file);
-        const response = await this.axiosInstance.post<ApiResponse<Attachment>>(
-          `/households/${householdId}/threads/${threadId}/messages/${messageId}/attachments`,
-          formData,
-          {
-            headers: {
-              "Content-Type": "multipart/form-data",
-            },
-            signal,
-          }
+        return this.handleRequest(() =>
+          this.axiosInstance.post<ApiResponse<Attachment>>(
+            `/households/${householdId}/threads/${threadId}/messages/${messageId}/attachments`,
+            formData,
+            {
+              headers: {
+                "Content-Type": "multipart/form-data",
+              },
+              signal,
+            }
+          )
         );
-        return this.extractData(response);
       },
 
       /**
@@ -626,11 +640,12 @@ export class ThreadService extends BaseApiClient {
         attachmentId: string,
         signal?: AbortSignal
       ): Promise<Attachment> => {
-        const response = await this.axiosInstance.get<ApiResponse<Attachment>>(
-          `/households/${householdId}/threads/${threadId}/messages/${messageId}/attachments/${attachmentId}`,
-          { signal }
+        return this.handleRequest(() =>
+          this.axiosInstance.get<ApiResponse<Attachment>>(
+            `/households/${householdId}/threads/${threadId}/messages/${messageId}/attachments/${attachmentId}`,
+            { signal }
+          )
         );
-        return this.extractData(response);
       },
 
       /**
@@ -643,9 +658,11 @@ export class ThreadService extends BaseApiClient {
         attachmentId: string,
         signal?: AbortSignal
       ): Promise<void> => {
-        await this.axiosInstance.delete(
-          `/households/${householdId}/threads/${threadId}/messages/${messageId}/attachments/${attachmentId}`,
-          { signal }
+        return this.handleRequest(() =>
+          this.axiosInstance.delete(
+            `/households/${householdId}/threads/${threadId}/messages/${messageId}/attachments/${attachmentId}`,
+            { signal }
+          )
         );
       },
     },
@@ -659,14 +676,13 @@ export class ThreadService extends BaseApiClient {
       messageId: string,
       signal?: AbortSignal
     ): Promise<MessageReadWithUser> => {
-      const response = await this.axiosInstance.post<
-        ApiResponse<MessageReadWithUser>
-      >(
-        `/households/${householdId}/threads/${threadId}/messages/${messageId}/read`,
-        {},
-        { signal }
+      return this.handleRequest(() =>
+        this.axiosInstance.post<ApiResponse<MessageReadWithUser>>(
+          `/households/${householdId}/threads/${threadId}/messages/${messageId}/read`,
+          {},
+          { signal }
+        )
       );
-      return this.extractData(response);
     },
   };
 }

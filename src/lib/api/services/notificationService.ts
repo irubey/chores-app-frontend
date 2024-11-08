@@ -12,11 +12,11 @@ export class NotificationService extends BaseApiClient {
    * Get all notifications for the current user
    */
   public async getNotifications(signal?: AbortSignal): Promise<Notification[]> {
-    const response = await this.axiosInstance.get<ApiResponse<Notification[]>>(
-      "/notifications",
-      { signal }
+    return this.handleRequest(() =>
+      this.axiosInstance.get<ApiResponse<Notification[]>>("/notifications", {
+        signal,
+      })
     );
-    return this.extractData(response);
   }
 
   /**
@@ -26,12 +26,13 @@ export class NotificationService extends BaseApiClient {
     notificationData: CreateNotificationDTO,
     signal?: AbortSignal
   ): Promise<Notification> {
-    const response = await this.axiosInstance.post<ApiResponse<Notification>>(
-      "/notifications",
-      notificationData,
-      { signal }
+    return this.handleRequest(() =>
+      this.axiosInstance.post<ApiResponse<Notification>>(
+        "/notifications",
+        notificationData,
+        { signal }
+      )
     );
-    return this.extractData(response);
   }
 
   /**
@@ -41,11 +42,13 @@ export class NotificationService extends BaseApiClient {
     notificationId: string,
     signal?: AbortSignal
   ): Promise<Notification> {
-    const response = await this.axiosInstance.patch<ApiResponse<Notification>>(
-      `/notifications/${notificationId}/read`,
-      { signal }
+    return this.handleRequest(() =>
+      this.axiosInstance.patch<ApiResponse<Notification>>(
+        `/notifications/${notificationId}/read`,
+        {},
+        { signal }
+      )
     );
-    return this.extractData(response);
   }
 
   /**
@@ -55,9 +58,12 @@ export class NotificationService extends BaseApiClient {
     notificationId: string,
     signal?: AbortSignal
   ): Promise<void> {
-    await this.axiosInstance.delete(`/notifications/${notificationId}`, {
-      signal,
-    });
+    return this.handleRequest(() =>
+      this.axiosInstance.delete<ApiResponse<void>>(
+        `/notifications/${notificationId}`,
+        { signal }
+      )
+    );
   }
 
   /**
@@ -76,10 +82,12 @@ export class NotificationService extends BaseApiClient {
       if (userId) params.append("userId", userId);
       if (householdId) params.append("householdId", householdId);
 
-      const response = await this.axiosInstance.get<
-        ApiResponse<NotificationSettings>
-      >(`/notifications/settings?${params.toString()}`, { signal });
-      return this.extractData(response);
+      return this.handleRequest(() =>
+        this.axiosInstance.get<ApiResponse<NotificationSettings>>(
+          `/notifications/settings?${params.toString()}`,
+          { signal }
+        )
+      );
     },
 
     /**
@@ -90,10 +98,13 @@ export class NotificationService extends BaseApiClient {
       settingsData: Partial<NotificationSettings>,
       signal?: AbortSignal
     ): Promise<NotificationSettings> => {
-      const response = await this.axiosInstance.patch<
-        ApiResponse<NotificationSettings>
-      >(`/notifications/settings/${settingsId}`, settingsData, { signal });
-      return this.extractData(response);
+      return this.handleRequest(() =>
+        this.axiosInstance.patch<ApiResponse<NotificationSettings>>(
+          `/notifications/settings/${settingsId}`,
+          settingsData,
+          { signal }
+        )
+      );
     },
   };
 }

@@ -1,6 +1,6 @@
 export enum TransactionStatus {
-  PENDING = 'PENDING',
-  COMPLETED = 'COMPLETED',
+  PENDING = "PENDING",
+  COMPLETED = "COMPLETED",
 }
 
 export interface Expense {
@@ -73,10 +73,10 @@ export interface CreateTransactionDTO {
   fromUserId: string;
   toUserId: string;
   amount: number;
-  type: 'EXPENSE' | 'INCOME';      // Added 'type'
-  category: string;                // Added 'category'
-  date: string;                    // Added 'date' as ISO string
-  description?: string;            // Optional 'description'
+  type: "EXPENSE" | "INCOME"; // Added 'type'
+  category: string; // Added 'category'
+  date: string; // Added 'date' as ISO string
+  description?: string; // Optional 'description'
 }
 
 export interface UpdateTransactionDTO {
@@ -84,8 +84,8 @@ export interface UpdateTransactionDTO {
   fromUserId?: string;
   toUserId?: string;
   amount?: number;
-  type?: 'EXPENSE' | 'INCOME';      // Optional 'type'
-  category?: string;                // Optional 'category'
-  date?: string;                    // Optional 'date' as ISO string
-  description?: string;             // Optional 'description'
+  type?: "EXPENSE" | "INCOME"; // Optional 'type'
+  category?: string; // Optional 'category'
+  date?: string; // Optional 'date' as ISO string
+  description?: string; // Optional 'description'
 }

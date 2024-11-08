@@ -10,16 +10,25 @@ import {
   CreateChoreDTO,
   UpdateChoreDTO,
   Subtask,
+  ChoreAssignment,
+  ChoreAssignmentWithUser,
+  ChoreHistory,
+  ChoreSwapRequest,
+  ChorePickDTO,
   CreateSubtaskDTO,
   UpdateSubtaskDTO,
-  ChoreSwapRequest,
+  ChoreWithAssignees,
+} from "@shared/types";
+import {
   ChoreSwapRequestStatus,
-} from "../../types/chore";
+  ChoreAction,
+  SubtaskStatus,
+} from "@shared/enums";
 import { RootState } from "../store";
 
 interface ChoresState {
   chores: {
-    [choreId: string]: Chore;
+    [choreId: string]: ChoreWithAssignees;
   };
   isLoading: {
     fetchChores: boolean;
@@ -54,7 +63,7 @@ const initialState: ChoresState = {
 // Async thunks
 
 export const fetchChores = createAsyncThunk<
-  Chore[],
+  ChoreWithAssignees[],
   string,
   { rejectValue: string }
 >("chores/fetchChores", async (householdId, thunkAPI) => {
@@ -66,7 +75,7 @@ export const fetchChores = createAsyncThunk<
 });
 
 export const addChore = createAsyncThunk<
-  Chore,
+  ChoreWithAssignees,
   { householdId: string; choreData: CreateChoreDTO },
   { rejectValue: string }
 >("chores/addChore", async ({ householdId, choreData }, thunkAPI) => {
@@ -78,7 +87,7 @@ export const addChore = createAsyncThunk<
 });
 
 export const updateChore = createAsyncThunk<
-  Chore,
+  ChoreWithAssignees,
   { householdId: string; choreId: string; choreData: UpdateChoreDTO },
   { rejectValue: string }
 >(
@@ -119,7 +128,7 @@ export const addSubtask = createAsyncThunk<
   "chores/addSubtask",
   async ({ householdId, choreId, subtaskData }, thunkAPI) => {
     try {
-      return await apiClient.chores.subtasks.createSubtask(
+      return await apiClient.chores.subtasks.addSubtask(
         householdId,
         choreId,
         subtaskData
@@ -201,7 +210,7 @@ export const requestChoreSwap = createAsyncThunk<
 );
 
 export const approveChoreSwap = createAsyncThunk<
-  Chore,
+  ChoreWithAssignees,
   {
     householdId: string;
     choreId: string;
@@ -245,7 +254,7 @@ const choresSlice = createSlice({
       })
       .addCase(
         fetchChores.fulfilled,
-        (state, action: PayloadAction<Chore[]>) => {
+        (state, action: PayloadAction<ChoreWithAssignees[]>) => {
           state.isLoading.fetchChores = false;
           state.chores = action.payload.reduce((acc, chore) => {
             acc[chore.id] = chore;
@@ -263,10 +272,13 @@ const choresSlice = createSlice({
         state.isLoading.createChore = true;
         state.error = null;
       })
-      .addCase(addChore.fulfilled, (state, action: PayloadAction<Chore>) => {
-        state.isLoading.createChore = false;
-        state.chores[action.payload.id] = action.payload;
-      })
+      .addCase(
+        addChore.fulfilled,
+        (state, action: PayloadAction<ChoreWithAssignees>) => {
+          state.isLoading.createChore = false;
+          state.chores[action.payload.id] = action.payload;
+        }
+      )
       .addCase(addChore.rejected, (state, action) => {
         state.isLoading.createChore = false;
         state.error = action.payload || "Failed to add chore";
@@ -277,10 +289,13 @@ const choresSlice = createSlice({
         state.isLoading.updateChore = true;
         state.error = null;
       })
-      .addCase(updateChore.fulfilled, (state, action: PayloadAction<Chore>) => {
-        state.isLoading.updateChore = false;
-        state.chores[action.payload.id] = action.payload;
-      })
+      .addCase(
+        updateChore.fulfilled,
+        (state, action: PayloadAction<ChoreWithAssignees>) => {
+          state.isLoading.updateChore = false;
+          state.chores[action.payload.id] = action.payload;
+        }
+      )
       .addCase(updateChore.rejected, (state, action) => {
         state.isLoading.updateChore = false;
         state.error = action.payload || "Failed to update chore";
@@ -314,9 +329,10 @@ const choresSlice = createSlice({
           state.isLoading.createSubtask = false;
           const chore = state.chores[action.payload.choreId];
           if (chore) {
-            chore.subtasks = chore.subtasks
-              ? [...chore.subtasks, action.payload]
-              : [action.payload];
+            if (!Array.isArray(chore.subtasks)) {
+              chore.subtasks = [];
+            }
+            chore.subtasks.push(action.payload);
           }
         }
       )
@@ -335,7 +351,7 @@ const choresSlice = createSlice({
         (state, action: PayloadAction<Subtask>) => {
           state.isLoading.updateSubtask = false;
           const chore = state.chores[action.payload.choreId];
-          if (chore && chore.subtasks) {
+          if (chore?.subtasks) {
             const index = chore.subtasks.findIndex(
               (sub) => sub.id === action.payload.id
             );
@@ -364,7 +380,7 @@ const choresSlice = createSlice({
           state.isLoading.deleteSubtask = false;
           const { choreId, subtaskId } = action.payload;
           const chore = state.chores[choreId];
-          if (chore && chore.subtasks) {
+          if (chore?.subtasks) {
             chore.subtasks = chore.subtasks.filter(
               (sub) => sub.id !== subtaskId
             );
@@ -387,10 +403,10 @@ const choresSlice = createSlice({
           state.isLoading.requestChoreSwap = false;
           const chore = state.chores[action.payload.choreId];
           if (chore) {
-            chore.swapRequests = [
-              ...(chore.swapRequests || []),
-              action.payload,
-            ];
+            if (!Array.isArray(chore.swapRequests)) {
+              chore.swapRequests = [];
+            }
+            chore.swapRequests.push(action.payload);
           }
         }
       )
@@ -406,7 +422,7 @@ const choresSlice = createSlice({
       })
       .addCase(
         approveChoreSwap.fulfilled,
-        (state, action: PayloadAction<Chore>) => {
+        (state, action: PayloadAction<ChoreWithAssignees>) => {
           state.isLoading.approveChoreSwap = false;
           state.chores[action.payload.id] = action.payload;
         }

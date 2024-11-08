@@ -34,6 +34,8 @@ import {
   AddMemberDTO,
 } from "@shared/types";
 import { HouseholdRole } from "@shared/enums";
+import { logger } from "@/lib/api/logger";
+import { ApiError, ApiErrorType } from "@/lib/api/errors/apiErrors";
 
 export const useHousehold = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -99,10 +101,32 @@ export const useHousehold = () => {
   );
 
   // Selection Actions
-  const getSelectedHouseholds = useCallback(
-    () => dispatch(fetchSelectedHouseholds()),
-    [dispatch]
-  );
+  const getSelectedHouseholds = useCallback(() => {
+    logger.info("Fetching selected households");
+    return dispatch(fetchSelectedHouseholds())
+      .unwrap()
+      .then((result) => {
+        logger.info("Selected households fetched successfully", {
+          count: result.length,
+        });
+        return result;
+      })
+      .catch((error) => {
+        if (error instanceof ApiError) {
+          logger.error(`Household error: ${error.type}`, {
+            message: error.message,
+            status: error.status,
+            data: error.data,
+          });
+        } else {
+          logger.error("Unknown error fetching households", {
+            error: error.message,
+            stack: error.stack,
+          });
+        }
+        throw error;
+      });
+  }, [dispatch]);
 
   const toggleSelection = useCallback(
     (householdId: string, memberId: string, isSelected: boolean) =>

@@ -25,10 +25,12 @@ export class FinanceService extends BaseApiClient {
       householdId: string,
       signal?: AbortSignal
     ): Promise<ExpenseWithSplitsAndPaidBy[]> => {
-      const response = await this.axiosInstance.get<
-        ApiResponse<ExpenseWithSplitsAndPaidBy[]>
-      >(`/households/${householdId}/expenses`, { signal });
-      return this.extractData(response);
+      return this.handleRequest(() =>
+        this.axiosInstance.get<ApiResponse<ExpenseWithSplitsAndPaidBy[]>>(
+          `/households/${householdId}/expenses`,
+          { signal }
+        )
+      );
     },
 
     /**
@@ -39,10 +41,13 @@ export class FinanceService extends BaseApiClient {
       expenseData: CreateExpenseDTO,
       signal?: AbortSignal
     ): Promise<ExpenseWithSplitsAndPaidBy> => {
-      const response = await this.axiosInstance.post<
-        ApiResponse<ExpenseWithSplitsAndPaidBy>
-      >(`/households/${householdId}/expenses`, expenseData, { signal });
-      return this.extractData(response);
+      return this.handleRequest(() =>
+        this.axiosInstance.post<ApiResponse<ExpenseWithSplitsAndPaidBy>>(
+          `/households/${householdId}/expenses`,
+          expenseData,
+          { signal }
+        )
+      );
     },
 
     /**
@@ -53,10 +58,12 @@ export class FinanceService extends BaseApiClient {
       expenseId: string,
       signal?: AbortSignal
     ): Promise<ExpenseWithSplitsAndPaidBy> => {
-      const response = await this.axiosInstance.get<
-        ApiResponse<ExpenseWithSplitsAndPaidBy>
-      >(`/households/${householdId}/expenses/${expenseId}`, { signal });
-      return this.extractData(response);
+      return this.handleRequest(() =>
+        this.axiosInstance.get<ApiResponse<ExpenseWithSplitsAndPaidBy>>(
+          `/households/${householdId}/expenses/${expenseId}`,
+          { signal }
+        )
+      );
     },
 
     /**
@@ -68,12 +75,13 @@ export class FinanceService extends BaseApiClient {
       expenseData: UpdateExpenseDTO,
       signal?: AbortSignal
     ): Promise<ExpenseWithSplitsAndPaidBy> => {
-      const response = await this.axiosInstance.patch<
-        ApiResponse<ExpenseWithSplitsAndPaidBy>
-      >(`/households/${householdId}/expenses/${expenseId}`, expenseData, {
-        signal,
-      });
-      return this.extractData(response);
+      return this.handleRequest(() =>
+        this.axiosInstance.patch<ApiResponse<ExpenseWithSplitsAndPaidBy>>(
+          `/households/${householdId}/expenses/${expenseId}`,
+          expenseData,
+          { signal }
+        )
+      );
     },
 
     /**
@@ -84,9 +92,11 @@ export class FinanceService extends BaseApiClient {
       expenseId: string,
       signal?: AbortSignal
     ): Promise<void> => {
-      await this.axiosInstance.delete(
-        `/households/${householdId}/expenses/${expenseId}`,
-        { signal }
+      return this.handleRequest(() =>
+        this.axiosInstance.delete<ApiResponse<void>>(
+          `/households/${householdId}/expenses/${expenseId}`,
+          { signal }
+        )
       );
     },
 
@@ -101,17 +111,18 @@ export class FinanceService extends BaseApiClient {
     ): Promise<Attachment> => {
       const formData = new FormData();
       formData.append("file", file);
-      const response = await this.axiosInstance.post<ApiResponse<Attachment>>(
-        `/households/${householdId}/expenses/${expenseId}/receipts`,
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-          signal,
-        }
+      return this.handleRequest(() =>
+        this.axiosInstance.post<ApiResponse<Attachment>>(
+          `/households/${householdId}/expenses/${expenseId}/receipts`,
+          formData,
+          {
+            headers: {
+              "Content-Type": "multipart/form-data",
+            },
+            signal,
+          }
+        )
       );
-      return this.extractData(response);
     },
 
     /**
@@ -122,11 +133,12 @@ export class FinanceService extends BaseApiClient {
       expenseId: string,
       signal?: AbortSignal
     ): Promise<Attachment[]> => {
-      const response = await this.axiosInstance.get<ApiResponse<Attachment[]>>(
-        `/households/${householdId}/expenses/${expenseId}/receipts`,
-        { signal }
+      return this.handleRequest(() =>
+        this.axiosInstance.get<ApiResponse<Attachment[]>>(
+          `/households/${householdId}/expenses/${expenseId}/receipts`,
+          { signal }
+        )
       );
-      return this.extractData(response);
     },
 
     /**
@@ -138,11 +150,12 @@ export class FinanceService extends BaseApiClient {
       receiptId: string,
       signal?: AbortSignal
     ): Promise<Attachment> => {
-      const response = await this.axiosInstance.get<ApiResponse<Attachment>>(
-        `/households/${householdId}/expenses/${expenseId}/receipts/${receiptId}`,
-        { signal }
+      return this.handleRequest(() =>
+        this.axiosInstance.get<ApiResponse<Attachment>>(
+          `/households/${householdId}/expenses/${expenseId}/receipts/${receiptId}`,
+          { signal }
+        )
       );
-      return this.extractData(response);
     },
 
     /**
@@ -154,9 +167,11 @@ export class FinanceService extends BaseApiClient {
       receiptId: string,
       signal?: AbortSignal
     ): Promise<void> => {
-      await this.axiosInstance.delete(
-        `/households/${householdId}/expenses/${expenseId}/receipts/${receiptId}`,
-        { signal }
+      return this.handleRequest(() =>
+        this.axiosInstance.delete<ApiResponse<void>>(
+          `/households/${householdId}/expenses/${expenseId}/receipts/${receiptId}`,
+          { signal }
+        )
       );
     },
 
@@ -169,14 +184,13 @@ export class FinanceService extends BaseApiClient {
       splits: UpdateExpenseSplitDTO[],
       signal?: AbortSignal
     ): Promise<ExpenseWithSplitsAndPaidBy> => {
-      const response = await this.axiosInstance.patch<
-        ApiResponse<ExpenseWithSplitsAndPaidBy>
-      >(
-        `/households/${householdId}/expenses/${expenseId}/splits`,
-        { splits },
-        { signal }
+      return this.handleRequest(() =>
+        this.axiosInstance.patch<ApiResponse<ExpenseWithSplitsAndPaidBy>>(
+          `/households/${householdId}/expenses/${expenseId}/splits`,
+          { splits },
+          { signal }
+        )
       );
-      return this.extractData(response);
     },
   };
 
@@ -191,10 +205,12 @@ export class FinanceService extends BaseApiClient {
       householdId: string,
       signal?: AbortSignal
     ): Promise<TransactionWithDetails[]> => {
-      const response = await this.axiosInstance.get<
-        ApiResponse<TransactionWithDetails[]>
-      >(`/households/${householdId}/transactions`, { signal });
-      return this.extractData(response);
+      return this.handleRequest(() =>
+        this.axiosInstance.get<ApiResponse<TransactionWithDetails[]>>(
+          `/households/${householdId}/transactions`,
+          { signal }
+        )
+      );
     },
 
     /**
@@ -205,10 +221,13 @@ export class FinanceService extends BaseApiClient {
       transactionData: CreateTransactionDTO,
       signal?: AbortSignal
     ): Promise<TransactionWithDetails> => {
-      const response = await this.axiosInstance.post<
-        ApiResponse<TransactionWithDetails>
-      >(`/households/${householdId}/transactions`, transactionData, { signal });
-      return this.extractData(response);
+      return this.handleRequest(() =>
+        this.axiosInstance.post<ApiResponse<TransactionWithDetails>>(
+          `/households/${householdId}/transactions`,
+          transactionData,
+          { signal }
+        )
+      );
     },
 
     /**
@@ -220,14 +239,13 @@ export class FinanceService extends BaseApiClient {
       statusData: UpdateTransactionDTO,
       signal?: AbortSignal
     ): Promise<TransactionWithDetails> => {
-      const response = await this.axiosInstance.patch<
-        ApiResponse<TransactionWithDetails>
-      >(
-        `/households/${householdId}/transactions/${transactionId}`,
-        statusData,
-        { signal }
+      return this.handleRequest(() =>
+        this.axiosInstance.patch<ApiResponse<TransactionWithDetails>>(
+          `/households/${householdId}/transactions/${transactionId}`,
+          statusData,
+          { signal }
+        )
       );
-      return this.extractData(response);
     },
 
     /**
@@ -238,9 +256,11 @@ export class FinanceService extends BaseApiClient {
       transactionId: string,
       signal?: AbortSignal
     ): Promise<void> => {
-      await this.axiosInstance.delete(
-        `/households/${householdId}/transactions/${transactionId}`,
-        { signal }
+      return this.handleRequest(() =>
+        this.axiosInstance.delete<ApiResponse<void>>(
+          `/households/${householdId}/transactions/${transactionId}`,
+          { signal }
+        )
       );
     },
   };

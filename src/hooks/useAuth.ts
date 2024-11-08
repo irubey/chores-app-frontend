@@ -11,7 +11,8 @@ import {
   selectAuth,
   initializeAuth,
 } from "../store/slices/authSlice";
-import { User } from "@shared/types";
+import { logger } from "../lib/api/logger";
+import { ApiError } from "../lib/api/errors/apiErrors";
 
 type LoginCredentials = {
   email: string;
@@ -28,31 +29,67 @@ export const useAuth = () => {
   const dispatch = useDispatch<AppDispatch>();
   const authState = useSelector(selectAuth);
 
-  // Auth Actions
   const loginUser = useCallback(
     async (credentials: LoginCredentials) => {
-      await dispatch(login(credentials)).unwrap();
+      logger.info("Attempting login", { email: credentials.email });
+      try {
+        const result = await dispatch(login(credentials)).unwrap();
+        logger.info("Login successful", { userId: result.id });
+        return result;
+      } catch (error) {
+        if (error instanceof ApiError) {
+          logger.error("Login failed", {
+            type: error.type,
+            message: error.message,
+            status: error.status,
+          });
+        } else {
+          logger.error("Login failed", { error });
+        }
+        throw error;
+      }
     },
     [dispatch]
   );
 
   const registerUser = useCallback(
     async (data: RegisterData) => {
-      await dispatch(register(data)).unwrap();
+      logger.info("Attempting registration", { email: data.email });
+      try {
+        const result = await dispatch(register(data)).unwrap();
+        logger.info("Registration successful", { userId: result.id });
+        return result;
+      } catch (error) {
+        logger.error("Registration failed", { error });
+        throw error;
+      }
     },
     [dispatch]
   );
 
   const logoutUser = useCallback(async () => {
-    await dispatch(logout()).unwrap();
+    logger.info("Logging out");
+    try {
+      await dispatch(logout()).unwrap();
+      logger.info("Logout successful");
+    } catch (error) {
+      logger.error("Logout failed", { error });
+      throw error;
+    }
   }, [dispatch]);
 
   const initAuth = useCallback(async () => {
-    await dispatch(initializeAuth()).unwrap();
-  }, [dispatch]);
-
-  const resetAuth = useCallback(() => {
-    dispatch(reset());
+    logger.info("Initializing auth");
+    try {
+      const result = await dispatch(initializeAuth()).unwrap();
+      logger.info("Auth initialization complete", {
+        authenticated: !!result,
+      });
+      return result;
+    } catch (error) {
+      logger.error("Auth initialization failed", { error });
+      throw error;
+    }
   }, [dispatch]);
 
   return {
@@ -66,7 +103,7 @@ export const useAuth = () => {
     loginUser,
     registerUser,
     logoutUser,
-    resetAuth,
     initAuth,
+    resetAuth: () => dispatch(reset()),
   };
 };

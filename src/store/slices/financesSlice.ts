@@ -67,7 +67,7 @@ export const fetchExpenses = createAsyncThunk<
   { rejectValue: string }
 >("finances/fetchExpenses", async (householdId, thunkAPI) => {
   try {
-    return await apiClient.finances.getExpenses(householdId);
+    return await apiClient.finances.expenses.getExpenses(householdId);
   } catch (error: any) {
     const message =
       error.response?.data?.message ||
@@ -83,7 +83,10 @@ export const addExpense = createAsyncThunk<
   { rejectValue: string }
 >("finances/addExpense", async ({ householdId, expenseData }, thunkAPI) => {
   try {
-    return await apiClient.finances.createExpense(householdId, expenseData);
+    return await apiClient.finances.expenses.createExpense(
+      householdId,
+      expenseData
+    );
   } catch (error: any) {
     const message =
       error.response?.data?.message || error.message || "Failed to add expense";
@@ -99,7 +102,7 @@ export const updateExpense = createAsyncThunk<
   "finances/updateExpense",
   async ({ householdId, expenseId, expenseData }, thunkAPI) => {
     try {
-      return await apiClient.finances.updateExpense(
+      return await apiClient.finances.expenses.updateExpense(
         householdId,
         expenseId,
         expenseData
@@ -120,7 +123,7 @@ export const deleteExpense = createAsyncThunk<
   { rejectValue: string }
 >("finances/deleteExpense", async ({ householdId, expenseId }, thunkAPI) => {
   try {
-    await apiClient.finances.deleteExpense(householdId, expenseId);
+    await apiClient.finances.expenses.deleteExpense(householdId, expenseId);
     return expenseId;
   } catch (error: any) {
     const message =
@@ -138,7 +141,7 @@ export const fetchTransactions = createAsyncThunk<
   { rejectValue: string }
 >("finances/fetchTransactions", async (householdId, thunkAPI) => {
   try {
-    return await apiClient.finances.getTransactions(householdId);
+    return await apiClient.finances.transactions.getTransactions(householdId);
   } catch (error: any) {
     const message =
       error.response?.data?.message ||
@@ -156,7 +159,7 @@ export const addTransaction = createAsyncThunk<
   "finances/addTransaction",
   async ({ householdId, transactionData }, thunkAPI) => {
     try {
-      return await apiClient.finances.createTransaction(
+      return await apiClient.finances.transactions.createTransaction(
         householdId,
         transactionData
       );
@@ -182,7 +185,7 @@ export const updateTransaction = createAsyncThunk<
   "finances/updateTransaction",
   async ({ householdId, transactionId, transactionData }, thunkAPI) => {
     try {
-      return await apiClient.finances.updateTransaction(
+      return await apiClient.finances.transactions.updateTransaction(
         householdId,
         transactionId,
         transactionData
@@ -205,7 +208,10 @@ export const deleteTransaction = createAsyncThunk<
   "finances/deleteTransaction",
   async ({ householdId, transactionId }, thunkAPI) => {
     try {
-      await apiClient.finances.deleteTransaction(householdId, transactionId);
+      await apiClient.finances.transactions.deleteTransaction(
+        householdId,
+        transactionId
+      );
       return transactionId;
     } catch (error: any) {
       const message =
@@ -224,7 +230,7 @@ export const addReceipt = createAsyncThunk<
   { rejectValue: string }
 >("finances/addReceipt", async ({ householdId, file }, thunkAPI) => {
   try {
-    return await apiClient.finances.uploadReceipt(householdId, file);
+    return await apiClient.finances.expenses.uploadReceipt(householdId, file);
   } catch (error: any) {
     const message =
       error.response?.data?.message ||

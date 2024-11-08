@@ -69,15 +69,15 @@ export const fetchMessages = createAsyncThunk<
   "messages/fetchMessages",
   async ({ householdId, threadId, options }, { rejectWithValue }) => {
     try {
-      const response = await apiClient.threads.messages.getMessages(
+      const messages = await apiClient.threads.messages.getMessages(
         householdId,
         threadId,
         options
       );
       return {
-        data: response.data,
-        hasMore: response.pagination?.hasMore || false,
-        nextCursor: response.pagination?.nextCursor,
+        data: messages,
+        hasMore: false,
+        nextCursor: undefined,
       };
     } catch (error) {
       if (error instanceof ApiError) {

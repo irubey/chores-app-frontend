@@ -479,10 +479,20 @@ const householdSlice = createSlice({
         state.status.list = "succeeded";
         state.selectedMembers = action.payload;
         state.selectedHouseholds = action.payload
-          .map((member) => member.household)
-          .filter(
-            (household): household is Household => household !== undefined
-          );
+          .filter((member) => member.householdId)
+          .map((member) => ({
+            id: member.householdId,
+            name: member.household?.name || "Unknown Household",
+            createdAt: member.household?.createdAt
+              ? new Date(member.household.createdAt)
+              : new Date(),
+            updatedAt: member.household?.updatedAt
+              ? new Date(member.household.updatedAt)
+              : new Date(),
+            currency: member.household?.currency || "USD",
+            timezone: member.household?.timezone || "UTC",
+            language: member.household?.language || "en",
+          }));
       })
       .addCase(fetchSelectedHouseholds.rejected, (state, action) => {
         state.status.list = "failed";

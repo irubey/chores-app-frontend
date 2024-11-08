@@ -3,13 +3,19 @@ import { apiClient } from "../../lib/api/apiClient";
 import { User } from "@shared/types";
 import type { RootState } from "../store";
 import { tokenService } from "../../lib/api/services/tokenService";
-import { ApiError } from "@/lib/api/errors";
+import { ApiError, ApiErrorType } from "@/lib/api/errors/apiErrors";
 
 interface AuthState {
   user: User | null;
   status: "idle" | "loading" | "succeeded" | "failed";
   error: string | null;
   isAuthenticated: boolean;
+}
+
+interface ErrorResponse {
+  message: string;
+  status: number;
+  type: ApiErrorType;
 }
 
 const initialState: AuthState = {
@@ -21,63 +27,99 @@ const initialState: AuthState = {
 
 export const login = createAsyncThunk<
   User,
-  { email: string; password: string }
+  { email: string; password: string },
+  { rejectValue: ErrorResponse }
 >("auth/login", async (credentials, { rejectWithValue }) => {
   try {
     const user = await apiClient.auth.login(credentials);
     return user;
-  } catch (error: any) {
+  } catch (error) {
     if (error instanceof ApiError) {
-      return rejectWithValue(error.message);
+      return rejectWithValue({
+        message: error.message,
+        status: error.status,
+        type: error instanceof ApiError ? error.type : ApiErrorType.UNKNOWN,
+      });
     }
-    return rejectWithValue("Login failed - Please try again");
+    return rejectWithValue({
+      message: "Login failed - Please try again",
+      status: 500,
+      type: ApiErrorType.UNKNOWN,
+    });
   }
 });
 
 export const register = createAsyncThunk<
   User,
-  { email: string; password: string; name: string }
+  { email: string; password: string; name: string },
+  { rejectValue: ErrorResponse }
 >("auth/register", async (userData, { rejectWithValue }) => {
   try {
     const user = await apiClient.auth.register(userData);
     return user;
-  } catch (error: any) {
+  } catch (error) {
     if (error instanceof ApiError) {
-      return rejectWithValue(error.message);
+      return rejectWithValue({
+        message: error.message,
+        status: error.status,
+        type: error instanceof ApiError ? error.type : ApiErrorType.UNKNOWN,
+      });
     }
-    return rejectWithValue("Registration failed - Please try again");
+    return rejectWithValue({
+      message: "Registration failed - Please try again",
+      status: 500,
+      type: ApiErrorType.UNKNOWN,
+    });
   }
 });
 
-export const logout = createAsyncThunk<void, void>(
-  "auth/logout",
-  async (_, { rejectWithValue }) => {
-    try {
-      await apiClient.auth.logout();
-      tokenService.cleanup();
-    } catch (error: any) {
-      if (error instanceof ApiError) {
-        return rejectWithValue(error.message);
-      }
-      return rejectWithValue("Logout failed - Please try again");
+export const logout = createAsyncThunk<
+  void,
+  void,
+  { rejectValue: ErrorResponse }
+>("auth/logout", async (_, { rejectWithValue }) => {
+  try {
+    await apiClient.auth.logout();
+    tokenService.cleanup();
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return rejectWithValue({
+        message: error.message,
+        status: error.status,
+        type: error instanceof ApiError ? error.type : ApiErrorType.UNKNOWN,
+      });
     }
+    return rejectWithValue({
+      message: "Logout failed - Please try again",
+      status: 500,
+      type: ApiErrorType.UNKNOWN,
+    });
   }
-);
+});
 
-export const initializeAuth = createAsyncThunk<User | null, void>(
-  "auth/initialize",
-  async (_, { rejectWithValue }) => {
-    try {
-      const user = await apiClient.auth.initializeAuth();
-      return user;
-    } catch (error) {
-      if (error instanceof ApiError) {
-        return rejectWithValue(error.message);
-      }
-      return rejectWithValue("An unexpected error occurred");
+export const initializeAuth = createAsyncThunk<
+  User | null,
+  void,
+  { rejectValue: ErrorResponse }
+>("auth/initialize", async (_, { rejectWithValue }) => {
+  try {
+    const user = await apiClient.auth.initializeAuth();
+    return user;
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return rejectWithValue({
+        message: error.message,
+        status: error.status,
+        type: error instanceof ApiError ? error.type : ApiErrorType.UNKNOWN,
+      });
     }
+    return rejectWithValue({
+      message: "An unexpected error occurred",
+      status: 500,
+      type: ApiErrorType.UNKNOWN,
+    });
   }
-);
+});
 
 const authSlice = createSlice({
   name: "auth",
@@ -105,7 +147,7 @@ const authSlice = createSlice({
       })
       .addCase(login.rejected, (state, action) => {
         state.status = "failed";
-        state.error = (action.payload as string) || "Login failed";
+        state.error = action.payload?.message || "Login failed";
         state.user = null;
         state.isAuthenticated = false;
       })
@@ -122,7 +164,7 @@ const authSlice = createSlice({
       })
       .addCase(register.rejected, (state, action) => {
         state.status = "failed";
-        state.error = (action.payload as string) || "Registration failed";
+        state.error = action.payload?.message || "Registration failed";
         state.user = null;
         state.isAuthenticated = false;
       })
@@ -139,7 +181,7 @@ const authSlice = createSlice({
       })
       .addCase(logout.rejected, (state, action) => {
         state.status = "failed";
-        state.error = (action.payload as string) || "Logout failed";
+        state.error = action.payload?.message || "Logout failed";
         state.user = null;
         state.isAuthenticated = false;
       })
@@ -157,9 +199,9 @@ const authSlice = createSlice({
       .addCase(initializeAuth.rejected, (state, action) => {
         state.status = "failed";
         state.error =
-          action.payload === "Unauthorized"
+          action.payload?.message === "Unauthorized"
             ? null
-            : (action.payload as string) || "Auth initialization failed";
+            : action.payload?.message || "Auth initialization failed";
         state.user = null;
         state.isAuthenticated = false;
       });

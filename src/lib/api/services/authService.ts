@@ -1,8 +1,9 @@
 import { ApiResponse } from "@shared/interfaces";
 import { User } from "@shared/types";
 import { BaseApiClient } from "../baseClient";
-import { ApiError } from "../errors";
+import { ApiError } from "../errors/apiErrors";
 import { RegisterUserDTO, LoginCredentials } from "@shared/types/user";
+import { logger } from "../logger";
 
 export class AuthService extends BaseApiClient {
   /**
@@ -12,16 +13,11 @@ export class AuthService extends BaseApiClient {
     data: RegisterUserDTO,
     signal?: AbortSignal
   ): Promise<User> {
-    try {
-      const response = await this.axiosInstance.post<ApiResponse<User>>(
-        "/auth/register",
-        data,
-        { signal }
-      );
-      return this.extractData(response);
-    } catch (error) {
-      throw error;
-    }
+    return this.handleRequest(() =>
+      this.axiosInstance.post<ApiResponse<User>>("/auth/register", data, {
+        signal,
+      })
+    );
   }
 
   /**
@@ -31,34 +27,20 @@ export class AuthService extends BaseApiClient {
     credentials: LoginCredentials,
     signal?: AbortSignal
   ): Promise<User> {
-    try {
-      const response = await this.axiosInstance.post<ApiResponse<User>>(
-        "/auth/login",
-        credentials,
-        { signal }
-      );
-      const userData = this.extractData(response);
-      if (!userData) {
-        throw new ApiError("Login failed - No user data received", 401);
-      }
-      return userData;
-    } catch (error) {
-      if (error instanceof ApiError) {
-        throw error;
-      }
-      throw new ApiError("Login failed", 401);
-    }
+    return this.handleRequest(() =>
+      this.axiosInstance.post<ApiResponse<User>>("/auth/login", credentials, {
+        signal,
+      })
+    );
   }
 
   /**
    * Logout the current user
    */
   public async logout(signal?: AbortSignal): Promise<void> {
-    try {
-      await this.axiosInstance.post("/auth/logout", {}, { signal });
-    } catch (error) {
-      throw error;
-    }
+    return this.handleRequest(() =>
+      this.axiosInstance.post<ApiResponse<void>>("/auth/logout", {}, { signal })
+    );
   }
 
   /**
@@ -66,13 +48,12 @@ export class AuthService extends BaseApiClient {
    */
   public async initializeAuth(signal?: AbortSignal): Promise<User | null> {
     try {
-      const response = await this.axiosInstance.get<ApiResponse<User>>(
-        "/users/profile",
-        { signal }
+      return await this.handleRequest(() =>
+        this.axiosInstance.get<ApiResponse<User>>("/users/profile", { signal })
       );
-      return this.extractData(response);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
+        logger.info("User not authenticated");
         return null;
       }
       throw error;

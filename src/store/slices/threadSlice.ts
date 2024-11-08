@@ -11,7 +11,7 @@ import {
 import type { RootState } from "../store";
 import { ApiError } from "@api/errors";
 
-interface ThreadState {
+export interface ThreadState {
   threads: ThreadWithMessages[];
   selectedThread: ThreadWithMessages | null;
   status: {
@@ -46,8 +46,8 @@ export const fetchThreads = createAsyncThunk<
   { rejectValue: string }
 >("threads/fetchThreads", async ({ householdId }, { rejectWithValue }) => {
   try {
-    const response = await apiClient.threads.threads.getThreads(householdId);
-    return response;
+    const threads = await apiClient.threads.threads.getThreads(householdId);
+    return threads;
   } catch (error) {
     if (error instanceof ApiError) {
       return rejectWithValue(error.message);
