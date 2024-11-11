@@ -4,12 +4,14 @@ import {
   Household,
   HouseholdMember,
   HouseholdMemberWithUser,
+  CreateHouseholdDTO,
   UpdateHouseholdDTO,
+  AddMemberDTO,
 } from "@shared/types";
 import { apiClient } from "../../lib/api/apiClient";
-import { AddMemberDTO } from "@shared/types";
 import { ApiError } from "../../lib/api/errors";
 import { HouseholdRole } from "@shared/enums";
+import { logger } from "@/lib/api/logger";
 
 interface HouseholdState {
   userHouseholds: Household[];
@@ -54,8 +56,8 @@ export const fetchUserHouseholds = createAsyncThunk<
   { state: RootState; rejectValue: string }
 >("household/fetchUserHouseholds", async (_, thunkAPI) => {
   try {
-    const households = await apiClient.households.getUserHouseholds();
-    return households;
+    const response = await apiClient.households.getUserHouseholds();
+    return response.data;
   } catch (error: any) {
     return thunkAPI.rejectWithValue(
       error.message || "Failed to fetch households"
@@ -70,8 +72,8 @@ export const fetchHousehold = createAsyncThunk<
   { rejectValue: string }
 >("household/fetchHousehold", async (householdId, thunkAPI) => {
   try {
-    const household = await apiClient.households.getHousehold(householdId);
-    return household;
+    const response = await apiClient.households.getHousehold(householdId);
+    return response.data;
   } catch (error: any) {
     return thunkAPI.rejectWithValue(
       error.message || "Failed to fetch household"
@@ -86,8 +88,8 @@ export const fetchHouseholdMembers = createAsyncThunk<
   { rejectValue: string }
 >("household/fetchHouseholdMembers", async (householdId, thunkAPI) => {
   try {
-    const members = await apiClient.households.members.getMembers(householdId);
-    return members;
+    const response = await apiClient.households.members.getMembers(householdId);
+    return response.data;
   } catch (error: any) {
     return thunkAPI.rejectWithValue(error.message || "Failed to fetch members");
   }
@@ -100,14 +102,11 @@ export const inviteMember = createAsyncThunk<
   { rejectValue: string }
 >("household/inviteMember", async ({ householdId, email }, thunkAPI) => {
   try {
-    const invitedMember = await apiClient.households.members.addMember(
-      householdId,
-      {
-        email,
-        role: HouseholdRole.MEMBER,
-      }
-    );
-    return invitedMember;
+    const response = await apiClient.households.members.addMember(householdId, {
+      email,
+      role: HouseholdRole.MEMBER,
+    });
+    return response.data;
   } catch (error: any) {
     if (error instanceof ApiError) {
       return thunkAPI.rejectWithValue(error.message);
@@ -139,13 +138,13 @@ export const createHousehold = createAsyncThunk<
   { rejectValue: string }
 >("household/createHousehold", async ({ name, currency }, thunkAPI) => {
   try {
-    const newHousehold = await apiClient.households.createHousehold({
+    const response = await apiClient.households.createHousehold({
       name,
       currency,
       timezone: "UTC",
       language: "en",
     });
-    return newHousehold;
+    return response.data;
   } catch (error: any) {
     const message =
       error.response?.data?.message ||
@@ -179,11 +178,11 @@ export const updateHousehold = createAsyncThunk<
   { rejectValue: string }
 >("household/updateHousehold", async ({ householdId, data }, thunkAPI) => {
   try {
-    const updatedHousehold = await apiClient.households.updateHousehold(
+    const response = await apiClient.households.updateHousehold(
       householdId,
       data
     );
-    return updatedHousehold;
+    return response.data;
   } catch (error: any) {
     if (error instanceof ApiError) {
       return thunkAPI.rejectWithValue(error.message);
@@ -201,13 +200,13 @@ export const updateMemberInvitationStatus = createAsyncThunk<
   "household/updateMemberInvitationStatus",
   async ({ householdId, memberId, accept }, thunkAPI) => {
     try {
-      const updatedMember =
+      const response =
         await apiClient.households.invitations.updateMemberInvitationStatus(
           householdId,
           memberId,
           accept
         );
-      return updatedMember;
+      return response.data;
     } catch (error: any) {
       if (error instanceof ApiError) {
         return thunkAPI.rejectWithValue(error.message);
@@ -220,21 +219,19 @@ export const updateMemberInvitationStatus = createAsyncThunk<
 );
 
 // Fetch Selected Households
-export const fetchSelectedHouseholds = createAsyncThunk<
-  HouseholdMemberWithUser[],
-  void,
-  { rejectValue: string }
->("household/fetchSelectedHouseholds", async (_, thunkAPI) => {
-  try {
-    const selectedMembers = await apiClient.households.getSelectedHouseholds();
-    return selectedMembers;
-  } catch (error: any) {
-    if (error instanceof ApiError) {
-      return thunkAPI.rejectWithValue(error.message);
+export const fetchSelectedHouseholds = createAsyncThunk(
+  "household/fetchSelectedHouseholds",
+  async () => {
+    logger.info("Fetching selected households");
+    try {
+      const response = await apiClient.households.getSelectedHouseholds();
+      return response.data;
+    } catch (error) {
+      logger.error("Failed to fetch selected households", { error });
+      throw error;
     }
-    return thunkAPI.rejectWithValue("Failed to fetch selected households");
   }
-});
+);
 
 // Update Selected Households
 export const updateSelectedHouseholds = createAsyncThunk<
@@ -245,12 +242,12 @@ export const updateSelectedHouseholds = createAsyncThunk<
   "household/updateSelectedHouseholds",
   async ({ householdId, memberId, isSelected }, thunkAPI) => {
     try {
-      const updatedMember = await apiClient.households.members.updateSelection(
+      const response = await apiClient.households.members.updateSelection(
         householdId,
         memberId,
         isSelected
       );
-      return updatedMember;
+      return response.data;
     } catch (error: any) {
       const message =
         error.response?.data?.message ||
@@ -270,12 +267,12 @@ export const toggleHouseholdSelection = createAsyncThunk<
   "household/toggleSelection",
   async ({ householdId, memberId, isSelected }, thunkAPI) => {
     try {
-      const updatedMember = await apiClient.households.members.updateSelection(
+      const response = await apiClient.households.members.updateSelection(
         householdId,
         memberId,
         isSelected
       );
-      return updatedMember;
+      return response.data;
     } catch (error: any) {
       return thunkAPI.rejectWithValue(
         error.message || "Failed to update selection"
@@ -293,12 +290,12 @@ export const updateMemberRole = createAsyncThunk<
   "household/updateMemberRole",
   async ({ householdId, memberId, role }, thunkAPI) => {
     try {
-      const updatedMember = await apiClient.households.members.updateMemberRole(
+      const response = await apiClient.households.members.updateMemberRole(
         householdId,
         memberId,
         role
       );
-      return updatedMember;
+      return response.data;
     } catch (error: any) {
       if (error instanceof ApiError) {
         return thunkAPI.rejectWithValue(error.message);
@@ -314,11 +311,11 @@ export const addMember = createAsyncThunk<
   { rejectValue: string }
 >("household/addMember", async ({ householdId, data }, thunkAPI) => {
   try {
-    const member = await apiClient.households.members.addMember(
+    const response = await apiClient.households.members.addMember(
       householdId,
       data
     );
-    return member;
+    return response.data;
   } catch (error: any) {
     if (error instanceof ApiError) {
       return thunkAPI.rejectWithValue(error.message);
@@ -333,8 +330,8 @@ export const getInvitations = createAsyncThunk<
   { rejectValue: string }
 >("household/getInvitations", async (_, thunkAPI) => {
   try {
-    const invitations = await apiClient.households.invitations.getInvitations();
-    return invitations;
+    const response = await apiClient.households.invitations.getInvitations();
+    return response.data;
   } catch (error: any) {
     if (error instanceof ApiError) {
       return thunkAPI.rejectWithValue(error.message);
@@ -350,7 +347,11 @@ export const sendInvitation = createAsyncThunk<
   { rejectValue: string }
 >("household/sendInvitation", async ({ householdId, email }, thunkAPI) => {
   try {
-    await apiClient.households.invitations.sendInvitation(householdId, email);
+    const response = await apiClient.households.invitations.sendInvitation(
+      householdId,
+      email
+    );
+    return response.data;
   } catch (error: any) {
     if (error instanceof ApiError) {
       return thunkAPI.rejectWithValue(error.message);
@@ -364,15 +365,11 @@ const householdSlice = createSlice({
   initialState,
   reducers: {
     reset: (state) => {
-      return initialState;
+      state.status = initialState.status;
+      state.error = null;
     },
     setCurrentHousehold: (state, action: PayloadAction<Household>) => {
-      const household = state.userHouseholds.find(
-        (h) => h.id === action.payload.id
-      );
-      if (household) {
-        state.currentHousehold = household;
-      }
+      state.currentHousehold = action.payload;
     },
   },
   extraReducers: (builder) => {
@@ -421,7 +418,7 @@ const householdSlice = createSlice({
       })
       .addCase(addMember.rejected, (state, action) => {
         state.status.member = "failed";
-        state.error = action.payload || "Failed to add member";
+        state.error = action.payload ?? "Failed to add member";
       })
 
       // Get Household Details
@@ -455,7 +452,7 @@ const householdSlice = createSlice({
       })
       .addCase(getInvitations.rejected, (state, action) => {
         state.status.invitation = "failed";
-        state.error = action.payload || "Failed to fetch invitations";
+        state.error = action.payload ?? "Failed to fetch invitations";
       })
 
       // Send Invitation
@@ -468,7 +465,7 @@ const householdSlice = createSlice({
       })
       .addCase(sendInvitation.rejected, (state, action) => {
         state.status.invitation = "failed";
-        state.error = action.payload || "Failed to send invitation";
+        state.error = action.payload ?? "Failed to send invitation";
       })
 
       // Selected Households Cases
@@ -478,25 +475,42 @@ const householdSlice = createSlice({
       .addCase(fetchSelectedHouseholds.fulfilled, (state, action) => {
         state.status.list = "succeeded";
         state.selectedMembers = action.payload;
-        state.selectedHouseholds = action.payload
-          .filter((member) => member.householdId)
-          .map((member) => ({
-            id: member.householdId,
-            name: member.household?.name || "Unknown Household",
-            createdAt: member.household?.createdAt
-              ? new Date(member.household.createdAt)
-              : new Date(),
-            updatedAt: member.household?.updatedAt
-              ? new Date(member.household.updatedAt)
-              : new Date(),
-            currency: member.household?.currency || "USD",
-            timezone: member.household?.timezone || "UTC",
-            language: member.household?.language || "en",
-          }));
+
+        // Create properly typed households array from members
+        const selectedHouseholds = action.payload
+          .filter((member) => member.householdId && member.household)
+          .map((member) => {
+            const now = new Date();
+
+            if (!member.household) {
+              return {
+                id: member.householdId,
+                name: "Unknown Household",
+                currency: "USD",
+                timezone: "UTC",
+                language: "en",
+                createdAt: now,
+                updatedAt: now,
+              } satisfies Household;
+            }
+
+            return {
+              id: member.householdId,
+              name: member.household.name,
+              currency: member.household.currency,
+              timezone: member.household.timezone || "UTC",
+              language: member.household.language || "en",
+              createdAt: new Date(member.household.createdAt),
+              updatedAt: new Date(member.household.updatedAt),
+            } satisfies Household;
+          });
+
+        state.selectedHouseholds = selectedHouseholds;
       })
       .addCase(fetchSelectedHouseholds.rejected, (state, action) => {
         state.status.list = "failed";
-        state.error = action.payload || "Failed to fetch selected households";
+        state.error =
+          action.error.message || "Failed to fetch selected households";
       })
 
       // Toggle Selection Cases
@@ -514,7 +528,7 @@ const householdSlice = createSlice({
       })
       .addCase(toggleHouseholdSelection.rejected, (state, action) => {
         state.status.member = "failed";
-        state.error = action.payload || "Failed to update selection";
+        state.error = action.payload ?? "Failed to update selection";
       });
   },
 });

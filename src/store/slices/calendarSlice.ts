@@ -1,23 +1,24 @@
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import { apiClient } from "../../lib/api/apiClient";
-import {
-  Event,
-  EventStatus,
-  EventRecurrence,
-  EventCategory,
-} from "../../types/event";
 import { RootState } from "../store";
-import { SyncCalendarResponse } from "@/types/api";
+import { logger } from "@/lib/api/logger";
+import {
+  EventWithDetails,
+  CreateCalendarEventDTO,
+  UpdateCalendarEventDTO,
+} from "@shared/types";
+import { Provider, EventStatus } from "@shared/enums";
+import { ApiError } from "@/lib/api/errors";
 
 interface CalendarState {
-  events: Event[];
+  events: EventWithDetails[];
   isLoading: boolean;
   isSuccess: boolean;
   isError: boolean;
   message: string;
   isSynced: boolean;
-  syncProvider: string | null;
-  lastSync: string | null; // ISO string format
+  syncProvider: Provider | null;
+  lastSync: string | null;
   syncError: string | null;
 }
 
@@ -35,60 +36,66 @@ const initialState: CalendarState = {
 
 // Async thunks
 export const fetchEvents = createAsyncThunk<
-  Event[],
+  EventWithDetails[],
   string,
   { rejectValue: string }
 >("calendar/fetchEvents", async (householdId, thunkAPI) => {
   try {
-    const events = await apiClient.calendar.events.getEvents(householdId);
-    return events;
-  } catch (error: any) {
-    const message =
-      error.response?.data?.message ||
-      error.message ||
-      "Failed to fetch events";
-    return thunkAPI.rejectWithValue(message);
+    logger.debug("Fetching calendar events", { householdId });
+    const response = await apiClient.calendar.events.getEvents(householdId);
+    return response.data;
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return thunkAPI.rejectWithValue(error.message);
+    }
+    return thunkAPI.rejectWithValue("Failed to fetch events");
   }
 });
 
 export const addEvent = createAsyncThunk<
-  Event,
-  { householdId: string; eventData: Partial<Event> },
+  EventWithDetails,
+  { householdId: string; eventData: CreateCalendarEventDTO },
   { rejectValue: string }
 >("calendar/addEvent", async ({ householdId, eventData }, thunkAPI) => {
   try {
-    const event = await apiClient.calendar.events.createEvent(
+    logger.debug("Adding calendar event", { householdId, eventData });
+    const response = await apiClient.calendar.events.createEvent(
       householdId,
       eventData
     );
-    return event;
-  } catch (error: any) {
-    const message =
-      error.response?.data?.message || error.message || "Failed to add event";
-    return thunkAPI.rejectWithValue(message);
+    return response.data;
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return thunkAPI.rejectWithValue(error.message);
+    }
+    return thunkAPI.rejectWithValue("Failed to add event");
   }
 });
 
 export const updateEvent = createAsyncThunk<
-  Event,
-  { householdId: string; eventId: string; eventData: Partial<Event> },
+  EventWithDetails,
+  { householdId: string; eventId: string; eventData: UpdateCalendarEventDTO },
   { rejectValue: string }
 >(
   "calendar/updateEvent",
   async ({ householdId, eventId, eventData }, thunkAPI) => {
     try {
-      const event = await apiClient.calendar.events.updateEvent(
+      logger.debug("Updating calendar event", {
+        householdId,
+        eventId,
+        eventData,
+      });
+      const response = await apiClient.calendar.events.updateEvent(
         householdId,
         eventId,
         eventData
       );
-      return event;
-    } catch (error: any) {
-      const message =
-        error.response?.data?.message ||
-        error.message ||
-        "Failed to update event";
-      return thunkAPI.rejectWithValue(message);
+      return response.data;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return thunkAPI.rejectWithValue(error.message);
+      }
+      return thunkAPI.rejectWithValue("Failed to update event");
     }
   }
 );
@@ -99,59 +106,40 @@ export const deleteEvent = createAsyncThunk<
   { rejectValue: string }
 >("calendar/deleteEvent", async ({ householdId, eventId }, thunkAPI) => {
   try {
+    logger.debug("Deleting calendar event", { householdId, eventId });
     await apiClient.calendar.events.deleteEvent(householdId, eventId);
     return eventId;
-  } catch (error: any) {
-    const message =
-      error.response?.data?.message ||
-      error.message ||
-      "Failed to delete event";
-    return thunkAPI.rejectWithValue(message);
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return thunkAPI.rejectWithValue(error.message);
+    }
+    return thunkAPI.rejectWithValue("Failed to delete event");
   }
 });
 
 export const updateEventStatus = createAsyncThunk<
-  Event,
+  EventWithDetails,
   { householdId: string; eventId: string; status: EventStatus },
   { rejectValue: string }
 >(
   "calendar/updateEventStatus",
   async ({ householdId, eventId, status }, thunkAPI) => {
     try {
-      const event = await apiClient.calendar.events.updateEventStatus(
+      logger.debug("Updating event status", { householdId, eventId, status });
+      const response = await apiClient.calendar.events.updateEventStatus(
         householdId,
         eventId,
         status
       );
-      return event;
-    } catch (error: any) {
-      const message =
-        error.response?.data?.message ||
-        error.message ||
-        "Failed to update event status";
-      return thunkAPI.rejectWithValue(message);
+      return response.data;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return thunkAPI.rejectWithValue(error.message);
+      }
+      return thunkAPI.rejectWithValue("Failed to update event status");
     }
   }
 );
-
-export const syncCalendar = createAsyncThunk<
-  SyncCalendarResponse["data"],
-  { householdId: string; provider: string },
-  { rejectValue: string }
->("calendar/syncCalendar", async ({ householdId, provider }, thunkAPI) => {
-  try {
-    const response = await apiClient.calendar.syncCalendar(householdId, {
-      provider,
-    });
-    return response;
-  } catch (error: any) {
-    const message =
-      error.response?.data?.message ||
-      error.message ||
-      "Failed to sync calendar";
-    return thunkAPI.rejectWithValue(message);
-  }
-});
 
 // Slice
 const calendarSlice = createSlice({
@@ -173,7 +161,7 @@ const calendarSlice = createSlice({
       })
       .addCase(
         fetchEvents.fulfilled,
-        (state, action: PayloadAction<Event[]>) => {
+        (state, action: PayloadAction<EventWithDetails[]>) => {
           state.isLoading = false;
           state.isSuccess = true;
           state.events = action.payload;
@@ -182,40 +170,46 @@ const calendarSlice = createSlice({
       .addCase(fetchEvents.rejected, (state, action) => {
         state.isLoading = false;
         state.isError = true;
-        state.message = action.payload || "Failed to fetch events";
+        state.message = action.payload ?? "Failed to fetch events";
       })
       // Add Event
       .addCase(addEvent.pending, (state) => {
         state.isLoading = true;
       })
-      .addCase(addEvent.fulfilled, (state, action: PayloadAction<Event>) => {
-        state.isLoading = false;
-        state.isSuccess = true;
-        state.events.push(action.payload);
-      })
+      .addCase(
+        addEvent.fulfilled,
+        (state, action: PayloadAction<EventWithDetails>) => {
+          state.isLoading = false;
+          state.isSuccess = true;
+          state.events.push(action.payload);
+        }
+      )
       .addCase(addEvent.rejected, (state, action) => {
         state.isLoading = false;
         state.isError = true;
-        state.message = action.payload || "Failed to add event";
+        state.message = action.payload ?? "Failed to add event";
       })
       // Update Event
       .addCase(updateEvent.pending, (state) => {
         state.isLoading = true;
       })
-      .addCase(updateEvent.fulfilled, (state, action: PayloadAction<Event>) => {
-        state.isLoading = false;
-        state.isSuccess = true;
-        const index = state.events.findIndex(
-          (event) => event.id === action.payload.id
-        );
-        if (index !== -1) {
-          state.events[index] = action.payload;
+      .addCase(
+        updateEvent.fulfilled,
+        (state, action: PayloadAction<EventWithDetails>) => {
+          state.isLoading = false;
+          state.isSuccess = true;
+          const index = state.events.findIndex(
+            (event) => event.id === action.payload.id
+          );
+          if (index !== -1) {
+            state.events[index] = action.payload;
+          }
         }
-      })
+      )
       .addCase(updateEvent.rejected, (state, action) => {
         state.isLoading = false;
         state.isError = true;
-        state.message = action.payload || "Failed to update event";
+        state.message = action.payload ?? "Failed to update event";
       })
       // Delete Event
       .addCase(deleteEvent.pending, (state) => {
@@ -234,7 +228,7 @@ const calendarSlice = createSlice({
       .addCase(deleteEvent.rejected, (state, action) => {
         state.isLoading = false;
         state.isError = true;
-        state.message = action.payload || "Failed to delete event";
+        state.message = action.payload ?? "Failed to delete event";
       })
       // Update Event Status
       .addCase(updateEventStatus.pending, (state) => {
@@ -242,7 +236,7 @@ const calendarSlice = createSlice({
       })
       .addCase(
         updateEventStatus.fulfilled,
-        (state, action: PayloadAction<Event>) => {
+        (state, action: PayloadAction<EventWithDetails>) => {
           state.isLoading = false;
           state.isSuccess = true;
           const index = state.events.findIndex(
@@ -256,36 +250,11 @@ const calendarSlice = createSlice({
       .addCase(updateEventStatus.rejected, (state, action) => {
         state.isLoading = false;
         state.isError = true;
-        state.message = action.payload || "Failed to update event status";
-      })
-      // Sync Calendar
-      .addCase(syncCalendar.pending, (state) => {
-        state.isLoading = true;
-        state.isSuccess = false;
-        state.isError = false;
-        state.syncError = null;
-      })
-      .addCase(
-        syncCalendar.fulfilled,
-        (state, action: PayloadAction<SyncCalendarResponse["data"]>) => {
-          state.isLoading = false;
-          state.isSuccess = true;
-          state.isSynced = true;
-          state.syncProvider = action.payload.provider;
-          state.lastSync = action.payload.lastSync;
-          state.events = action.payload.events;
-        }
-      )
-      .addCase(syncCalendar.rejected, (state, action) => {
-        state.isLoading = false;
-        state.isError = true;
-        state.syncError = action.payload || "Sync failed";
+        state.message = action.payload ?? "Failed to update event status";
       });
   },
 });
 
 export const { reset } = calendarSlice.actions;
-
 export const selectCalendar = (state: RootState) => state.calendar;
-
 export default calendarSlice.reducer;

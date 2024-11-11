@@ -1,5 +1,5 @@
 import { setupStore } from "../../../utils/test-utils";
-import { ReactionType } from "@shared/enums/messages";
+import { ReactionType, HouseholdRole, MessageAction } from "@shared/enums";
 import {
   fetchMessages,
   createMessage,
@@ -8,21 +8,18 @@ import {
   selectMessageStatus,
 } from "../messagesSlice";
 import { apiClient } from "../../../lib/api/apiClient";
-import { MessageWithDetails, Thread, User } from "@shared/types";
+import {
+  MessageWithDetails,
+  Thread,
+  User,
+  CreateMessageDTO,
+} from "@shared/types";
+import { ApiResponse } from "@shared/interfaces";
 
 jest.mock("../../../lib/api/apiClient");
 
 describe("Messages Slice", () => {
   let store: ReturnType<typeof setupStore>;
-
-  const mockThread: Thread = {
-    id: "thread-1",
-    title: "Test Thread",
-    householdId: "household-1",
-    authorId: "user-1",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
 
   const mockUser: User = {
     id: "user-1",
@@ -32,11 +29,20 @@ describe("Messages Slice", () => {
     updatedAt: new Date(),
   };
 
+  const mockThread: Thread = {
+    id: "thread-1",
+    title: "Test Thread",
+    householdId: "household-1",
+    authorId: mockUser.id,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
   const initialMessage: MessageWithDetails = {
     id: "1",
     content: "Test Message",
-    authorId: "user-1",
-    threadId: "thread-1",
+    authorId: mockUser.id,
+    threadId: mockThread.id,
     createdAt: new Date(),
     updatedAt: new Date(),
     reactions: [],
@@ -52,8 +58,92 @@ describe("Messages Slice", () => {
     store = setupStore();
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
+  describe("fetchMessages", () => {
+    it("should fetch messages successfully", async () => {
+      const mockMessages = [initialMessage];
+      const mockApiResponse = {
+        data: mockMessages,
+        pagination: {
+          hasMore: false,
+          nextCursor: undefined,
+        },
+      };
+
+      (apiClient.threads.messages.getMessages as jest.Mock).mockResolvedValue(
+        mockMessages
+      );
+
+      const result = await store.dispatch(
+        fetchMessages({
+          householdId: "household-1",
+          threadId: "thread-1",
+        })
+      );
+
+      const state = store.getState();
+      expect(selectMessages(state)).toEqual(mockMessages);
+      expect(selectMessageStatus(state).list).toBe("succeeded");
+      expect(result.payload).toEqual({
+        data: mockMessages,
+        hasMore: false,
+        nextCursor: undefined,
+      });
+    });
+
+    it("should handle fetch messages error", async () => {
+      const errorMessage = "Failed to fetch messages";
+      (apiClient.threads.messages.getMessages as jest.Mock).mockRejectedValue(
+        new Error(errorMessage)
+      );
+
+      await store.dispatch(
+        fetchMessages({
+          householdId: "household-1",
+          threadId: "thread-1",
+        })
+      );
+
+      const state = store.getState();
+      expect(selectMessageStatus(state).list).toBe("failed");
+      expect(state.messages.error).toBe(errorMessage);
+    });
+  });
+
+  describe("createMessage", () => {
+    it("should create message successfully", async () => {
+      const messageData: CreateMessageDTO = {
+        threadId: mockThread.id,
+        content: "New test message",
+      };
+
+      const mockApiResponse: ApiResponse<MessageWithDetails> = {
+        data: {
+          ...initialMessage,
+          content: messageData.content,
+        },
+      };
+
+      (apiClient.threads.messages.createMessage as jest.Mock).mockResolvedValue(
+        mockApiResponse.data
+      );
+
+      const result = await store.dispatch(
+        createMessage({
+          householdId: "household-1",
+          threadId: mockThread.id,
+          messageData,
+        })
+      );
+
+      if (typeof result.payload === "string") {
+        fail("Expected MessageWithDetails but got string");
+        return;
+      }
+
+      const state = store.getState();
+      expect(state.messages.status.create).toBe("succeeded");
+      expect(result.payload.content).toBe(messageData.content);
+    });
   });
 
   describe("reactions", () => {
@@ -84,8 +174,9 @@ describe("Messages Slice", () => {
         messageId: "1",
         emoji: "👍",
         type: ReactionType.LIKE,
-        userId: "user-1",
+        userId: mockUser.id,
         createdAt: new Date(),
+        user: mockUser,
       };
 
       (
@@ -95,7 +186,7 @@ describe("Messages Slice", () => {
       await store.dispatch(
         addReaction({
           householdId: "household-1",
-          threadId: "thread-1",
+          threadId: mockThread.id,
           messageId: "1",
           reaction: {
             emoji: "👍",
@@ -105,48 +196,8 @@ describe("Messages Slice", () => {
       );
 
       const state = store.getState();
-      expect(state.messages.messages[0].reactions).toContainEqual(newReaction);
+      expect(state.messages.messages[0]?.reactions).toContainEqual(newReaction);
       expect(state.messages.status.reaction).toBe("succeeded");
-    });
-  });
-
-  describe("fetchMessages", () => {
-    it("should fetch messages successfully", async () => {
-      const mockMessages: MessageWithDetails[] = [
-        {
-          ...initialMessage,
-          id: "1",
-          content: "Message 1",
-        },
-        {
-          ...initialMessage,
-          id: "2",
-          content: "Message 2",
-        },
-      ];
-
-      const mockResponse = {
-        data: mockMessages,
-        pagination: {
-          hasMore: false,
-          nextCursor: null,
-        },
-      };
-
-      (apiClient.threads.messages.getMessages as jest.Mock).mockResolvedValue(
-        mockResponse
-      );
-
-      await store.dispatch(
-        fetchMessages({
-          householdId: "household-1",
-          threadId: "thread-1",
-        })
-      );
-
-      const state = store.getState();
-      expect(selectMessages(state)).toEqual(mockMessages);
-      expect(selectMessageStatus(state).list).toBe("succeeded");
     });
   });
 });

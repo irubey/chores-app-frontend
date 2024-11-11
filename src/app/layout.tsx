@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from "react";
-import { Provider, useDispatch } from "react-redux";
+import { Provider } from "react-redux";
 import { useAuth } from "../hooks/useAuth";
+import { useHousehold } from "../hooks/useHousehold";
 import { ThemeProvider } from "../contexts/ThemeContext";
 import { SocketProvider } from "../contexts/SocketContext";
 import Header from "../components/layout/Header";
@@ -12,7 +13,9 @@ import Spinner from "../components/common/Spinner";
 import { useRouter, usePathname } from "next/navigation";
 import { reset } from "../store/slices/authSlice";
 import "../styles/globals.css";
-import { User } from "@shared/types";
+import { User, HouseholdWithMembers } from "@shared/types";
+import { logger } from "@/lib/api/logger";
+import { ApiError } from "@/lib/api/errors";
 
 // Define public routes
 const PUBLIC_ROUTES = [
@@ -30,11 +33,13 @@ interface AppContentProps {
 // Add type for components that can receive user prop
 interface WithUserProp {
   user?: User;
+  selectedHouseholds?: HouseholdWithMembers[];
 }
 
 function AppContent({ children }: AppContentProps) {
-  const dispatch = useDispatch();
-  const { isAuthenticated, isLoading, user, error, initAuth } = useAuth();
+  const { isAuthenticated, isLoading, user, error, initAuth, resetAuth } =
+    useAuth();
+  const { selectedHouseholds, getSelectedHouseholds } = useHousehold();
   const router = useRouter();
   const pathname = usePathname();
   const [isInitialized, setIsInitialized] = useState(false);
@@ -48,20 +53,36 @@ function AppContent({ children }: AppContentProps) {
       if (hasInitializedAuth.current) return;
       hasInitializedAuth.current = true;
 
+      logger.info("Initializing authentication");
       try {
-        await initAuth();
-        // After successful auth, redirect from home to dashboard
+        const user = await initAuth();
+        logger.info("Authentication initialized successfully", {
+          isAuthenticated: !!user,
+        });
+
         if (
-          isAuthenticated &&
+          user &&
           pathname === "/" &&
           !window.location.search.includes("from=redirect")
         ) {
+          logger.info("Redirecting authenticated user to dashboard");
           router.replace("/dashboard?from=redirect");
         }
-      } catch (err) {
-        console.error("Auth initialization failed:", err);
-        dispatch(reset()); // Reset auth state
+      } catch (error) {
+        if (error instanceof ApiError) {
+          logger.error("Auth initialization failed", {
+            type: error.type,
+            message: error.message,
+            status: error.status,
+          });
+        } else {
+          logger.error("Auth initialization failed with unknown error", {
+            error,
+          });
+        }
+        resetAuth();
         if (!isPublicRoute) {
+          logger.info("Redirecting to login page", { from: pathname });
           router.replace("/login?from=redirect");
         }
       } finally {
@@ -70,30 +91,83 @@ function AppContent({ children }: AppContentProps) {
     };
 
     initialize();
-  }, [isPublicRoute, initAuth, router, pathname, isAuthenticated, dispatch]);
+  }, [isPublicRoute, initAuth, router, pathname, resetAuth]);
 
-  // Add effect to handle auth state changes
+  // Auth state changes effect
   useEffect(() => {
     if (isInitialized) {
       if (!isAuthenticated && !isPublicRoute) {
+        logger.info(
+          "Unauthenticated access to protected route - redirecting to login",
+          {
+            pathname,
+            isPublicRoute,
+          }
+        );
         router.replace("/login?from=redirect");
       } else if (
         isAuthenticated &&
         pathname === "/" &&
         !window.location.search.includes("from=redirect")
       ) {
+        logger.info("Authenticated user at root - redirecting to dashboard");
         router.replace("/dashboard?from=redirect");
       }
     }
   }, [isAuthenticated, isInitialized, isPublicRoute, pathname, router]);
 
+  // Selected households effect
+  useEffect(() => {
+    const fetchSelectedHouseholds = async () => {
+      if (isAuthenticated && !selectedHouseholds?.length) {
+        logger.info("Fetching selected households for authenticated user");
+        try {
+          await getSelectedHouseholds();
+          logger.debug("Successfully fetched selected households");
+        } catch (error) {
+          if (error instanceof ApiError) {
+            logger.error("Failed to fetch selected households", {
+              type: error.type,
+              message: error.message,
+              status: error.status,
+              userId: user?.id,
+            });
+          } else {
+            logger.error(
+              "Failed to fetch selected households with unknown error",
+              {
+                error,
+                userId: user?.id,
+              }
+            );
+          }
+        }
+      }
+    };
+
+    fetchSelectedHouseholds();
+  }, [
+    isAuthenticated,
+    getSelectedHouseholds,
+    selectedHouseholds?.length,
+    user?.id,
+  ]);
+
   if (!isInitialized) {
+    logger.debug("Rendering initialization spinner");
     return (
       <div className="min-h-screen flex items-center justify-center bg-background-light dark:bg-background-dark">
         <Spinner className="h-8 w-8" />
       </div>
     );
   }
+
+  logger.debug("Rendering main layout", {
+    isPublicRoute,
+    isAuthenticated,
+    hasSelectedHouseholds: !!selectedHouseholds?.length,
+    pathname,
+  });
 
   return (
     <div className="min-h-screen flex flex-col bg-background-light dark:bg-background-dark text-text-primary dark:text-text-secondary">
@@ -108,6 +182,7 @@ function AppContent({ children }: AppContentProps) {
             React.isValidElement(child)
               ? React.cloneElement(child as React.ReactElement<WithUserProp>, {
                   user,
+                  selectedHouseholds,
                 })
               : child
           )

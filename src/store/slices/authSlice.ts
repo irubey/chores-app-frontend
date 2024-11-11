@@ -4,6 +4,7 @@ import { User } from "@shared/types";
 import type { RootState } from "../store";
 import { tokenService } from "../../lib/api/services/tokenService";
 import { ApiError, ApiErrorType } from "@/lib/api/errors/apiErrors";
+import { logger } from "@/lib/api/logger";
 
 interface AuthState {
   user: User | null;
@@ -31,8 +32,9 @@ export const login = createAsyncThunk<
   { rejectValue: ErrorResponse }
 >("auth/login", async (credentials, { rejectWithValue }) => {
   try {
-    const user = await apiClient.auth.login(credentials);
-    return user;
+    logger.debug("Attempting login", { email: credentials.email });
+    const response = await apiClient.auth.login(credentials);
+    return response.data;
   } catch (error) {
     if (error instanceof ApiError) {
       return rejectWithValue({
@@ -55,8 +57,9 @@ export const register = createAsyncThunk<
   { rejectValue: ErrorResponse }
 >("auth/register", async (userData, { rejectWithValue }) => {
   try {
-    const user = await apiClient.auth.register(userData);
-    return user;
+    logger.debug("Attempting registration", { email: userData.email });
+    const response = await apiClient.auth.register(userData);
+    return response.data;
   } catch (error) {
     if (error instanceof ApiError) {
       return rejectWithValue({
@@ -79,8 +82,10 @@ export const logout = createAsyncThunk<
   { rejectValue: ErrorResponse }
 >("auth/logout", async (_, { rejectWithValue }) => {
   try {
-    await apiClient.auth.logout();
+    logger.debug("Attempting logout");
+    const response = await apiClient.auth.logout();
     tokenService.cleanup();
+    return response.data;
   } catch (error) {
     if (error instanceof ApiError) {
       return rejectWithValue({
@@ -103,8 +108,9 @@ export const initializeAuth = createAsyncThunk<
   { rejectValue: ErrorResponse }
 >("auth/initialize", async (_, { rejectWithValue }) => {
   try {
-    const user = await apiClient.auth.initializeAuth();
-    return user;
+    logger.debug("Initializing auth state");
+    const response = await apiClient.auth.initializeAuth();
+    return response?.data ?? null;
   } catch (error) {
     if (error instanceof ApiError) {
       return rejectWithValue({
@@ -144,12 +150,14 @@ const authSlice = createSlice({
         state.user = action.payload;
         state.isAuthenticated = true;
         state.error = null;
+        logger.info("Login successful", { userId: action.payload.id });
       })
       .addCase(login.rejected, (state, action) => {
         state.status = "failed";
         state.error = action.payload?.message || "Login failed";
         state.user = null;
         state.isAuthenticated = false;
+        logger.error("Login failed", { error: action.payload });
       })
       // Register Cases
       .addCase(register.pending, (state) => {
@@ -161,12 +169,14 @@ const authSlice = createSlice({
         state.user = action.payload;
         state.isAuthenticated = true;
         state.error = null;
+        logger.info("Registration successful", { userId: action.payload.id });
       })
       .addCase(register.rejected, (state, action) => {
         state.status = "failed";
         state.error = action.payload?.message || "Registration failed";
         state.user = null;
         state.isAuthenticated = false;
+        logger.error("Registration failed", { error: action.payload });
       })
       // Logout Cases
       .addCase(logout.pending, (state) => {
@@ -178,12 +188,14 @@ const authSlice = createSlice({
         state.user = null;
         state.isAuthenticated = false;
         state.error = null;
+        logger.info("Logout successful");
       })
       .addCase(logout.rejected, (state, action) => {
         state.status = "failed";
         state.error = action.payload?.message || "Logout failed";
         state.user = null;
         state.isAuthenticated = false;
+        logger.error("Logout failed", { error: action.payload });
       })
       // Initialize Auth Cases
       .addCase(initializeAuth.pending, (state) => {
@@ -195,6 +207,9 @@ const authSlice = createSlice({
         state.user = action.payload;
         state.isAuthenticated = !!action.payload;
         state.error = null;
+        logger.info("Auth initialization successful", {
+          isAuthenticated: !!action.payload,
+        });
       })
       .addCase(initializeAuth.rejected, (state, action) => {
         state.status = "failed";
@@ -204,6 +219,7 @@ const authSlice = createSlice({
             : action.payload?.message || "Auth initialization failed";
         state.user = null;
         state.isAuthenticated = false;
+        logger.error("Auth initialization failed", { error: action.payload });
       });
   },
 });

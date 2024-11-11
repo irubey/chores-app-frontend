@@ -1,21 +1,23 @@
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import { apiClient } from "../../lib/api/apiClient";
 import {
-  Expense,
+  ExpenseWithSplitsAndPaidBy,
   CreateExpenseDTO,
   UpdateExpenseDTO,
   ExpenseSplit,
-  TransactionStatus,
-  Transaction,
+  TransactionWithDetails,
   CreateTransactionDTO,
   UpdateTransactionDTO,
-} from "../../types/expense";
+  Receipt,
+} from "@shared/types";
+import { TransactionStatus } from "@shared/enums";
 import { RootState } from "../store";
-import { Receipt } from "../../types/api";
 import { createSelector } from "reselect";
+import { ApiError } from "../../lib/api/errors/apiErrors";
+import { logger } from "../../lib/api/logger";
 
 export interface FinancesState {
-  expenses: Expense[];
+  expenses: ExpenseWithSplitsAndPaidBy[];
   isLoading: boolean;
   isSuccess: boolean;
   isError: boolean;
@@ -29,7 +31,7 @@ export interface FinancesState {
       netBalance: number;
     };
   };
-  transactions: Transaction[];
+  transactions: TransactionWithDetails[];
   transactionSummaries: {
     [userId: string]: {
       totalSent: number;
@@ -62,57 +64,62 @@ export const initialState: FinancesState = {
 
 // Async thunks for Expenses
 export const fetchExpenses = createAsyncThunk<
-  Expense[],
+  ExpenseWithSplitsAndPaidBy[],
   string,
   { rejectValue: string }
 >("finances/fetchExpenses", async (householdId, thunkAPI) => {
   try {
-    return await apiClient.finances.expenses.getExpenses(householdId);
-  } catch (error: any) {
-    const message =
-      error.response?.data?.message ||
-      error.message ||
-      "Failed to fetch expenses";
-    return thunkAPI.rejectWithValue(message);
+    logger.debug("Fetching expenses", { householdId });
+    const response = await apiClient.finances.expenses.getExpenses(householdId);
+    return response.data;
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return thunkAPI.rejectWithValue(error.message);
+    }
+    return thunkAPI.rejectWithValue("Failed to fetch expenses");
   }
 });
 
 export const addExpense = createAsyncThunk<
-  Expense,
+  ExpenseWithSplitsAndPaidBy,
   { householdId: string; expenseData: CreateExpenseDTO },
   { rejectValue: string }
 >("finances/addExpense", async ({ householdId, expenseData }, thunkAPI) => {
   try {
-    return await apiClient.finances.expenses.createExpense(
+    logger.debug("Adding expense", { householdId, expenseData });
+    const response = await apiClient.finances.expenses.createExpense(
       householdId,
       expenseData
     );
-  } catch (error: any) {
-    const message =
-      error.response?.data?.message || error.message || "Failed to add expense";
-    return thunkAPI.rejectWithValue(message);
+    return response.data;
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return thunkAPI.rejectWithValue(error.message);
+    }
+    return thunkAPI.rejectWithValue("Failed to add expense");
   }
 });
 
 export const updateExpense = createAsyncThunk<
-  Expense,
+  ExpenseWithSplitsAndPaidBy,
   { householdId: string; expenseId: string; expenseData: UpdateExpenseDTO },
   { rejectValue: string }
 >(
   "finances/updateExpense",
   async ({ householdId, expenseId, expenseData }, thunkAPI) => {
     try {
-      return await apiClient.finances.expenses.updateExpense(
+      logger.debug("Updating expense", { householdId, expenseId, expenseData });
+      const response = await apiClient.finances.expenses.updateExpense(
         householdId,
         expenseId,
         expenseData
       );
-    } catch (error: any) {
-      const message =
-        error.response?.data?.message ||
-        error.message ||
-        "Failed to update expense";
-      return thunkAPI.rejectWithValue(message);
+      return response.data;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return thunkAPI.rejectWithValue(error.message);
+      }
+      return thunkAPI.rejectWithValue("Failed to update expense");
     }
   }
 );
@@ -123,58 +130,62 @@ export const deleteExpense = createAsyncThunk<
   { rejectValue: string }
 >("finances/deleteExpense", async ({ householdId, expenseId }, thunkAPI) => {
   try {
+    logger.debug("Deleting expense", { householdId, expenseId });
     await apiClient.finances.expenses.deleteExpense(householdId, expenseId);
     return expenseId;
-  } catch (error: any) {
-    const message =
-      error.response?.data?.message ||
-      error.message ||
-      "Failed to delete expense";
-    return thunkAPI.rejectWithValue(message);
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return thunkAPI.rejectWithValue(error.message);
+    }
+    return thunkAPI.rejectWithValue("Failed to delete expense");
   }
 });
 
 // Async thunks for Transactions
 export const fetchTransactions = createAsyncThunk<
-  Transaction[],
+  TransactionWithDetails[],
   string,
   { rejectValue: string }
 >("finances/fetchTransactions", async (householdId, thunkAPI) => {
   try {
-    return await apiClient.finances.transactions.getTransactions(householdId);
-  } catch (error: any) {
-    const message =
-      error.response?.data?.message ||
-      error.message ||
-      "Failed to fetch transactions";
-    return thunkAPI.rejectWithValue(message);
+    logger.debug("Fetching transactions", { householdId });
+    const response = await apiClient.finances.transactions.getTransactions(
+      householdId
+    );
+    return response.data;
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return thunkAPI.rejectWithValue(error.message);
+    }
+    return thunkAPI.rejectWithValue("Failed to fetch transactions");
   }
 });
 
 export const addTransaction = createAsyncThunk<
-  Transaction,
+  TransactionWithDetails,
   { householdId: string; transactionData: CreateTransactionDTO },
   { rejectValue: string }
 >(
   "finances/addTransaction",
   async ({ householdId, transactionData }, thunkAPI) => {
     try {
-      return await apiClient.finances.transactions.createTransaction(
+      logger.debug("Adding transaction", { householdId, transactionData });
+      const response = await apiClient.finances.transactions.createTransaction(
         householdId,
         transactionData
       );
-    } catch (error: any) {
-      const message =
-        error.response?.data?.message ||
-        error.message ||
-        "Failed to add transaction";
-      return thunkAPI.rejectWithValue(message);
+      return response.data;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return thunkAPI.rejectWithValue(error.message);
+      }
+      return thunkAPI.rejectWithValue("Failed to add transaction");
     }
   }
 );
 
 export const updateTransaction = createAsyncThunk<
-  Transaction,
+  TransactionWithDetails,
   {
     householdId: string;
     transactionId: string;
@@ -185,17 +196,23 @@ export const updateTransaction = createAsyncThunk<
   "finances/updateTransaction",
   async ({ householdId, transactionId, transactionData }, thunkAPI) => {
     try {
-      return await apiClient.finances.transactions.updateTransaction(
+      logger.debug("Updating transaction", {
         householdId,
         transactionId,
-        transactionData
-      );
-    } catch (error: any) {
-      const message =
-        error.response?.data?.message ||
-        error.message ||
-        "Failed to update transaction";
-      return thunkAPI.rejectWithValue(message);
+        transactionData,
+      });
+      const response =
+        await apiClient.finances.transactions.updateTransactionStatus(
+          householdId,
+          transactionId,
+          transactionData
+        );
+      return response.data;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return thunkAPI.rejectWithValue(error.message);
+      }
+      return thunkAPI.rejectWithValue("Failed to update transaction");
     }
   }
 );
@@ -208,17 +225,17 @@ export const deleteTransaction = createAsyncThunk<
   "finances/deleteTransaction",
   async ({ householdId, transactionId }, thunkAPI) => {
     try {
+      logger.debug("Deleting transaction", { householdId, transactionId });
       await apiClient.finances.transactions.deleteTransaction(
         householdId,
         transactionId
       );
       return transactionId;
-    } catch (error: any) {
-      const message =
-        error.response?.data?.message ||
-        error.message ||
-        "Failed to delete transaction";
-      return thunkAPI.rejectWithValue(message);
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return thunkAPI.rejectWithValue(error.message);
+      }
+      return thunkAPI.rejectWithValue("Failed to delete transaction");
     }
   }
 );
@@ -226,17 +243,22 @@ export const deleteTransaction = createAsyncThunk<
 // Updated Add Receipt Thunk
 export const addReceipt = createAsyncThunk<
   Receipt,
-  { householdId: string; file: File },
+  { householdId: string; expenseId: string; file: File },
   { rejectValue: string }
->("finances/addReceipt", async ({ householdId, file }, thunkAPI) => {
+>("finances/addReceipt", async ({ householdId, expenseId, file }, thunkAPI) => {
   try {
-    return await apiClient.finances.expenses.uploadReceipt(householdId, file);
-  } catch (error: any) {
-    const message =
-      error.response?.data?.message ||
-      error.message ||
-      "Failed to upload receipt";
-    return thunkAPI.rejectWithValue(message);
+    logger.debug("Uploading receipt", { householdId, expenseId });
+    const response = await apiClient.finances.expenses.uploadReceipt(
+      householdId,
+      expenseId,
+      file
+    );
+    return response.data;
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return thunkAPI.rejectWithValue(error.message);
+    }
+    return thunkAPI.rejectWithValue("Failed to upload receipt");
   }
 });
 
@@ -403,7 +425,7 @@ const financesSlice = createSlice({
       })
       .addCase(
         fetchExpenses.fulfilled,
-        (state, action: PayloadAction<Expense[]>) => {
+        (state, action: PayloadAction<ExpenseWithSplitsAndPaidBy[]>) => {
           state.isLoading = false;
           state.isSuccess = true;
           state.expenses = action.payload;
@@ -412,7 +434,7 @@ const financesSlice = createSlice({
       .addCase(fetchExpenses.rejected, (state, action) => {
         state.isLoading = false;
         state.isError = true;
-        state.message = action.payload || "Failed to fetch expenses";
+        state.message = action.payload ?? "Failed to fetch expenses";
       })
       // Add Expense
       .addCase(addExpense.pending, (state) => {
@@ -420,7 +442,7 @@ const financesSlice = createSlice({
       })
       .addCase(
         addExpense.fulfilled,
-        (state, action: PayloadAction<Expense>) => {
+        (state, action: PayloadAction<ExpenseWithSplitsAndPaidBy>) => {
           state.isLoading = false;
           state.isSuccess = true;
           state.expenses.push(action.payload);
@@ -429,7 +451,7 @@ const financesSlice = createSlice({
       .addCase(addExpense.rejected, (state, action) => {
         state.isLoading = false;
         state.isError = true;
-        state.message = action.payload || "Failed to add expense";
+        state.message = action.payload ?? "Failed to add expense";
       })
       // Update Expense
       .addCase(updateExpense.pending, (state) => {
@@ -437,7 +459,7 @@ const financesSlice = createSlice({
       })
       .addCase(
         updateExpense.fulfilled,
-        (state, action: PayloadAction<Expense>) => {
+        (state, action: PayloadAction<ExpenseWithSplitsAndPaidBy>) => {
           state.isLoading = false;
           state.isSuccess = true;
           const index = state.expenses.findIndex(
@@ -451,7 +473,7 @@ const financesSlice = createSlice({
       .addCase(updateExpense.rejected, (state, action) => {
         state.isLoading = false;
         state.isError = true;
-        state.message = action.payload || "Failed to update expense";
+        state.message = action.payload ?? "Failed to update expense";
       })
       // Delete Expense
       .addCase(deleteExpense.pending, (state) => {
@@ -470,7 +492,7 @@ const financesSlice = createSlice({
       .addCase(deleteExpense.rejected, (state, action) => {
         state.isLoading = false;
         state.isError = true;
-        state.message = action.payload || "Failed to delete expense";
+        state.message = action.payload ?? "Failed to delete expense";
       })
       // Fetch Transactions
       .addCase(fetchTransactions.pending, (state) => {
@@ -478,7 +500,7 @@ const financesSlice = createSlice({
       })
       .addCase(
         fetchTransactions.fulfilled,
-        (state, action: PayloadAction<Transaction[]>) => {
+        (state, action: PayloadAction<TransactionWithDetails[]>) => {
           state.isLoading = false;
           state.isSuccess = true;
           state.transactions = action.payload;
@@ -487,7 +509,7 @@ const financesSlice = createSlice({
       .addCase(fetchTransactions.rejected, (state, action) => {
         state.isLoading = false;
         state.isError = true;
-        state.message = action.payload || "Failed to fetch transactions";
+        state.message = action.payload ?? "Failed to fetch transactions";
       })
       // Add Transaction
       .addCase(addTransaction.pending, (state) => {
@@ -495,7 +517,7 @@ const financesSlice = createSlice({
       })
       .addCase(
         addTransaction.fulfilled,
-        (state, action: PayloadAction<Transaction>) => {
+        (state, action: PayloadAction<TransactionWithDetails>) => {
           state.isLoading = false;
           state.isSuccess = true;
           state.transactions.push(action.payload);
@@ -504,7 +526,7 @@ const financesSlice = createSlice({
       .addCase(addTransaction.rejected, (state, action) => {
         state.isLoading = false;
         state.isError = true;
-        state.message = action.payload || "Failed to add transaction";
+        state.message = action.payload ?? "Failed to add transaction";
       })
       // Update Transaction
       .addCase(updateTransaction.pending, (state) => {
@@ -512,7 +534,7 @@ const financesSlice = createSlice({
       })
       .addCase(
         updateTransaction.fulfilled,
-        (state, action: PayloadAction<Transaction>) => {
+        (state, action: PayloadAction<TransactionWithDetails>) => {
           state.isLoading = false;
           state.isSuccess = true;
           const index = state.transactions.findIndex(
@@ -526,7 +548,7 @@ const financesSlice = createSlice({
       .addCase(updateTransaction.rejected, (state, action) => {
         state.isLoading = false;
         state.isError = true;
-        state.message = action.payload || "Failed to update transaction";
+        state.message = action.payload ?? "Failed to update transaction";
       })
       // Delete Transaction
       .addCase(deleteTransaction.pending, (state) => {
@@ -545,7 +567,7 @@ const financesSlice = createSlice({
       .addCase(deleteTransaction.rejected, (state, action) => {
         state.isLoading = false;
         state.isError = true;
-        state.message = action.payload || "Failed to delete transaction";
+        state.message = action.payload ?? "Failed to delete transaction";
       })
       // Add Receipt
       .addCase(addReceipt.pending, (state) => {
@@ -565,7 +587,8 @@ const financesSlice = createSlice({
       )
       .addCase(addReceipt.rejected, (state, action) => {
         state.isUploadingReceipt = false;
-        state.uploadReceiptError = action.payload || "Failed to upload receipt";
+        state.uploadReceiptError =
+          (action.payload as string) || "Failed to upload receipt";
       });
   },
 });

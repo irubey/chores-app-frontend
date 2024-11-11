@@ -23,8 +23,8 @@ const ThreadList: React.FC<ThreadListProps> = ({
 
   if (status.list === "loading") {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <Spinner className="h-6 w-6" />
+      <div data-testid="thread-list-loading" role="progressbar">
+        <Spinner />
       </div>
     );
   }

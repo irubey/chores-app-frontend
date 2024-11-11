@@ -3,7 +3,7 @@ import Modal from "@/components/common/Modal";
 import Input from "@/components/common/Input";
 import { useHousehold } from "@/hooks/useHousehold";
 import { CreateThreadDTO } from "@shared/types";
-import { useMessages } from "@/hooks/useMessages";
+import { useThreads } from "@/hooks/useThreads";
 import { HouseholdMemberWithUser } from "@shared/types";
 
 const NewThreadModal: React.FC = () => {
@@ -16,7 +16,7 @@ const NewThreadModal: React.FC = () => {
   const [selectedHouseholdId, setSelectedHouseholdId] = useState<string>("");
 
   const { selectedHouseholds, members } = useHousehold();
-  const { startNewThread, threadStatus } = useMessages();
+  const { startNewThread, threadStatus } = useThreads();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,7 +28,7 @@ const NewThreadModal: React.FC = () => {
       participants: selectedParticipants,
       initialMessage: message.trim()
         ? {
-            threadId: "", // Will be set by backend
+            threadId: "",
             content: message.trim(),
           }
         : undefined,

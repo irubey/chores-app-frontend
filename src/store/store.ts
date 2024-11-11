@@ -1,4 +1,4 @@
-import { configureStore } from "@reduxjs/toolkit";
+import { configureStore, useDispatch } from "@reduxjs/toolkit";
 import authReducer from "./slices/authSlice";
 import messagesReducer from "./slices/messagesSlice";
 import financesReducer from "./slices/financesSlice";
@@ -8,6 +8,9 @@ import notificationsReducer from "./slices/notificationsSlice";
 import householdReducer from "./slices/householdSlice";
 import threadReducer from "./slices/threadSlice";
 import { setAppDispatch } from "./storeDispatch";
+import { logger } from "@/lib/api/logger";
+
+logger.debug("Configuring Redux store");
 
 const store = configureStore({
   reducer: {
@@ -28,5 +31,6 @@ setAppDispatch(store.dispatch);
 
 export type RootState = ReturnType<typeof store.getState>;
 export type AppDispatch = typeof store.dispatch;
+export const useAppDispatch = () => useDispatch<AppDispatch>();
 
 export default store;

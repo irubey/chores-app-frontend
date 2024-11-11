@@ -1,13 +1,11 @@
 import React, { PropsWithChildren } from "react";
-import { render } from "@testing-library/react";
+import { render, RenderOptions } from "@testing-library/react";
 import { Provider } from "react-redux";
 import { configureStore, combineReducers } from "@reduxjs/toolkit";
-import type { RenderOptions } from "@testing-library/react";
-import type { Store } from "@reduxjs/toolkit";
 import type { RootState } from "../store/store";
-import { Thread, Message, User, Household } from "@shared/types";
+import { MessageWithDetails, Thread, User, Household } from "@shared/types";
 
-// Import your reducers
+// Import all reducers
 import authReducer from "../store/slices/authSlice";
 import messagesReducer from "../store/slices/messagesSlice";
 import threadReducer from "../store/slices/threadSlice";
@@ -17,7 +15,7 @@ import choresReducer from "../store/slices/choresSlice";
 import calendarReducer from "../store/slices/calendarSlice";
 import notificationsReducer from "../store/slices/notificationsSlice";
 
-// Create the root reducer
+// Create root reducer matching the actual store
 const rootReducer = combineReducers({
   auth: authReducer,
   messages: messagesReducer,
@@ -29,49 +27,54 @@ const rootReducer = combineReducers({
   notifications: notificationsReducer,
 });
 
-export type TestRootState = ReturnType<typeof rootReducer>;
+type Status = "idle" | "loading" | "succeeded" | "failed";
 
-// Create a custom store setup function
-export function setupStore(preloadedState?: Partial<TestRootState>) {
-  return configureStore({
-    reducer: rootReducer,
-    preloadedState,
-    middleware: (getDefaultMiddleware) =>
-      getDefaultMiddleware({
-        serializableCheck: false, // Disable serializable check for testing
-      }),
-  });
+// Define the MessageState type locally to match the slice
+interface MessageState {
+  messages: MessageWithDetails[];
+  selectedMessage: MessageWithDetails | null;
+  status: {
+    list: Status;
+    create: Status;
+    update: Status;
+    delete: Status;
+    reaction: Status;
+    attachment: Status;
+    poll: Status;
+    mention: Status;
+    read: Status;
+  };
+  error: string | null;
+  hasMore: boolean;
+  nextCursor?: string;
 }
 
-interface ExtendedRenderOptions extends Omit<RenderOptions, "queries"> {
-  preloadedState?: Partial<TestRootState>;
-  store?: ReturnType<typeof setupStore>;
-}
-
-export function renderWithProviders(
-  ui: React.ReactElement,
-  {
-    preloadedState = {},
-    store = setupStore(preloadedState),
-    ...renderOptions
-  }: ExtendedRenderOptions = {}
-) {
-  function Wrapper({ children }: PropsWithChildren<{}>): JSX.Element {
-    return <Provider store={store}>{children}</Provider>;
-  }
-
-  return { store, ...render(ui, { wrapper: Wrapper, ...renderOptions }) };
-}
+export const mockMessageState: MessageState = {
+  messages: [],
+  selectedMessage: null,
+  status: {
+    list: "idle",
+    create: "idle",
+    update: "idle",
+    delete: "idle",
+    reaction: "idle",
+    attachment: "idle",
+    poll: "idle",
+    mention: "idle",
+    read: "idle",
+  },
+  error: null,
+  hasMore: false,
+  nextCursor: undefined,
+};
 
 // Test data generators
-export const mockHousehold = (overrides = {}): Household => ({
-  id: "household-1",
-  name: "Test Household",
+export const mockUser = (overrides = {}): User => ({
+  id: "user-1",
+  name: "Test User",
+  email: "test@example.com",
   createdAt: new Date(),
   updatedAt: new Date(),
-  currency: "USD",
-  timezone: "UTC",
-  language: "en",
   ...overrides,
 });
 
@@ -85,57 +88,53 @@ export const mockThread = (overrides = {}): Thread => ({
   ...overrides,
 });
 
-export const mockMessage = (overrides = {}): Message => ({
-  id: "message-1",
+export const mockMessage = (overrides = {}): MessageWithDetails => ({
+  id: "msg-1",
   content: "Test message",
   threadId: "thread-1",
   authorId: "user-1",
   createdAt: new Date(),
   updatedAt: new Date(),
+  author: mockUser(),
+  thread: mockThread(),
+  attachments: [],
+  reactions: [],
+  mentions: [],
+  reads: [],
+  poll: undefined,
   ...overrides,
 });
 
-export const mockUser = (overrides = {}): User => ({
-  id: "user-1",
-  name: "Test User",
-  email: "test@example.com",
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  ...overrides,
-});
+// Setup store with proper typing
+export function setupStore(preloadedState?: Partial<RootState>) {
+  return configureStore({
+    reducer: rootReducer,
+    preloadedState: preloadedState as any,
+    middleware: (getDefaultMiddleware) =>
+      getDefaultMiddleware({
+        serializableCheck: false, // Disable for testing
+      }),
+  });
+}
 
-// Mock initial states
-type Status = "idle" | "loading" | "succeeded" | "failed";
+export type AppStore = ReturnType<typeof setupStore>;
+export type AppDispatch = AppStore["dispatch"];
 
-export const mockInitialThreadState = {
-  threads: [],
-  selectedThread: null,
-  status: {
-    list: "idle" as Status,
-    create: "idle" as Status,
-    update: "idle" as Status,
-    delete: "idle" as Status,
-    invite: "idle" as Status,
-    details: "idle" as Status,
-  },
-  error: null,
-};
+// Enhanced render with providers
+export function renderWithProviders(
+  ui: React.ReactElement,
+  {
+    preloadedState = {},
+    store = setupStore(preloadedState),
+    ...renderOptions
+  }: {
+    preloadedState?: Partial<RootState>;
+    store?: AppStore;
+  } & Omit<RenderOptions, "wrapper"> = {}
+) {
+  function Wrapper({ children }: PropsWithChildren<{}>): JSX.Element {
+    return <Provider store={store}>{children}</Provider>;
+  }
 
-export const mockInitialMessageState = {
-  messages: [],
-  selectedMessage: null,
-  status: {
-    list: "idle" as Status,
-    create: "idle" as Status,
-    update: "idle" as Status,
-    delete: "idle" as Status,
-    reaction: "idle" as Status,
-    attachment: "idle" as Status,
-    poll: "idle" as Status,
-    mention: "idle" as Status,
-    read: "idle" as Status,
-  },
-  error: null,
-  hasMore: false,
-  nextCursor: undefined,
-};
+  return { store, ...render(ui, { wrapper: Wrapper, ...renderOptions }) };
+}

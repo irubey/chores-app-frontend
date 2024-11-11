@@ -5,6 +5,8 @@ import {
   createSelector,
 } from "@reduxjs/toolkit";
 import { apiClient } from "../../lib/api/apiClient";
+import { logger } from "@/lib/api/logger";
+import { ApiError } from "@/lib/api/errors/apiErrors";
 import {
   Chore,
   CreateChoreDTO,
@@ -68,9 +70,14 @@ export const fetchChores = createAsyncThunk<
   { rejectValue: string }
 >("chores/fetchChores", async (householdId, thunkAPI) => {
   try {
-    return await apiClient.chores.getChores(householdId);
-  } catch (error: any) {
-    return thunkAPI.rejectWithValue(error.message || "Failed to fetch chores");
+    logger.debug("Fetching chores", { householdId });
+    const response = await apiClient.chores.getChores(householdId);
+    return response.data;
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return thunkAPI.rejectWithValue(error.message);
+    }
+    return thunkAPI.rejectWithValue("Failed to fetch chores");
   }
 });
 
@@ -80,9 +87,14 @@ export const addChore = createAsyncThunk<
   { rejectValue: string }
 >("chores/addChore", async ({ householdId, choreData }, thunkAPI) => {
   try {
-    return await apiClient.chores.createChore(householdId, choreData);
-  } catch (error: any) {
-    return thunkAPI.rejectWithValue(error.message || "Failed to add chore");
+    logger.debug("Adding chore", { householdId, choreData });
+    const response = await apiClient.chores.createChore(householdId, choreData);
+    return response.data;
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return thunkAPI.rejectWithValue(error.message);
+    }
+    return thunkAPI.rejectWithValue("Failed to add chore");
   }
 });
 
@@ -94,15 +106,18 @@ export const updateChore = createAsyncThunk<
   "chores/updateChore",
   async ({ householdId, choreId, choreData }, thunkAPI) => {
     try {
-      return await apiClient.chores.updateChore(
+      logger.debug("Updating chore", { householdId, choreId, choreData });
+      const response = await apiClient.chores.updateChore(
         householdId,
         choreId,
         choreData
       );
-    } catch (error: any) {
-      return thunkAPI.rejectWithValue(
-        error.message || "Failed to update chore"
-      );
+      return response.data;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return thunkAPI.rejectWithValue(error.message);
+      }
+      return thunkAPI.rejectWithValue("Failed to update chore");
     }
   }
 );
@@ -113,10 +128,14 @@ export const deleteChore = createAsyncThunk<
   { rejectValue: string }
 >("chores/deleteChore", async ({ householdId, choreId }, thunkAPI) => {
   try {
+    logger.debug("Deleting chore", { householdId, choreId });
     await apiClient.chores.deleteChore(householdId, choreId);
     return choreId;
-  } catch (error: any) {
-    return thunkAPI.rejectWithValue(error.message || "Failed to delete chore");
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return thunkAPI.rejectWithValue(error.message);
+    }
+    return thunkAPI.rejectWithValue("Failed to delete chore");
   }
 });
 
@@ -128,13 +147,18 @@ export const addSubtask = createAsyncThunk<
   "chores/addSubtask",
   async ({ householdId, choreId, subtaskData }, thunkAPI) => {
     try {
-      return await apiClient.chores.subtasks.addSubtask(
+      logger.debug("Adding subtask", { householdId, choreId, subtaskData });
+      const response = await apiClient.chores.subtasks.addSubtask(
         householdId,
         choreId,
         subtaskData
       );
-    } catch (error: any) {
-      return thunkAPI.rejectWithValue(error.message || "Failed to add subtask");
+      return response.data;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return thunkAPI.rejectWithValue(error.message);
+      }
+      return thunkAPI.rejectWithValue("Failed to add subtask");
     }
   }
 );
@@ -152,16 +176,24 @@ export const updateSubtask = createAsyncThunk<
   "chores/updateSubtask",
   async ({ householdId, choreId, subtaskId, subtaskData }, thunkAPI) => {
     try {
-      return await apiClient.chores.subtasks.updateSubtask(
+      logger.debug("Updating subtask", {
+        householdId,
+        choreId,
+        subtaskId,
+        subtaskData,
+      });
+      const response = await apiClient.chores.subtasks.updateSubtask(
         householdId,
         choreId,
         subtaskId,
         subtaskData
       );
-    } catch (error: any) {
-      return thunkAPI.rejectWithValue(
-        error.message || "Failed to update subtask"
-      );
+      return response.data;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return thunkAPI.rejectWithValue(error.message);
+      }
+      return thunkAPI.rejectWithValue("Failed to update subtask");
     }
   }
 );
@@ -174,16 +206,18 @@ export const deleteSubtask = createAsyncThunk<
   "chores/deleteSubtask",
   async ({ householdId, choreId, subtaskId }, thunkAPI) => {
     try {
+      logger.debug("Deleting subtask", { householdId, choreId, subtaskId });
       await apiClient.chores.subtasks.deleteSubtask(
         householdId,
         choreId,
         subtaskId
       );
       return { choreId, subtaskId };
-    } catch (error: any) {
-      return thunkAPI.rejectWithValue(
-        error.message || "Failed to delete subtask"
-      );
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return thunkAPI.rejectWithValue(error.message);
+      }
+      return thunkAPI.rejectWithValue("Failed to delete subtask");
     }
   }
 );
@@ -196,15 +230,22 @@ export const requestChoreSwap = createAsyncThunk<
   "chores/requestChoreSwap",
   async ({ householdId, choreId, targetUserId }, thunkAPI) => {
     try {
-      return await apiClient.chores.requestChoreSwap(
+      logger.debug("Requesting chore swap", {
+        householdId,
+        choreId,
+        targetUserId,
+      });
+      const response = await apiClient.chores.requestChoreSwap(
         householdId,
         choreId,
         targetUserId
       );
-    } catch (error: any) {
-      return thunkAPI.rejectWithValue(
-        error.message || "Failed to request chore swap"
-      );
+      return response.data;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return thunkAPI.rejectWithValue(error.message);
+      }
+      return thunkAPI.rejectWithValue("Failed to request chore swap");
     }
   }
 );
@@ -222,16 +263,24 @@ export const approveChoreSwap = createAsyncThunk<
   "chores/approveChoreSwap",
   async ({ householdId, choreId, swapRequestId, approved }, thunkAPI) => {
     try {
-      return await apiClient.chores.approveChoreSwap(
+      logger.debug("Approving chore swap", {
+        householdId,
+        choreId,
+        swapRequestId,
+        approved,
+      });
+      const response = await apiClient.chores.approveChoreSwap(
         householdId,
         choreId,
         swapRequestId,
         approved
       );
-    } catch (error: any) {
-      return thunkAPI.rejectWithValue(
-        error.message || "Failed to approve chore swap"
-      );
+      return response.data;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return thunkAPI.rejectWithValue(error.message);
+      }
+      return thunkAPI.rejectWithValue("Failed to approve chore swap");
     }
   }
 );
@@ -264,7 +313,7 @@ const choresSlice = createSlice({
       )
       .addCase(fetchChores.rejected, (state, action) => {
         state.isLoading.fetchChores = false;
-        state.error = action.payload || "Failed to fetch chores";
+        state.error = action.payload ?? "Failed to fetch chores";
       })
 
       // Add Chore
@@ -281,7 +330,7 @@ const choresSlice = createSlice({
       )
       .addCase(addChore.rejected, (state, action) => {
         state.isLoading.createChore = false;
-        state.error = action.payload || "Failed to add chore";
+        state.error = action.payload ?? "Failed to add chore";
       })
 
       // Update Chore
@@ -298,7 +347,7 @@ const choresSlice = createSlice({
       )
       .addCase(updateChore.rejected, (state, action) => {
         state.isLoading.updateChore = false;
-        state.error = action.payload || "Failed to update chore";
+        state.error = action.payload ?? "Failed to update chore";
       })
 
       // Delete Chore
@@ -315,7 +364,7 @@ const choresSlice = createSlice({
       )
       .addCase(deleteChore.rejected, (state, action) => {
         state.isLoading.deleteChore = false;
-        state.error = action.payload || "Failed to delete chore";
+        state.error = action.payload ?? "Failed to delete chore";
       })
 
       // Add Subtask
@@ -338,7 +387,7 @@ const choresSlice = createSlice({
       )
       .addCase(addSubtask.rejected, (state, action) => {
         state.isLoading.createSubtask = false;
-        state.error = action.payload || "Failed to add subtask";
+        state.error = action.payload ?? "Failed to add subtask";
       })
 
       // Update Subtask
@@ -363,7 +412,7 @@ const choresSlice = createSlice({
       )
       .addCase(updateSubtask.rejected, (state, action) => {
         state.isLoading.updateSubtask = false;
-        state.error = action.payload || "Failed to update subtask";
+        state.error = action.payload ?? "Failed to update subtask";
       })
 
       // Delete Subtask
@@ -389,7 +438,7 @@ const choresSlice = createSlice({
       )
       .addCase(deleteSubtask.rejected, (state, action) => {
         state.isLoading.deleteSubtask = false;
-        state.error = action.payload || "Failed to delete subtask";
+        state.error = action.payload ?? "Failed to delete subtask";
       })
 
       // Request Chore Swap
@@ -412,7 +461,7 @@ const choresSlice = createSlice({
       )
       .addCase(requestChoreSwap.rejected, (state, action) => {
         state.isLoading.requestChoreSwap = false;
-        state.error = action.payload || "Failed to request chore swap";
+        state.error = action.payload ?? "Failed to request chore swap";
       })
 
       // Approve Chore Swap
@@ -429,7 +478,7 @@ const choresSlice = createSlice({
       )
       .addCase(approveChoreSwap.rejected, (state, action) => {
         state.isLoading.approveChoreSwap = false;
-        state.error = action.payload || "Failed to approve chore swap";
+        state.error = action.payload ?? "Failed to approve chore swap";
       });
   },
 });

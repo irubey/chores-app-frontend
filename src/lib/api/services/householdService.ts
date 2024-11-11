@@ -9,12 +9,17 @@ import {
   HouseholdMemberWithUser,
 } from "@shared/types";
 import { HouseholdRole } from "@shared/enums";
+import { logger } from "../logger";
 
 export class HouseholdService extends BaseApiClient {
   /**
    * Get all households for the current user
    */
-  public async getUserHouseholds(signal?: AbortSignal): Promise<Household[]> {
+  public async getUserHouseholds(
+    signal?: AbortSignal
+  ): Promise<ApiResponse<Household[]>> {
+    logger.debug("Fetching user households");
+
     return this.handleRequest(() =>
       this.axiosInstance.get<ApiResponse<Household[]>>("/households", {
         signal,
@@ -28,7 +33,9 @@ export class HouseholdService extends BaseApiClient {
   public async createHousehold(
     data: CreateHouseholdDTO,
     signal?: AbortSignal
-  ): Promise<Household> {
+  ): Promise<ApiResponse<Household>> {
+    logger.debug("Creating new household", { data });
+
     return this.handleRequest(() =>
       this.axiosInstance.post<ApiResponse<Household>>("/households", data, {
         signal,
@@ -42,7 +49,9 @@ export class HouseholdService extends BaseApiClient {
   public async getHousehold(
     householdId: string,
     signal?: AbortSignal
-  ): Promise<Household> {
+  ): Promise<ApiResponse<Household>> {
+    logger.debug("Fetching household details", { householdId });
+
     return this.handleRequest(() =>
       this.axiosInstance.get<ApiResponse<Household>>(
         `/households/${householdId}`,
@@ -58,7 +67,9 @@ export class HouseholdService extends BaseApiClient {
     householdId: string,
     data: UpdateHouseholdDTO,
     signal?: AbortSignal
-  ): Promise<Household> {
+  ): Promise<ApiResponse<Household>> {
+    logger.debug("Updating household", { householdId, data });
+
     return this.handleRequest(() =>
       this.axiosInstance.patch<ApiResponse<Household>>(
         `/households/${householdId}`,
@@ -74,7 +85,9 @@ export class HouseholdService extends BaseApiClient {
   public async deleteHousehold(
     householdId: string,
     signal?: AbortSignal
-  ): Promise<void> {
+  ): Promise<ApiResponse<void>> {
+    logger.debug("Deleting household", { householdId });
+
     return this.handleRequest(() =>
       this.axiosInstance.delete<ApiResponse<void>>(
         `/households/${householdId}`,
@@ -90,7 +103,9 @@ export class HouseholdService extends BaseApiClient {
    */
   public async getSelectedHouseholds(
     signal?: AbortSignal
-  ): Promise<HouseholdMemberWithUser[]> {
+  ): Promise<ApiResponse<HouseholdMemberWithUser[]>> {
+    logger.debug("Fetching selected households");
+
     return this.handleRequest(() =>
       this.axiosInstance.get<ApiResponse<HouseholdMemberWithUser[]>>(
         "/households/selected",
@@ -114,7 +129,9 @@ export class HouseholdService extends BaseApiClient {
     getMembers: async (
       householdId: string,
       signal?: AbortSignal
-    ): Promise<HouseholdMember[]> => {
+    ): Promise<ApiResponse<HouseholdMember[]>> => {
+      logger.debug("Fetching household members", { householdId });
+
       return this.handleRequest(() =>
         this.axiosInstance.get<ApiResponse<HouseholdMember[]>>(
           `/households/${householdId}/members`,
@@ -130,7 +147,9 @@ export class HouseholdService extends BaseApiClient {
       householdId: string,
       data: AddMemberDTO,
       signal?: AbortSignal
-    ): Promise<HouseholdMember> => {
+    ): Promise<ApiResponse<HouseholdMember>> => {
+      logger.debug("Adding household member", { householdId, data });
+
       return this.handleRequest(() =>
         this.axiosInstance.post<ApiResponse<HouseholdMember>>(
           `/households/${householdId}/members`,
@@ -147,7 +166,9 @@ export class HouseholdService extends BaseApiClient {
       householdId: string,
       memberId: string,
       signal?: AbortSignal
-    ): Promise<void> => {
+    ): Promise<ApiResponse<void>> => {
+      logger.debug("Removing household member", { householdId, memberId });
+
       return this.handleRequest(() =>
         this.axiosInstance.delete<ApiResponse<void>>(
           `/households/${householdId}/members/${memberId}`,
@@ -164,7 +185,9 @@ export class HouseholdService extends BaseApiClient {
       memberId: string,
       role: HouseholdRole,
       signal?: AbortSignal
-    ): Promise<HouseholdMember> => {
+    ): Promise<ApiResponse<HouseholdMember>> => {
+      logger.debug("Updating member role", { householdId, memberId, role });
+
       return this.handleRequest(() =>
         this.axiosInstance.patch<ApiResponse<HouseholdMember>>(
           `/households/${householdId}/members/${memberId}/role`,
@@ -182,7 +205,13 @@ export class HouseholdService extends BaseApiClient {
       memberId: string,
       isSelected: boolean,
       signal?: AbortSignal
-    ): Promise<HouseholdMember> => {
+    ): Promise<ApiResponse<HouseholdMember>> => {
+      logger.debug("Updating member selection", {
+        householdId,
+        memberId,
+        isSelected,
+      });
+
       return this.handleRequest(() =>
         this.axiosInstance.patch<ApiResponse<HouseholdMember>>(
           `/households/${householdId}/members/${memberId}/selection`,
@@ -204,7 +233,9 @@ export class HouseholdService extends BaseApiClient {
       householdId: string,
       email: string,
       signal?: AbortSignal
-    ): Promise<void> => {
+    ): Promise<ApiResponse<void>> => {
+      logger.debug("Sending household invitation", { householdId, email });
+
       return this.handleRequest(() =>
         this.axiosInstance.post<ApiResponse<void>>(
           `/households/${householdId}/invitations`,
@@ -219,7 +250,9 @@ export class HouseholdService extends BaseApiClient {
      */
     getInvitations: async (
       signal?: AbortSignal
-    ): Promise<HouseholdMember[]> => {
+    ): Promise<ApiResponse<HouseholdMember[]>> => {
+      logger.debug("Fetching household invitations");
+
       return this.handleRequest(() =>
         this.axiosInstance.get<ApiResponse<HouseholdMember[]>>(
           `/households/invitations`,
@@ -236,7 +269,13 @@ export class HouseholdService extends BaseApiClient {
       memberId: string,
       accept: boolean,
       signal?: AbortSignal
-    ): Promise<HouseholdMember> => {
+    ): Promise<ApiResponse<HouseholdMember>> => {
+      logger.debug("Updating invitation status", {
+        householdId,
+        memberId,
+        accept,
+      });
+
       return this.handleRequest(() =>
         this.axiosInstance.patch<ApiResponse<HouseholdMember>>(
           `/households/${householdId}/members/${memberId}/status`,

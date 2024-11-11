@@ -12,7 +12,8 @@ export class AuthService extends BaseApiClient {
   public async register(
     data: RegisterUserDTO,
     signal?: AbortSignal
-  ): Promise<User> {
+  ): Promise<ApiResponse<User>> {
+    logger.debug("Registering new user", { email: data.email });
     return this.handleRequest(() =>
       this.axiosInstance.post<ApiResponse<User>>("/auth/register", data, {
         signal,
@@ -26,7 +27,8 @@ export class AuthService extends BaseApiClient {
   public async login(
     credentials: LoginCredentials,
     signal?: AbortSignal
-  ): Promise<User> {
+  ): Promise<ApiResponse<User>> {
+    logger.debug("Logging in user", { email: credentials.email });
     return this.handleRequest(() =>
       this.axiosInstance.post<ApiResponse<User>>("/auth/login", credentials, {
         signal,
@@ -37,7 +39,8 @@ export class AuthService extends BaseApiClient {
   /**
    * Logout the current user
    */
-  public async logout(signal?: AbortSignal): Promise<void> {
+  public async logout(signal?: AbortSignal): Promise<ApiResponse<void>> {
+    logger.debug("Logging out user");
     return this.handleRequest(() =>
       this.axiosInstance.post<ApiResponse<void>>("/auth/logout", {}, { signal })
     );
@@ -46,7 +49,10 @@ export class AuthService extends BaseApiClient {
   /**
    * Initialize authentication state
    */
-  public async initializeAuth(signal?: AbortSignal): Promise<User | null> {
+  public async initializeAuth(
+    signal?: AbortSignal
+  ): Promise<ApiResponse<User> | null> {
+    logger.debug("Initializing auth state");
     try {
       return await this.handleRequest(() =>
         this.axiosInstance.get<ApiResponse<User>>("/users/profile", { signal })

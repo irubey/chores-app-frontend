@@ -62,23 +62,28 @@ const initialState: MessageState = {
 
 // Async Thunks
 export const fetchMessages = createAsyncThunk<
-  { data: MessageWithDetails[]; hasMore: boolean; nextCursor?: string },
+  MessageWithDetails[],
   { householdId: string; threadId: string; options?: PaginationOptions },
-  { rejectValue: string }
+  {
+    rejectValue: string;
+    fulfilledMeta: { hasMore: boolean; nextCursor?: string };
+  }
 >(
   "messages/fetchMessages",
-  async ({ householdId, threadId, options }, { rejectWithValue }) => {
+  async (
+    { householdId, threadId, options },
+    { rejectWithValue, fulfillWithValue }
+  ) => {
     try {
-      const messages = await apiClient.threads.messages.getMessages(
+      const response = await apiClient.threads.messages.getMessages(
         householdId,
         threadId,
         options
       );
-      return {
-        data: messages,
-        hasMore: false,
-        nextCursor: undefined,
-      };
+      return fulfillWithValue(response.data, {
+        hasMore: response.pagination?.hasMore ?? false,
+        nextCursor: response.pagination?.nextCursor,
+      });
     } catch (error) {
       if (error instanceof ApiError) {
         return rejectWithValue(error.message);
@@ -96,12 +101,12 @@ export const createMessage = createAsyncThunk<
   "messages/createMessage",
   async ({ householdId, threadId, messageData }, { rejectWithValue }) => {
     try {
-      const message = await apiClient.threads.messages.createMessage(
+      const response = await apiClient.threads.messages.createMessage(
         householdId,
         threadId,
         messageData
       );
-      return message;
+      return response.data;
     } catch (error) {
       if (error instanceof ApiError) {
         return rejectWithValue(error.message);
@@ -127,13 +132,13 @@ export const updateMessage = createAsyncThunk<
     { rejectWithValue }
   ) => {
     try {
-      const message = await apiClient.threads.messages.updateMessage(
+      const response = await apiClient.threads.messages.updateMessage(
         householdId,
         threadId,
         messageId,
         messageData
       );
-      return message;
+      return response.data;
     } catch (error) {
       if (error instanceof ApiError) {
         return rejectWithValue(error.message);
@@ -176,16 +181,43 @@ export const getAttachments = createAsyncThunk<
   "messages/getAttachments",
   async ({ householdId, threadId, messageId }, { rejectWithValue }) => {
     try {
-      return await apiClient.threads.messages.attachments.getAttachments(
-        householdId,
-        threadId,
-        messageId
-      );
+      const response =
+        await apiClient.threads.messages.attachments.getAttachments(
+          householdId,
+          threadId,
+          messageId
+        );
+      return response.data;
     } catch (error) {
       if (error instanceof ApiError) {
         return rejectWithValue(error.message);
       }
       return rejectWithValue("Failed to get attachments");
+    }
+  }
+);
+
+export const addAttachment = createAsyncThunk<
+  Attachment,
+  { householdId: string; threadId: string; messageId: string; file: File },
+  { rejectValue: string }
+>(
+  "messages/addAttachment",
+  async ({ householdId, threadId, messageId, file }, { rejectWithValue }) => {
+    try {
+      const response =
+        await apiClient.threads.messages.attachments.addAttachment(
+          householdId,
+          threadId,
+          messageId,
+          file
+        );
+      return response.data;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return rejectWithValue(error.message);
+      }
+      return rejectWithValue("Failed to add attachment");
     }
   }
 );
@@ -206,42 +238,19 @@ export const getAttachment = createAsyncThunk<
     { rejectWithValue }
   ) => {
     try {
-      return await apiClient.threads.messages.attachments.getAttachment(
-        householdId,
-        threadId,
-        messageId,
-        attachmentId
-      );
+      const response =
+        await apiClient.threads.messages.attachments.getAttachment(
+          householdId,
+          threadId,
+          messageId,
+          attachmentId
+        );
+      return response.data;
     } catch (error) {
       if (error instanceof ApiError) {
         return rejectWithValue(error.message);
       }
       return rejectWithValue("Failed to get attachment");
-    }
-  }
-);
-
-export const addAttachment = createAsyncThunk<
-  Attachment,
-  { householdId: string; threadId: string; messageId: string; file: File },
-  { rejectValue: string }
->(
-  "messages/addAttachment",
-  async ({ householdId, threadId, messageId, file }, { rejectWithValue }) => {
-    try {
-      const attachment =
-        await apiClient.threads.messages.attachments.addAttachment(
-          householdId,
-          threadId,
-          messageId,
-          file
-        );
-      return attachment;
-    } catch (error) {
-      if (error instanceof ApiError) {
-        return rejectWithValue(error.message);
-      }
-      return rejectWithValue("Failed to add attachment");
     }
   }
 );
@@ -288,11 +297,12 @@ export const getReactions = createAsyncThunk<
   "messages/getReactions",
   async ({ householdId, threadId, messageId }, { rejectWithValue }) => {
     try {
-      return await apiClient.threads.messages.reactions.getReactions(
+      const response = await apiClient.threads.messages.reactions.getReactions(
         householdId,
         threadId,
         messageId
       );
+      return response.data;
     } catch (error) {
       if (error instanceof ApiError) {
         return rejectWithValue(error.message);
@@ -318,14 +328,13 @@ export const addReaction = createAsyncThunk<
     { rejectWithValue }
   ) => {
     try {
-      const newReaction =
-        await apiClient.threads.messages.reactions.addReaction(
-          householdId,
-          threadId,
-          messageId,
-          reaction
-        );
-      return newReaction;
+      const response = await apiClient.threads.messages.reactions.addReaction(
+        householdId,
+        threadId,
+        messageId,
+        reaction
+      );
+      return response.data;
     } catch (error) {
       if (error instanceof ApiError) {
         return rejectWithValue(error.message);
@@ -375,9 +384,11 @@ export const getReactionAnalytics = createAsyncThunk<
   "messages/getReactionAnalytics",
   async ({ householdId }, { rejectWithValue }) => {
     try {
-      return await apiClient.threads.messages.reactions.getReactionAnalytics(
-        householdId
-      );
+      const response =
+        await apiClient.threads.messages.reactions.getReactionAnalytics(
+          householdId
+        );
+      return response.data;
     } catch (error) {
       if (error instanceof ApiError) {
         return rejectWithValue(error.message);
@@ -395,9 +406,11 @@ export const getReactionsByType = createAsyncThunk<
   "messages/getReactionsByType",
   async ({ householdId }, { rejectWithValue }) => {
     try {
-      return await apiClient.threads.messages.reactions.getReactionsByType(
-        householdId
-      );
+      const response =
+        await apiClient.threads.messages.reactions.getReactionsByType(
+          householdId
+        );
+      return response.data;
     } catch (error) {
       if (error instanceof ApiError) {
         return rejectWithValue(error.message);
@@ -417,11 +430,12 @@ export const getPollsInThread = createAsyncThunk<
   "messages/getPollsInThread",
   async ({ householdId, threadId, messageId }, { rejectWithValue }) => {
     try {
-      return await apiClient.threads.messages.polls.getPollsInThread(
+      const response = await apiClient.threads.messages.polls.getPollsInThread(
         householdId,
         threadId,
         messageId
       );
+      return response.data;
     } catch (error) {
       if (error instanceof ApiError) {
         return rejectWithValue(error.message);
@@ -439,12 +453,13 @@ export const getPoll = createAsyncThunk<
   "messages/getPoll",
   async ({ householdId, threadId, messageId, pollId }, { rejectWithValue }) => {
     try {
-      return await apiClient.threads.messages.polls.getPoll(
+      const response = await apiClient.threads.messages.polls.getPoll(
         householdId,
         threadId,
         messageId,
         pollId
       );
+      return response.data;
     } catch (error) {
       if (error instanceof ApiError) {
         return rejectWithValue(error.message);
@@ -470,13 +485,13 @@ export const createPoll = createAsyncThunk<
     { rejectWithValue }
   ) => {
     try {
-      const poll = await apiClient.threads.messages.polls.createPoll(
+      const response = await apiClient.threads.messages.polls.createPoll(
         householdId,
         threadId,
         messageId,
         pollData
       );
-      return poll;
+      return response.data;
     } catch (error) {
       if (error instanceof ApiError) {
         return rejectWithValue(error.message);
@@ -503,13 +518,14 @@ export const updatePoll = createAsyncThunk<
     { rejectWithValue }
   ) => {
     try {
-      return await apiClient.threads.messages.polls.updatePoll(
+      const response = await apiClient.threads.messages.polls.updatePoll(
         householdId,
         threadId,
         messageId,
         pollId,
         pollData
       );
+      return response.data;
     } catch (error) {
       if (error instanceof ApiError) {
         return rejectWithValue(error.message);
@@ -569,14 +585,14 @@ export const votePoll = createAsyncThunk<
       );
 
       // Then fetch the updated poll details
-      const poll = await apiClient.threads.messages.polls.getPoll(
+      const pollResponse = await apiClient.threads.messages.polls.getPoll(
         householdId,
         threadId,
         messageId,
         pollId
       );
 
-      return { poll, messageId };
+      return { poll: pollResponse.data, messageId };
     } catch (error) {
       if (error instanceof ApiError) {
         return rejectWithValue(error.message);
@@ -613,14 +629,14 @@ export const removePollVote = createAsyncThunk<
       );
 
       // Then fetch the updated poll details
-      const poll = await apiClient.threads.messages.polls.getPoll(
+      const pollResponse = await apiClient.threads.messages.polls.getPoll(
         householdId,
         threadId,
         messageId,
         pollId
       );
 
-      return { poll, messageId };
+      return { poll: pollResponse.data, messageId };
     } catch (error) {
       if (error instanceof ApiError) {
         return rejectWithValue(error.message);
@@ -667,12 +683,12 @@ export const markMessageAsRead = createAsyncThunk<
   "messages/markMessageAsRead",
   async ({ householdId, threadId, messageId }, { rejectWithValue }) => {
     try {
-      const messageRead = await apiClient.threads.messages.markAsRead(
+      const response = await apiClient.threads.messages.markAsRead(
         householdId,
         threadId,
         messageId
       );
-      return { messageRead, messageId };
+      return { messageRead: response.data, messageId };
     } catch (error) {
       if (error instanceof ApiError) {
         return rejectWithValue(error.message);
@@ -690,11 +706,13 @@ export const getMessageReadStatus = createAsyncThunk<
   "messages/getReadStatus",
   async ({ householdId, threadId, messageId }, { rejectWithValue }) => {
     try {
-      return await apiClient.threads.messages.readStatus.getReadStatus(
-        householdId,
-        threadId,
-        messageId
-      );
+      const response =
+        await apiClient.threads.messages.readStatus.getReadStatus(
+          householdId,
+          threadId,
+          messageId
+        );
+      return response.data;
     } catch (error) {
       if (error instanceof ApiError) {
         return rejectWithValue(error.message);
@@ -712,9 +730,10 @@ export const getUserMentions = createAsyncThunk<
   { rejectValue: string }
 >("messages/getUserMentions", async ({ householdId }, { rejectWithValue }) => {
   try {
-    return await apiClient.threads.messages.mentions.getUserMentions(
+    const response = await apiClient.threads.messages.mentions.getUserMentions(
       householdId
     );
+    return response.data;
   } catch (error) {
     if (error instanceof ApiError) {
       return rejectWithValue(error.message);
@@ -731,11 +750,13 @@ export const getMessageMentions = createAsyncThunk<
   "messages/getMessageMentions",
   async ({ householdId, threadId, messageId }, { rejectWithValue }) => {
     try {
-      return await apiClient.threads.messages.mentions.getMessageMentions(
-        householdId,
-        threadId,
-        messageId
-      );
+      const response =
+        await apiClient.threads.messages.mentions.getMessageMentions(
+          householdId,
+          threadId,
+          messageId
+        );
+      return response.data;
     } catch (error) {
       if (error instanceof ApiError) {
         return rejectWithValue(error.message);
@@ -761,12 +782,13 @@ export const createMention = createAsyncThunk<
     { rejectWithValue }
   ) => {
     try {
-      return await apiClient.threads.messages.mentions.createMention(
+      const response = await apiClient.threads.messages.mentions.createMention(
         householdId,
         threadId,
         messageId,
         mentionData
       );
+      return response.data;
     } catch (error) {
       if (error instanceof ApiError) {
         return rejectWithValue(error.message);
@@ -792,12 +814,13 @@ export const deleteMention = createAsyncThunk<
     { rejectWithValue }
   ) => {
     try {
-      await apiClient.threads.messages.mentions.deleteMention(
+      const response = await apiClient.threads.messages.mentions.deleteMention(
         householdId,
         threadId,
         messageId,
         mentionId
       );
+      return response.data;
     } catch (error) {
       if (error instanceof ApiError) {
         return rejectWithValue(error.message);
@@ -815,9 +838,11 @@ export const getUnreadMentionsCount = createAsyncThunk<
   "messages/getUnreadMentionsCount",
   async ({ householdId }, { rejectWithValue }) => {
     try {
-      return await apiClient.threads.messages.mentions.getUnreadMentionsCount(
-        householdId
-      );
+      const response =
+        await apiClient.threads.messages.mentions.getUnreadMentionsCount(
+          householdId
+        );
+      return response.data;
     } catch (error) {
       if (error instanceof ApiError) {
         return rejectWithValue(error.message);
@@ -851,9 +876,13 @@ const messagesSlice = createSlice({
       })
       .addCase(fetchMessages.fulfilled, (state, action) => {
         state.status.list = "succeeded";
-        state.messages = action.payload.data;
-        state.hasMore = action.payload.hasMore;
-        state.nextCursor = action.payload.nextCursor;
+        if (action.meta.arg.options?.cursor) {
+          state.messages = [...state.messages, ...action.payload];
+        } else {
+          state.messages = action.payload;
+        }
+        state.hasMore = action.meta.hasMore;
+        state.nextCursor = action.meta.nextCursor;
       })
       .addCase(fetchMessages.rejected, (state, action) => {
         state.status.list = "failed";

@@ -1,10 +1,15 @@
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import { apiClient } from "../../lib/api/apiClient";
-import { Notification } from "../../types/notification";
+import {
+  NotificationWithUser,
+  UpdateNotificationSettingsDTO,
+} from "@shared/types";
 import { RootState } from "../store";
+import { logger } from "../../lib/api/logger";
+import { ApiError } from "@/lib/api/errors";
 
 interface NotificationsState {
-  notifications: Notification[];
+  notifications: NotificationWithUser[];
   isLoading: boolean;
   isSuccess: boolean;
   isError: boolean;
@@ -21,37 +26,44 @@ const initialState: NotificationsState = {
 
 // Async thunks
 export const fetchNotifications = createAsyncThunk<
-  Notification[],
+  NotificationWithUser[],
   void,
   { rejectValue: string }
 >("notifications/fetchNotifications", async (_, thunkAPI) => {
   try {
-    const notifications = await apiClient.notifications.getNotifications();
-    return notifications;
-  } catch (error: any) {
-    const message =
-      error.response?.data?.message ||
-      error.message ||
-      "Failed to fetch notifications";
-    return thunkAPI.rejectWithValue(message);
+    logger.debug("Fetching notifications");
+    const response = await apiClient.notifications.getNotifications();
+    logger.debug("Notifications fetched successfully", {
+      count: response.data.length,
+    });
+    return response.data;
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return thunkAPI.rejectWithValue(error.message);
+    }
+    return thunkAPI.rejectWithValue("Failed to fetch notifications");
   }
 });
 
 export const markNotificationAsRead = createAsyncThunk<
-  Notification,
+  NotificationWithUser,
   string,
   { rejectValue: string }
 >("notifications/markAsRead", async (notificationId, thunkAPI) => {
   try {
-    const updatedNotification =
-      await apiClient.notifications.markNotificationAsRead(notificationId);
-    return updatedNotification;
-  } catch (error: any) {
-    const message =
-      error.response?.data?.message ||
-      error.message ||
-      "Failed to mark notification as read";
-    return thunkAPI.rejectWithValue(message);
+    logger.debug("Marking notification as read", { notificationId });
+    const response = await apiClient.notifications.markNotificationAsRead(
+      notificationId
+    );
+    logger.debug("Notification marked as read successfully", {
+      notificationId,
+    });
+    return response.data;
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return thunkAPI.rejectWithValue(error.message);
+    }
+    return thunkAPI.rejectWithValue("Failed to mark notification as read");
   }
 });
 
@@ -61,14 +73,15 @@ export const deleteNotification = createAsyncThunk<
   { rejectValue: string }
 >("notifications/deleteNotification", async (notificationId, thunkAPI) => {
   try {
+    logger.debug("Deleting notification", { notificationId });
     await apiClient.notifications.deleteNotification(notificationId);
+    logger.debug("Notification deleted successfully", { notificationId });
     return notificationId;
-  } catch (error: any) {
-    const message =
-      error.response?.data?.message ||
-      error.message ||
-      "Failed to delete notification";
-    return thunkAPI.rejectWithValue(message);
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return thunkAPI.rejectWithValue(error.message);
+    }
+    return thunkAPI.rejectWithValue("Failed to delete notification");
   }
 });
 
@@ -89,10 +102,12 @@ const notificationsSlice = createSlice({
       // Fetch Notifications
       .addCase(fetchNotifications.pending, (state) => {
         state.isLoading = true;
+        state.isError = false;
+        state.message = "";
       })
       .addCase(
         fetchNotifications.fulfilled,
-        (state, action: PayloadAction<Notification[]>) => {
+        (state, action: PayloadAction<NotificationWithUser[]>) => {
           state.isLoading = false;
           state.isSuccess = true;
           state.notifications = action.payload;
@@ -101,15 +116,17 @@ const notificationsSlice = createSlice({
       .addCase(fetchNotifications.rejected, (state, action) => {
         state.isLoading = false;
         state.isError = true;
-        state.message = action.payload as string;
+        state.message = action.payload ?? "Failed to fetch notifications";
       })
       // Mark Notification as Read
       .addCase(markNotificationAsRead.pending, (state) => {
         state.isLoading = true;
+        state.isError = false;
+        state.message = "";
       })
       .addCase(
         markNotificationAsRead.fulfilled,
-        (state, action: PayloadAction<Notification>) => {
+        (state, action: PayloadAction<NotificationWithUser>) => {
           state.isLoading = false;
           state.isSuccess = true;
           const index = state.notifications.findIndex(
@@ -123,11 +140,13 @@ const notificationsSlice = createSlice({
       .addCase(markNotificationAsRead.rejected, (state, action) => {
         state.isLoading = false;
         state.isError = true;
-        state.message = action.payload as string;
+        state.message = action.payload ?? "Failed to mark notification as read";
       })
       // Delete Notification
       .addCase(deleteNotification.pending, (state) => {
         state.isLoading = true;
+        state.isError = false;
+        state.message = "";
       })
       .addCase(
         deleteNotification.fulfilled,
@@ -142,13 +161,22 @@ const notificationsSlice = createSlice({
       .addCase(deleteNotification.rejected, (state, action) => {
         state.isLoading = false;
         state.isError = true;
-        state.message = action.payload as string;
+        state.message = action.payload ?? "Failed to delete notification";
       });
   },
 });
 
 export const { reset } = notificationsSlice.actions;
 
-export const selectNotifications = (state: RootState) => state.notifications;
+// Selectors
+export const selectNotifications = (state: RootState): NotificationsState =>
+  state.notifications;
+export const selectAllNotifications = (
+  state: RootState
+): NotificationWithUser[] => state.notifications.notifications;
+export const selectUnreadNotifications = (
+  state: RootState
+): NotificationWithUser[] =>
+  state.notifications.notifications.filter((n) => !n.isRead);
 
 export default notificationsSlice.reducer;

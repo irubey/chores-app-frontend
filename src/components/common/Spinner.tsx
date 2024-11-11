@@ -32,6 +32,7 @@ const Spinner: FC<SpinnerProps> = ({
 
   return (
     <div
+      data-testid="loading-spinner"
       className={twMerge(
         baseClasses,
         sizeClasses[size],

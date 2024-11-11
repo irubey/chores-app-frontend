@@ -14,6 +14,7 @@ const ThreadItem: React.FC<ThreadItemProps> = ({
 }) => {
   return (
     <div
+      data-testid="thread-item"
       className={`p-4 hover:bg-neutral-50 dark:hover:bg-neutral-800 cursor-pointer
       ${isSelected ? "bg-neutral-100 dark:bg-neutral-800" : ""}`}
     >

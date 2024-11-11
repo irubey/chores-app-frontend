@@ -22,7 +22,7 @@ export class BaseApiClient {
 
   protected async handleRequest<T>(
     requestFn: () => Promise<AxiosResponse<ApiResponse<T>>>
-  ): Promise<T> {
+  ): Promise<ApiResponse<T>> {
     try {
       const response = await requestFn();
       logger.logAPIResponse({
@@ -39,7 +39,13 @@ export class BaseApiClient {
         );
       }
 
-      return response.data.data;
+      return {
+        data: this.serializeDates(response.data.data),
+        pagination: response.data.pagination,
+        status: response.data.status,
+        message: response.data.message,
+        errors: response.data.errors,
+      };
     } catch (error) {
       if (error instanceof ApiError) {
         logger.logAPIError(error);
@@ -66,5 +72,39 @@ export class BaseApiClient {
       logger.logAPIError(unknownError);
       throw unknownError;
     }
+  }
+
+  private serializeDates<T>(data: T): T {
+    if (!data) return data;
+
+    if (Array.isArray(data)) {
+      return data.map((item) => this.serializeDates(item)) as unknown as T;
+    }
+
+    if (data instanceof Date) {
+      return data.toISOString() as unknown as T;
+    }
+
+    if (typeof data === "object") {
+      const result = {} as { [K in keyof T]: any };
+
+      for (const key in data) {
+        if (Object.prototype.hasOwnProperty.call(data, key)) {
+          const value = data[key];
+
+          if (value instanceof Date) {
+            result[key] = value.toISOString();
+          } else if (typeof value === "object" && value !== null) {
+            result[key] = this.serializeDates(value);
+          } else {
+            result[key] = value;
+          }
+        }
+      }
+
+      return result as T;
+    }
+
+    return data;
   }
 }

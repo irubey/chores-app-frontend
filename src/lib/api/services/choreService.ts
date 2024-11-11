@@ -1,6 +1,5 @@
 import { ApiResponse } from "@shared/interfaces";
 import {
-  Chore,
   CreateChoreDTO,
   UpdateChoreDTO,
   Subtask,
@@ -10,6 +9,7 @@ import {
   ChoreWithAssignees,
 } from "@shared/types";
 import { BaseApiClient } from "../baseClient";
+import { logger } from "../logger";
 
 export class ChoreService extends BaseApiClient {
   /**
@@ -18,7 +18,8 @@ export class ChoreService extends BaseApiClient {
   public async getChores(
     householdId: string,
     signal?: AbortSignal
-  ): Promise<ChoreWithAssignees[]> {
+  ): Promise<ApiResponse<ChoreWithAssignees[]>> {
+    logger.debug("Getting chores", { householdId });
     return this.handleRequest(() =>
       this.axiosInstance.get<ApiResponse<ChoreWithAssignees[]>>(
         `/households/${householdId}/chores`,
@@ -34,7 +35,8 @@ export class ChoreService extends BaseApiClient {
     householdId: string,
     choreData: CreateChoreDTO,
     signal?: AbortSignal
-  ): Promise<ChoreWithAssignees> {
+  ): Promise<ApiResponse<ChoreWithAssignees>> {
+    logger.debug("Creating chore", { householdId, choreData });
     return this.handleRequest(() =>
       this.axiosInstance.post<ApiResponse<ChoreWithAssignees>>(
         `/households/${householdId}/chores`,
@@ -51,7 +53,8 @@ export class ChoreService extends BaseApiClient {
     householdId: string,
     choreId: string,
     signal?: AbortSignal
-  ): Promise<ChoreWithAssignees> {
+  ): Promise<ApiResponse<ChoreWithAssignees>> {
+    logger.debug("Getting chore details", { householdId, choreId });
     return this.handleRequest(() =>
       this.axiosInstance.get<ApiResponse<ChoreWithAssignees>>(
         `/households/${householdId}/chores/${choreId}`,
@@ -68,7 +71,8 @@ export class ChoreService extends BaseApiClient {
     choreId: string,
     choreData: UpdateChoreDTO,
     signal?: AbortSignal
-  ): Promise<ChoreWithAssignees> {
+  ): Promise<ApiResponse<ChoreWithAssignees>> {
+    logger.debug("Updating chore", { householdId, choreId, choreData });
     return this.handleRequest(() =>
       this.axiosInstance.patch<ApiResponse<ChoreWithAssignees>>(
         `/households/${householdId}/chores/${choreId}`,
@@ -85,7 +89,8 @@ export class ChoreService extends BaseApiClient {
     householdId: string,
     choreId: string,
     signal?: AbortSignal
-  ): Promise<void> {
+  ): Promise<ApiResponse<void>> {
+    logger.debug("Deleting chore", { householdId, choreId });
     return this.handleRequest(() =>
       this.axiosInstance.delete<ApiResponse<void>>(
         `/households/${householdId}/chores/${choreId}`,
@@ -102,7 +107,12 @@ export class ChoreService extends BaseApiClient {
     choreId: string,
     targetUserId: string,
     signal?: AbortSignal
-  ): Promise<ChoreSwapRequest> {
+  ): Promise<ApiResponse<ChoreSwapRequest>> {
+    logger.debug("Requesting chore swap", {
+      householdId,
+      choreId,
+      targetUserId,
+    });
     return this.handleRequest(() =>
       this.axiosInstance.post<ApiResponse<ChoreSwapRequest>>(
         `/households/${householdId}/chores/${choreId}/swap-request`,
@@ -121,7 +131,13 @@ export class ChoreService extends BaseApiClient {
     swapRequestId: string,
     approved: boolean,
     signal?: AbortSignal
-  ): Promise<ChoreWithAssignees> {
+  ): Promise<ApiResponse<ChoreWithAssignees>> {
+    logger.debug("Approving chore swap", {
+      householdId,
+      choreId,
+      swapRequestId,
+      approved,
+    });
     return this.handleRequest(() =>
       this.axiosInstance.patch<ApiResponse<ChoreWithAssignees>>(
         `/households/${householdId}/chores/${choreId}/swap-approve`,
@@ -139,7 +155,8 @@ export class ChoreService extends BaseApiClient {
       householdId: string,
       choreId: string,
       signal?: AbortSignal
-    ): Promise<Subtask[]> => {
+    ): Promise<ApiResponse<Subtask[]>> => {
+      logger.debug("Getting subtasks", { householdId, choreId });
       return this.handleRequest(() =>
         this.axiosInstance.get<ApiResponse<Subtask[]>>(
           `/households/${householdId}/chores/${choreId}/subtasks`,
@@ -156,7 +173,8 @@ export class ChoreService extends BaseApiClient {
       choreId: string,
       subtaskData: CreateSubtaskDTO,
       signal?: AbortSignal
-    ): Promise<Subtask> => {
+    ): Promise<ApiResponse<Subtask>> => {
+      logger.debug("Adding subtask", { householdId, choreId, subtaskData });
       return this.handleRequest(() =>
         this.axiosInstance.post<ApiResponse<Subtask>>(
           `/households/${householdId}/chores/${choreId}/subtasks`,
@@ -175,7 +193,13 @@ export class ChoreService extends BaseApiClient {
       subtaskId: string,
       subtaskData: UpdateSubtaskDTO,
       signal?: AbortSignal
-    ): Promise<Subtask> => {
+    ): Promise<ApiResponse<Subtask>> => {
+      logger.debug("Updating subtask", {
+        householdId,
+        choreId,
+        subtaskId,
+        subtaskData,
+      });
       return this.handleRequest(() =>
         this.axiosInstance.patch<ApiResponse<Subtask>>(
           `/households/${householdId}/chores/${choreId}/subtasks/${subtaskId}`,
@@ -193,7 +217,8 @@ export class ChoreService extends BaseApiClient {
       choreId: string,
       subtaskId: string,
       signal?: AbortSignal
-    ): Promise<void> => {
+    ): Promise<ApiResponse<void>> => {
+      logger.debug("Deleting subtask", { householdId, choreId, subtaskId });
       return this.handleRequest(() =>
         this.axiosInstance.delete<ApiResponse<void>>(
           `/households/${householdId}/chores/${choreId}/subtasks/${subtaskId}`,

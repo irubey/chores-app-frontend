@@ -1,21 +1,29 @@
 import { ApiResponse } from "@shared/interfaces";
 import {
-  Notification,
   CreateNotificationDTO,
-  NotificationSettings,
+  NotificationWithUser,
+  UpdateNotificationDTO,
+  NotificationSettingsWithUserAndHousehold,
   UpdateNotificationSettingsDTO,
 } from "@shared/types";
 import { BaseApiClient } from "../baseClient";
+import { logger } from "../logger";
 
 export class NotificationService extends BaseApiClient {
   /**
    * Get all notifications for the current user
    */
-  public async getNotifications(signal?: AbortSignal): Promise<Notification[]> {
+  public async getNotifications(
+    signal?: AbortSignal
+  ): Promise<ApiResponse<NotificationWithUser[]>> {
+    logger.debug("Getting notifications");
     return this.handleRequest(() =>
-      this.axiosInstance.get<ApiResponse<Notification[]>>("/notifications", {
-        signal,
-      })
+      this.axiosInstance.get<ApiResponse<NotificationWithUser[]>>(
+        "/notifications",
+        {
+          signal,
+        }
+      )
     );
   }
 
@@ -25,9 +33,10 @@ export class NotificationService extends BaseApiClient {
   public async createNotification(
     notificationData: CreateNotificationDTO,
     signal?: AbortSignal
-  ): Promise<Notification> {
+  ): Promise<ApiResponse<NotificationWithUser>> {
+    logger.debug("Creating notification", { notificationData });
     return this.handleRequest(() =>
-      this.axiosInstance.post<ApiResponse<Notification>>(
+      this.axiosInstance.post<ApiResponse<NotificationWithUser>>(
         "/notifications",
         notificationData,
         { signal }
@@ -41,11 +50,13 @@ export class NotificationService extends BaseApiClient {
   public async markNotificationAsRead(
     notificationId: string,
     signal?: AbortSignal
-  ): Promise<Notification> {
+  ): Promise<ApiResponse<NotificationWithUser>> {
+    logger.debug("Marking notification as read", { notificationId });
+    const updateData: UpdateNotificationDTO = { isRead: true };
     return this.handleRequest(() =>
-      this.axiosInstance.patch<ApiResponse<Notification>>(
+      this.axiosInstance.patch<ApiResponse<NotificationWithUser>>(
         `/notifications/${notificationId}/read`,
-        {},
+        updateData,
         { signal }
       )
     );
@@ -57,7 +68,8 @@ export class NotificationService extends BaseApiClient {
   public async deleteNotification(
     notificationId: string,
     signal?: AbortSignal
-  ): Promise<void> {
+  ): Promise<ApiResponse<void>> {
+    logger.debug("Deleting notification", { notificationId });
     return this.handleRequest(() =>
       this.axiosInstance.delete<ApiResponse<void>>(
         `/notifications/${notificationId}`,
@@ -77,16 +89,16 @@ export class NotificationService extends BaseApiClient {
       userId?: string,
       householdId?: string,
       signal?: AbortSignal
-    ): Promise<NotificationSettings> => {
+    ): Promise<ApiResponse<NotificationSettingsWithUserAndHousehold>> => {
+      logger.debug("Getting notification settings", { userId, householdId });
       const params = new URLSearchParams();
       if (userId) params.append("userId", userId);
       if (householdId) params.append("householdId", householdId);
 
       return this.handleRequest(() =>
-        this.axiosInstance.get<ApiResponse<NotificationSettings>>(
-          `/notifications/settings?${params.toString()}`,
-          { signal }
-        )
+        this.axiosInstance.get<
+          ApiResponse<NotificationSettingsWithUserAndHousehold>
+        >(`/notifications/settings?${params.toString()}`, { signal })
       );
     },
 
@@ -95,15 +107,17 @@ export class NotificationService extends BaseApiClient {
      */
     updateSettings: async (
       settingsId: string,
-      settingsData: Partial<NotificationSettings>,
+      settingsData: UpdateNotificationSettingsDTO,
       signal?: AbortSignal
-    ): Promise<NotificationSettings> => {
+    ): Promise<ApiResponse<NotificationSettingsWithUserAndHousehold>> => {
+      logger.debug("Updating notification settings", {
+        settingsId,
+        settingsData,
+      });
       return this.handleRequest(() =>
-        this.axiosInstance.patch<ApiResponse<NotificationSettings>>(
-          `/notifications/settings/${settingsId}`,
-          settingsData,
-          { signal }
-        )
+        this.axiosInstance.patch<
+          ApiResponse<NotificationSettingsWithUserAndHousehold>
+        >(`/notifications/settings/${settingsId}`, settingsData, { signal })
       );
     },
   };

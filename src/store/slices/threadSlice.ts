@@ -7,13 +7,17 @@ import {
   ThreadWithParticipants,
   CreateThreadDTO,
   UpdateThreadDTO,
+  ThreadWithDetails,
 } from "@shared/types";
+import { PaginationOptions } from "@shared/interfaces";
 import type { RootState } from "../store";
 import { ApiError } from "@api/errors";
 
 export interface ThreadState {
   threads: ThreadWithMessages[];
   selectedThread: ThreadWithMessages | null;
+  hasMore: boolean;
+  nextCursor?: string;
   status: {
     list: "idle" | "loading" | "succeeded" | "failed";
     create: "idle" | "loading" | "succeeded" | "failed";
@@ -28,6 +32,8 @@ export interface ThreadState {
 const initialState: ThreadState = {
   threads: [],
   selectedThread: null,
+  hasMore: true,
+  nextCursor: undefined,
   status: {
     list: "idle",
     create: "idle",
@@ -41,20 +47,32 @@ const initialState: ThreadState = {
 
 // Async Thunks
 export const fetchThreads = createAsyncThunk<
-  ThreadWithMessages[],
-  { householdId: string },
-  { rejectValue: string }
->("threads/fetchThreads", async ({ householdId }, { rejectWithValue }) => {
-  try {
-    const threads = await apiClient.threads.threads.getThreads(householdId);
-    return threads;
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return rejectWithValue(error.message);
-    }
-    return rejectWithValue("Failed to fetch threads");
+  ThreadWithDetails[],
+  { householdId: string; options?: PaginationOptions },
+  {
+    rejectValue: string;
+    fulfilledMeta: { hasMore: boolean; nextCursor?: string };
   }
-});
+>(
+  "threads/fetchThreads",
+  async ({ householdId, options }, { rejectWithValue, fulfillWithValue }) => {
+    try {
+      const response = await apiClient.threads.threads.getThreads(
+        householdId,
+        options
+      );
+      return fulfillWithValue(response.data, {
+        hasMore: response.pagination?.hasMore ?? false,
+        nextCursor: response.pagination?.nextCursor,
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return rejectWithValue(error.message);
+      }
+      return rejectWithValue("Failed to fetch threads");
+    }
+  }
+);
 
 export const createThread = createAsyncThunk<
   ThreadWithParticipants,
@@ -64,11 +82,11 @@ export const createThread = createAsyncThunk<
   "threads/createThread",
   async ({ householdId, threadData }, { rejectWithValue }) => {
     try {
-      const thread = await apiClient.threads.threads.createThread(
+      const response = await apiClient.threads.threads.createThread(
         householdId,
         threadData
       );
-      return thread;
+      return response.data;
     } catch (error) {
       if (error instanceof ApiError) {
         return rejectWithValue(error.message);
@@ -86,11 +104,11 @@ export const fetchThreadDetails = createAsyncThunk<
   "threads/fetchThreadDetails",
   async ({ householdId, threadId }, { rejectWithValue }) => {
     try {
-      const thread = await apiClient.threads.threads.getThreadDetails(
+      const response = await apiClient.threads.threads.getThreadDetails(
         householdId,
         threadId
       );
-      return thread;
+      return response.data;
     } catch (error) {
       if (error instanceof ApiError) {
         return rejectWithValue(error.message);
@@ -108,12 +126,12 @@ export const updateThread = createAsyncThunk<
   "threads/updateThread",
   async ({ householdId, threadId, threadData }, { rejectWithValue }) => {
     try {
-      const thread = await apiClient.threads.threads.updateThread(
+      const response = await apiClient.threads.threads.updateThread(
         householdId,
         threadId,
         threadData
       );
-      return thread;
+      return response.data;
     } catch (error) {
       if (error instanceof ApiError) {
         return rejectWithValue(error.message);
@@ -150,12 +168,12 @@ export const inviteUsersToThread = createAsyncThunk<
   "threads/inviteUsers",
   async ({ householdId, threadId, userIds }, { rejectWithValue }) => {
     try {
-      const thread = await apiClient.threads.threads.inviteUsers(
+      const response = await apiClient.threads.threads.inviteUsers(
         householdId,
         threadId,
         userIds
       );
-      return thread;
+      return response.data;
     } catch (error) {
       if (error instanceof ApiError) {
         return rejectWithValue(error.message);
@@ -186,7 +204,13 @@ const threadSlice = createSlice({
       })
       .addCase(fetchThreads.fulfilled, (state, action) => {
         state.status.list = "succeeded";
-        state.threads = action.payload;
+        if (action.meta.arg.options?.cursor) {
+          state.threads = [...state.threads, ...action.payload];
+        } else {
+          state.threads = action.payload;
+        }
+        state.hasMore = action.meta.hasMore;
+        state.nextCursor = action.meta.nextCursor;
       })
       .addCase(fetchThreads.rejected, (state, action) => {
         state.status.list = "failed";
@@ -298,7 +322,7 @@ const threadSlice = createSlice({
       })
       .addCase(inviteUsersToThread.rejected, (state, action) => {
         state.status.invite = "failed";
-        state.error = action.payload || "Failed to invite users to thread";
+        state.error = action.payload ?? "Failed to invite users to thread";
       });
   },
 });

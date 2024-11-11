@@ -5,6 +5,7 @@ import Spinner from "@/components/common/Spinner";
 import { useInView } from "react-intersection-observer";
 import { useMessages } from "@/hooks/useMessages";
 import { PaginationOptions } from "@shared/interfaces";
+import { useThreads } from "@/hooks/useThreads";
 
 interface MessageListProps {
   messages: MessageWithDetails[];
@@ -19,7 +20,8 @@ const MessageList: React.FC<MessageListProps> = ({
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { ref: loadMoreRef, inView } = useInView();
-  const { hasMore, nextCursor, getMessages, selectedThread } = useMessages();
+  const { hasMore, nextCursor, getMessages } = useMessages();
+  const { selectedThread } = useThreads();
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -32,7 +34,7 @@ const MessageList: React.FC<MessageListProps> = ({
       const paginationOptions: PaginationOptions = {
         cursor: nextCursor,
         limit: 20,
-        direction: "desc", // Most recent messages first
+        direction: "desc",
         sortBy: "createdAt",
       };
 

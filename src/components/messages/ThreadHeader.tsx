@@ -5,8 +5,9 @@ import {
   ThreadWithParticipants,
   HouseholdMemberWithUser,
   HouseholdMember,
+  Household,
 } from "@shared/types";
-import { useMessages } from "@/hooks/useMessages";
+import { useThreads } from "@/hooks/useThreads";
 import { useHousehold } from "@/hooks/useHousehold";
 import {
   EllipsisHorizontalIcon,
@@ -23,31 +24,8 @@ const ThreadHeader: React.FC<ThreadHeaderProps> = ({ thread }) => {
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [newParticipants, setNewParticipants] = useState<string[]>([]);
 
-  const { editThread, inviteUsers, threadStatus } = useMessages();
-  const { selectedHouseholds, members } = useHousehold();
-
-  const currentHousehold = selectedHouseholds.find(
-    (h) => h.id === thread.householdId
-  );
-
-  const availableMembers = members.filter(
-    (m): m is HouseholdMemberWithUser =>
-      m.householdId === thread.householdId &&
-      "user" in m &&
-      !thread.participants.some((p) => p.userId === m.userId)
-  );
-
-  const handleInviteUsers = async () => {
-    if (!newParticipants.length) return;
-
-    try {
-      await inviteUsers(thread.householdId, thread.id, newParticipants);
-      setIsInviteOpen(false);
-      setNewParticipants([]);
-    } catch (error) {
-      console.error("Failed to invite users:", error);
-    }
-  };
+  const { threadStatus } = useThreads();
+  const participants = thread.participants;
 
   // Type guard function to check if a participant has user details
   const hasUserDetails = (
@@ -60,22 +38,13 @@ const ThreadHeader: React.FC<ThreadHeaderProps> = ({ thread }) => {
     );
   };
 
-  // Get full member details including user info
-  const participantsWithDetails = thread.participants.map((participant) => {
-    const memberWithDetails = members.find(
-      (m): m is HouseholdMemberWithUser =>
-        m.userId === participant.userId && "user" in m && m.user !== undefined
-    );
-    return memberWithDetails || participant;
-  });
-
   return (
     <div className="px-6 py-4 border-b border-neutral-200 dark:border-neutral-700 bg-white dark:bg-background-dark">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-h5 mb-1">{thread.title || "Untitled Thread"}</h2>
           <p className="text-sm text-text-secondary">
-            {currentHousehold?.name} • {thread.participants.length} participants
+            {thread.householdId} • {thread.participants.length} participants
           </p>
         </div>
 

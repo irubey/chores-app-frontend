@@ -4,58 +4,54 @@ import { useDispatch, useSelector } from "react-redux";
 import { AppDispatch } from "../store/store";
 import { logger } from "../lib/api/logger";
 import {
+  // Message actions
   fetchMessages,
   createMessage,
   updateMessage,
   deleteMessage,
+  // Reaction actions
   addReaction,
   removeReaction,
-  addAttachment,
-  deleteAttachment,
+  getReactions,
+  getReactionAnalytics,
+  getReactionsByType,
+  // Poll actions
   createPoll,
   updatePoll,
+  deletePoll,
   votePoll,
   removePollVote,
+  getPoll,
+  getPollsInThread,
+  getPollAnalytics,
+  // Attachment actions
+  addAttachment,
+  deleteAttachment,
+  getAttachment,
+  getAttachments,
+  // Read status actions
   markMessageAsRead,
+  getMessageReadStatus,
+  // Mention actions
+  createMention,
+  deleteMention,
+  getUserMentions,
+  getMessageMentions,
+  getUnreadMentionsCount,
+  // State actions
   resetMessages,
+  selectMessage,
+  // Selectors
   selectMessages,
   selectMessageStatus,
   selectMessageError,
   selectHasMore,
   selectNextCursor,
   selectSelectedMessage,
-  selectMessage,
-  deleteMention,
-  deletePoll,
-  createMention,
-  getMessageMentions as getMentions,
-  getUserMentions,
-  getUnreadMentionsCount,
-  getReactionAnalytics,
-  getReactionsByType,
-  getPollAnalytics,
-  getAttachments,
-  getAttachment,
-  getPollsInThread,
-  getPoll,
-  getMessageReadStatus,
 } from "../store/slices/messagesSlice";
 
-import {
-  fetchThreads,
-  createThread,
-  fetchThreadDetails,
-  updateThread,
-  deleteThread,
-  inviteUsersToThread,
-  selectThreads,
-  selectSelectedThread,
-  selectThreadStatus,
-  selectThreadError,
-  selectThread,
-} from "../store/slices/threadSlice";
-
 import type {
+  MessageWithDetails,
   CreateMessageDTO,
   UpdateMessageDTO,
   CreateReactionDTO,
@@ -63,19 +59,20 @@ import type {
   UpdatePollDTO,
   CreatePollVoteDTO,
   CreateMentionDTO,
-  CreateAttachmentDTO,
-  CreateThreadDTO,
-  UpdateThreadDTO,
+  MessageReadStatus,
+  PollWithDetails,
+  Attachment,
+  ReactionWithUser,
+  MentionWithUser,
 } from "@shared/types";
 
 import { PaginationOptions } from "@shared/interfaces";
+import type { RootState } from "../store/store";
 
 export const useMessages = () => {
   const dispatch = useDispatch<AppDispatch>();
 
-  logger.info("useMessages hook initialized", {
-    timestamp: new Date().toISOString(),
-  });
+  logger.info("useMessages hook initialized");
 
   // Message selectors
   const messages = useSelector(selectMessages);
@@ -85,305 +82,253 @@ export const useMessages = () => {
   const nextCursor = useSelector(selectNextCursor);
   const selectedMessage = useSelector(selectSelectedMessage);
 
-  // Thread selectors
-  const threads = useSelector(selectThreads);
-  const selectedThread = useSelector(selectSelectedThread);
-  const threadStatus = useSelector(selectThreadStatus);
-  const threadError = useSelector(selectThreadError);
-
-  // Thread actions
-  const getThreads = useCallback(
-    (householdId: string) => {
-      logger.info("Fetching threads", { householdId });
-      return dispatch(fetchThreads({ householdId }))
-        .then((result) => {
-          logger.info("Threads fetched successfully", {
-            householdId,
-            threadCount: result.payload?.length,
-          });
-          return result;
-        })
-        .catch((error) => {
-          logger.error("Failed to fetch threads", {
-            householdId,
-            error: error.message,
-            stack: error.stack,
-          });
-          throw error;
-        });
-    },
-    [dispatch]
-  );
-
-  const startNewThread = useCallback(
-    (householdId: string, threadData: CreateThreadDTO) =>
-      dispatch(createThread({ householdId, threadData })),
-    [dispatch]
-  );
-
-  const getThreadDetails = (householdId: string, threadId: string) =>
-    dispatch(fetchThreadDetails({ householdId, threadId }));
-
-  const editThread = (
-    householdId: string,
-    threadId: string,
-    threadData: { title?: string }
-  ) => dispatch(updateThread({ householdId, threadId, threadData }));
-
-  const removeThread = (householdId: string, threadId: string) =>
-    dispatch(deleteThread({ householdId, threadId }));
-
-  const inviteUsers = (
-    householdId: string,
-    threadId: string,
-    userIds: string[]
-  ) => dispatch(inviteUsersToThread({ householdId, threadId, userIds }));
-
   // Message actions
   const getMessages = useCallback(
-    (householdId: string, threadId: string, options?: PaginationOptions) =>
-      dispatch(fetchMessages({ householdId, threadId, options })),
-    [dispatch]
+    async (
+      householdId: string,
+      threadId: string,
+      options?: PaginationOptions
+    ) => {
+      logger.info("Fetching messages", { householdId, threadId, options });
+      try {
+        const result = await dispatch(
+          fetchMessages({ householdId, threadId, options })
+        ).unwrap();
+        logger.info("Messages fetched successfully", {
+          messageCount: result.length,
+          hasMore,
+          nextCursor,
+        });
+        return result;
+      } catch (error) {
+        logger.error("Failed to fetch messages", { error });
+        throw error;
+      }
+    },
+    [dispatch, hasMore, nextCursor]
   );
 
   const sendMessage = useCallback(
-    (householdId: string, threadId: string, messageData: CreateMessageDTO) => {
-      logger.info("Sending message", { householdId, threadId });
-      return dispatch(createMessage({ householdId, threadId, messageData }))
-        .then((result) => {
-          logger.info("Message sent successfully", { threadId });
-          return result;
-        })
-        .catch((error) => {
-          logger.error("Failed to send message", { threadId, error });
-          throw error;
-        });
+    async (
+      householdId: string,
+      threadId: string,
+      messageData: CreateMessageDTO
+    ) => {
+      logger.info("Sending message", { threadId });
+      try {
+        const result = await dispatch(
+          createMessage({ householdId, threadId, messageData })
+        ).unwrap();
+        logger.info("Message sent successfully", { messageId: result.id });
+        return result;
+      } catch (error) {
+        logger.error("Failed to send message", { error });
+        throw error;
+      }
     },
     [dispatch]
   );
 
-  const editMessage = (
-    householdId: string,
-    threadId: string,
-    messageId: string,
-    messageData: UpdateMessageDTO
-  ) =>
-    dispatch(updateMessage({ householdId, threadId, messageId, messageData }));
+  const editMessage = useCallback(
+    async (
+      householdId: string,
+      threadId: string,
+      messageId: string,
+      messageData: UpdateMessageDTO
+    ) => {
+      logger.info("Editing message", { messageId });
+      try {
+        const result = await dispatch(
+          updateMessage({ householdId, threadId, messageId, messageData })
+        ).unwrap();
+        logger.info("Message edited successfully", { messageId });
+        return result;
+      } catch (error) {
+        logger.error("Failed to edit message", { error });
+        throw error;
+      }
+    },
+    [dispatch]
+  );
 
-  const removeMessage = (
-    householdId: string,
-    threadId: string,
-    messageId: string
-  ) => dispatch(deleteMessage({ householdId, threadId, messageId }));
+  const removeMessage = useCallback(
+    async (householdId: string, threadId: string, messageId: string) => {
+      logger.info("Removing message", { messageId });
+      try {
+        await dispatch(
+          deleteMessage({ householdId, threadId, messageId })
+        ).unwrap();
+        logger.info("Message removed successfully", { messageId });
+      } catch (error) {
+        logger.error("Failed to remove message", { error });
+        throw error;
+      }
+    },
+    [dispatch]
+  );
 
   // Reaction actions
-  const addMessageReaction = (
-    householdId: string,
-    threadId: string,
-    messageId: string,
-    reaction: CreateReactionDTO
-  ) => dispatch(addReaction({ householdId, threadId, messageId, reaction }));
+  const addReaction = useCallback(
+    async (
+      householdId: string,
+      threadId: string,
+      messageId: string,
+      reaction: CreateReactionDTO
+    ) => {
+      logger.info("Adding reaction", { messageId });
+      try {
+        const result = await dispatch(
+          addReaction(householdId, threadId, messageId, reaction)
+        ).unwrap();
+        logger.info("Reaction added successfully");
+        return result;
+      } catch (error) {
+        logger.error("Failed to add reaction", { error });
+        throw error;
+      }
+    },
+    [dispatch]
+  );
 
-  const removeMessageReaction = (
-    householdId: string,
-    threadId: string,
-    messageId: string,
-    reactionId: string
-  ) =>
-    dispatch(removeReaction({ householdId, threadId, messageId, reactionId }));
-
-  // Attachment actions
-  const addMessageAttachment = (
-    householdId: string,
-    threadId: string,
-    messageId: string,
-    file: File
-  ) => dispatch(addAttachment({ householdId, threadId, messageId, file }));
-
-  const removeMessageAttachment = (
-    householdId: string,
-    threadId: string,
-    messageId: string,
-    attachmentId: string
-  ) =>
-    dispatch(
-      deleteAttachment({ householdId, threadId, messageId, attachmentId })
-    );
-
-  const getMessageAttachments = (
-    householdId: string,
-    threadId: string,
-    messageId: string
-  ) => dispatch(getAttachments({ householdId, threadId, messageId }));
-
-  const getMessageAttachment = (
-    householdId: string,
-    threadId: string,
-    messageId: string,
-    attachmentId: string
-  ) =>
-    dispatch(getAttachment({ householdId, threadId, messageId, attachmentId }));
+  const removeReaction = useCallback(
+    async (
+      householdId: string,
+      threadId: string,
+      messageId: string,
+      reactionId: string
+    ) => {
+      logger.info("Removing reaction", { messageId, reactionId });
+      try {
+        const result = await dispatch(
+          removeReaction(householdId, threadId, messageId, reactionId)
+        ).unwrap();
+        logger.info("Reaction removed successfully");
+        return result;
+      } catch (error) {
+        logger.error("Failed to remove reaction", { error });
+        throw error;
+      }
+    },
+    [dispatch]
+  );
 
   // Poll actions
-  const createMessagePoll = (
-    householdId: string,
-    threadId: string,
-    messageId: string,
-    pollData: CreatePollDTO
-  ) => dispatch(createPoll({ householdId, threadId, messageId, pollData }));
+  const createPoll = useCallback(
+    async (
+      householdId: string,
+      threadId: string,
+      messageId: string,
+      pollData: CreatePollDTO
+    ) => {
+      logger.info("Creating poll", { messageId });
+      try {
+        const result = await dispatch(
+          createPoll(householdId, threadId, messageId, pollData)
+        ).unwrap();
+        logger.info("Poll created successfully");
+        return result;
+      } catch (error) {
+        logger.error("Failed to create poll", { error });
+        throw error;
+      }
+    },
+    [dispatch]
+  );
 
-  const updateMessagePoll = (
-    householdId: string,
-    threadId: string,
-    messageId: string,
-    pollId: string,
-    pollData: UpdatePollDTO
-  ) =>
-    dispatch(
-      updatePoll({ householdId, threadId, messageId, pollId, pollData })
-    );
+  const votePoll = useCallback(
+    async (
+      householdId: string,
+      threadId: string,
+      messageId: string,
+      pollId: string,
+      vote: CreatePollVoteDTO
+    ) => {
+      logger.info("Voting on poll", { messageId, pollId });
+      try {
+        const result = await dispatch(
+          votePoll(householdId, threadId, messageId, pollId, vote)
+        ).unwrap();
+        logger.info("Poll vote submitted successfully");
+        return result;
+      } catch (error) {
+        logger.error("Failed to vote on poll", { error });
+        throw error;
+      }
+    },
+    [dispatch]
+  );
 
-  const deleteMessagePoll = (
-    householdId: string,
-    threadId: string,
-    messageId: string,
-    pollId: string
-  ) => dispatch(deletePoll({ householdId, threadId, messageId, pollId }));
+  // Attachment actions
+  const addAttachment = useCallback(
+    async (
+      householdId: string,
+      threadId: string,
+      messageId: string,
+      file: File
+    ) => {
+      logger.info("Adding attachment", { messageId });
+      try {
+        const result = await dispatch(
+          addAttachment(householdId, threadId, messageId, file)
+        ).unwrap();
+        logger.info("Attachment added successfully");
+        return result;
+      } catch (error) {
+        logger.error("Failed to add attachment", { error });
+        throw error;
+      }
+    },
+    [dispatch]
+  );
 
-  const voteOnPoll = (
-    householdId: string,
-    threadId: string,
-    messageId: string,
-    pollId: string,
-    vote: CreatePollVoteDTO
-  ) => dispatch(votePoll({ householdId, threadId, messageId, pollId, vote }));
-
-  const removeVoteFromPoll = (
-    householdId: string,
-    threadId: string,
-    messageId: string,
-    pollId: string,
-    optionId: string
-  ) =>
-    dispatch(
-      removePollVote({ householdId, threadId, messageId, pollId, optionId })
-    );
-
-  const getMessagePollAnalytics = (
-    householdId: string,
-    threadId: string,
-    messageId: string,
-    pollId: string
-  ) => dispatch(getPollAnalytics({ householdId, threadId, messageId, pollId }));
-
-  const getThreadPolls = (
-    householdId: string,
-    threadId: string,
-    messageId: string
-  ) => dispatch(getPollsInThread({ householdId, threadId, messageId }));
-
-  const getPollDetails = (
-    householdId: string,
-    threadId: string,
-    messageId: string,
-    pollId: string
-  ) => dispatch(getPoll({ householdId, threadId, messageId, pollId }));
+  const deleteAttachment = useCallback(
+    async (
+      householdId: string,
+      threadId: string,
+      messageId: string,
+      attachmentId: string
+    ) => {
+      logger.info("Deleting attachment", { messageId, attachmentId });
+      try {
+        const result = await dispatch(
+          deleteAttachment(householdId, threadId, messageId, attachmentId)
+        ).unwrap();
+        logger.info("Attachment deleted successfully");
+        return result;
+      } catch (error) {
+        logger.error("Failed to delete attachment", { error });
+        throw error;
+      }
+    },
+    [dispatch]
+  );
 
   // Read status actions
-  const markAsRead = (
-    householdId: string,
-    threadId: string,
-    messageId: string
-  ) => dispatch(markMessageAsRead({ householdId, threadId, messageId }));
-
-  const getReadStatus = (
-    householdId: string,
-    threadId: string,
-    messageId: string
-  ) => dispatch(getMessageReadStatus({ householdId, threadId, messageId }));
-
-  // Mention actions
-  const createMessageMention = (
-    householdId: string,
-    threadId: string,
-    messageId: string,
-    mentionData: CreateMentionDTO
-  ) =>
-    dispatch(createMention({ householdId, threadId, messageId, mentionData }));
-
-  const deleteMessageMention = (
-    householdId: string,
-    threadId: string,
-    messageId: string,
-    mentionId: string
-  ) => dispatch(deleteMention({ householdId, threadId, messageId, mentionId }));
-
-  const getMessageMentions = (
-    householdId: string,
-    threadId: string,
-    messageId: string
-  ) => dispatch(getMentions({ householdId, threadId, messageId }));
-
-  const getUserMentionsList = (householdId: string) =>
-    dispatch(getUserMentions({ householdId }));
-
-  const getUnreadMentionsTotal = (householdId: string) =>
-    dispatch(getUnreadMentionsCount({ householdId }));
-
-  // Analytics actions
-  const getMessageReactionAnalytics = (householdId: string) =>
-    dispatch(getReactionAnalytics({ householdId }));
-
-  const getMessageReactionsByType = (householdId: string) =>
-    dispatch(getReactionsByType({ householdId }));
-
-  // Reset action
-  const reset = useCallback(() => {
-    logger.info("Resetting messages state");
-    dispatch(resetMessages());
-  }, [dispatch]);
+  const markAsRead = useCallback(
+    async (householdId: string, threadId: string, messageId: string) => {
+      logger.info("Marking message as read", { messageId });
+      try {
+        const result = await dispatch(
+          markMessageAsRead({ householdId, threadId, messageId })
+        ).unwrap();
+        logger.info("Message marked as read successfully");
+        return result;
+      } catch (error) {
+        logger.error("Failed to mark message as read", { error });
+        throw error;
+      }
+    },
+    [dispatch]
+  );
 
   return {
     // State
     messages,
-    threads,
-    selectedThread,
     selectedMessage,
     messageStatus,
-    threadStatus,
     messageError,
-    threadError,
     hasMore,
     nextCursor,
-
-    // State management
-    selectMessageById: useCallback(
-      (messageId: string) => {
-        logger.info("Selecting message", { messageId });
-        const message = messages.find((m) => m.id === messageId);
-        if (message) {
-          dispatch(selectMessage(message));
-          logger.info("Message selected", { messageId });
-        } else {
-          logger.error("Message not found", { messageId });
-        }
-      },
-      [messages, dispatch]
-    ),
-    selectThreadById: (threadId: string) => {
-      const thread = threads.find((t) => t.id === threadId);
-      if (thread) {
-        dispatch(selectThread(thread));
-      }
-    },
-
-    // Thread actions
-    getThreads,
-    startNewThread,
-    getThreadDetails,
-    editThread,
-    removeThread,
-    inviteUsers,
 
     // Message actions
     getMessages,
@@ -391,40 +336,25 @@ export const useMessages = () => {
     editMessage,
     removeMessage,
 
+    // Poll actions
+    createPoll,
+    votePoll,
+
     // Reaction actions
-    addMessageReaction,
-    removeMessageReaction,
-    getMessageReactionAnalytics,
-    getMessageReactionsByType,
+    addReaction,
+    removeReaction,
 
     // Attachment actions
-    addMessageAttachment,
-    removeMessageAttachment,
-    getMessageAttachments,
-    getMessageAttachment,
-
-    // Poll actions
-    createMessagePoll,
-    updateMessagePoll,
-    deleteMessagePoll,
-    voteOnPoll,
-    removeVoteFromPoll,
-    getMessagePollAnalytics,
-    getThreadPolls,
-    getPollDetails,
+    addAttachment,
+    deleteAttachment,
 
     // Read status actions
     markAsRead,
-    getReadStatus,
-
-    // Mention actions
-    createMessageMention,
-    deleteMessageMention,
-    getMessageMentions,
-    getUserMentionsList,
-    getUnreadMentionsTotal,
 
     // Reset action
-    reset,
+    reset: useCallback(() => {
+      logger.info("Resetting messages state");
+      dispatch(resetMessages());
+    }, [dispatch]),
   };
 };

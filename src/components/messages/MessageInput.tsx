@@ -5,71 +5,85 @@ import {
   PaperClipIcon,
   PhotoIcon,
 } from "@heroicons/react/24/outline";
-import { CreateMessageDTO, MessageWithDetails } from "@shared/types";
+import {
+  CreateMessageDTO,
+  MessageWithDetails,
+  ThreadWithMessages,
+} from "@shared/types";
+import { logger } from "@/lib/api/logger";
 
 interface MessageInputProps {
-  threadId: string;
+  selectedThread: ThreadWithMessages;
 }
 
-const MessageInput: React.FC<MessageInputProps> = ({ threadId }) => {
+const MessageInput: React.FC<MessageInputProps> = ({ selectedThread }) => {
   const [message, setMessage] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { selectedThread, sendMessage, addMessageAttachment } = useMessages();
+  const { sendMessage, addAttachment } = useMessages();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if ((!message.trim() && !pendingFiles.length) || !selectedThread) return;
 
+    logger.info("Submitting message", { threadId: selectedThread.id });
+
     try {
       const messageData: CreateMessageDTO = {
-        threadId,
+        threadId: selectedThread.id,
         content: message.trim(),
       };
 
+      // Send the message
       const response = await sendMessage(
         selectedThread.householdId,
-        threadId,
+        selectedThread.id,
         messageData
       );
 
-      // Check if the action was fulfilled and has payload data
-      if (response.meta.requestStatus === "fulfilled" && response.payload) {
-        const newMessage = response.payload as MessageWithDetails;
+      // Upload any pending files
+      if (pendingFiles.length > 0 && response) {
+        setIsUploading(true);
+        logger.info("Uploading attachments", {
+          messageId: response.id,
+          fileCount: pendingFiles.length,
+        });
 
-        // Upload any pending files
-        if (pendingFiles.length > 0 && newMessage.id) {
-          setIsUploading(true);
-          try {
-            for (const file of pendingFiles) {
-              await addMessageAttachment(
+        try {
+          await Promise.all(
+            pendingFiles.map((file) =>
+              addAttachment(
                 selectedThread.householdId,
-                threadId,
-                newMessage.id,
+                selectedThread.id,
+                response.id,
                 file
-              );
-            }
-          } finally {
-            setIsUploading(false);
-            setPendingFiles([]);
-            if (fileInputRef.current) {
-              fileInputRef.current.value = "";
-            }
+              )
+            )
+          );
+        } catch (error) {
+          logger.error("Failed to upload attachments", { error });
+          throw error;
+        } finally {
+          setIsUploading(false);
+          setPendingFiles([]);
+          if (fileInputRef.current) {
+            fileInputRef.current.value = "";
           }
         }
       }
 
       setMessage("");
+      logger.info("Message sent successfully", { messageId: response.id });
     } catch (error) {
-      console.error("Failed to send message:", error);
+      logger.error("Failed to send message", { error });
+      // Here you might want to show an error toast/notification
     }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
-
     setPendingFiles(Array.from(files));
   };
 
