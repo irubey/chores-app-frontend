@@ -14,8 +14,8 @@ import type { RootState } from "../store";
 import { ApiError } from "@api/errors";
 
 export interface ThreadState {
-  threads: ThreadWithMessages[];
-  selectedThread: ThreadWithMessages | null;
+  threads: ThreadWithDetails[];
+  selectedThread: ThreadWithDetails | null;
   hasMore: boolean;
   nextCursor?: string;
   status: {
@@ -188,7 +188,7 @@ const threadSlice = createSlice({
   initialState,
   reducers: {
     resetThreads: () => initialState,
-    selectThread: (state, action: PayloadAction<ThreadWithMessages | null>) => {
+    selectThread: (state, action: PayloadAction<ThreadWithDetails | null>) => {
       state.selectedThread = action.payload;
     },
     clearThreadError: (state) => {

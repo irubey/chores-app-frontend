@@ -1,43 +1,31 @@
 import React from "react";
-import { Thread } from "@shared/types";
+import { ThreadWithDetails, HouseholdWithMembers } from "@shared/types";
 import ThreadItem from "./ThreadItem";
 import Spinner from "@/components/common/Spinner";
-import { useHousehold } from "@/hooks/useHousehold";
 import NewThreadModal from "../NewThreadModal";
-import { useEffect } from "react";
+import { logger } from "@/lib/api/logger";
 
 interface ThreadListProps {
-  threads: Thread[];
+  threads: ThreadWithDetails[];
   selectedThreadId?: string;
+  loadMore: () => void;
+  hasMore: boolean;
+  isLoading: boolean;
+  selectedHouseholds: HouseholdWithMembers[];
 }
 
 const ThreadList: React.FC<ThreadListProps> = ({
   threads,
   selectedThreadId,
+  loadMore,
+  hasMore,
+  isLoading,
+  selectedHouseholds,
 }) => {
-  const { selectedHouseholds, getSelectedHouseholds, status } = useHousehold();
-
-  useEffect(() => {
-    getSelectedHouseholds();
-  }, [getSelectedHouseholds]);
-
-  if (status.list === "loading") {
+  if (isLoading && !threads.length) {
     return (
       <div data-testid="thread-list-loading" role="progressbar">
         <Spinner />
-      </div>
-    );
-  }
-
-  if (selectedHouseholds.length === 0) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-text-secondary mb-4">No households selected</p>
-          <p className="text-sm text-text-secondary mb-4">
-            Select households in settings to view their threads
-          </p>
-        </div>
       </div>
     );
   }
@@ -83,6 +71,19 @@ const ThreadList: React.FC<ThreadListProps> = ({
           </div>
         )}
       </div>
+
+      {/* Load More Button */}
+      {hasMore && (
+        <div className="p-4 border-t border-neutral-200 dark:border-neutral-700">
+          <button
+            onClick={loadMore}
+            disabled={isLoading}
+            className="btn btn-secondary w-full"
+          >
+            {isLoading ? <Spinner className="h-5 w-5" /> : "Load More"}
+          </button>
+        </div>
+      )}
     </div>
   );
 };

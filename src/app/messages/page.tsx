@@ -1,7 +1,7 @@
 "use client";
 
 import { useMessages } from "@/hooks/useMessages";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useCallback } from "react";
 import { useParams } from "next/navigation";
 import ThreadList from "@/components/messages/ThreadList/ThreadList";
 import MessageList from "@/components/messages/MessageList/MessageList";
@@ -9,32 +9,18 @@ import ThreadHeader from "@/components/messages/ThreadHeader";
 import MessageInput from "@/components/messages/MessageInput";
 import NewThreadModal from "@/components/messages/NewThreadModal";
 import { useThreads } from "@/hooks/useThreads";
-import {
-  User,
-  ThreadWithParticipants,
-  ThreadWithDetails,
-  HouseholdWithMembers,
-} from "@shared/types";
+import { User, ThreadWithDetails, HouseholdWithMembers } from "@shared/types";
 import { PaginationOptions } from "@shared/interfaces";
 import Spinner from "@/components/common/Spinner";
+import { logger } from "@/lib/api/logger";
 
+// Move interfaces to separate types file
 interface MessagesPageProps {
   user?: User;
   selectedHouseholds?: HouseholdWithMembers[];
 }
 
-interface ThreadListProps {
-  threads: ThreadWithDetails[];
-  selectedThreadId?: string;
-  loadMore: () => void;
-  hasMore: boolean;
-  isLoading: boolean;
-}
-
-interface MessageInputProps {
-  householdId: string;
-  threadId: string;
-}
+const THREADS_PER_PAGE = 20;
 
 const MessagesPage: React.FC<MessagesPageProps> = ({
   user,
@@ -51,61 +37,76 @@ const MessagesPage: React.FC<MessagesPageProps> = ({
     getThreadDetails,
   } = useThreads();
 
-  const [threadWithParticipants, setThreadWithParticipants] =
-    useState<ThreadWithParticipants | null>(null);
-
   const params = useParams();
   const threadId = params?.threadId as string;
 
-  // Pagination options
-  const THREADS_PER_PAGE = 20;
+  // Memoize thread with details to prevent unnecessary rerenders
+  const threadWithDetails = useMemo(() => {
+    if (!selectedThread) return null;
+    return selectedThread as ThreadWithDetails;
+  }, [selectedThread]);
 
-  const loadThreads = async (
-    householdId: string,
-    isInitial: boolean = false
-  ) => {
-    const paginationOptions: PaginationOptions = {
-      limit: THREADS_PER_PAGE,
-      cursor: isInitial ? undefined : nextCursor,
-      direction: "desc",
-      sortBy: "updatedAt",
+  // Memoize the loadThreads function
+  const loadThreads = useCallback(
+    async (householdId: string, isInitial: boolean = false) => {
+      logger.info("Loading threads", { householdId, isInitial });
+
+      const paginationOptions: PaginationOptions = {
+        limit: THREADS_PER_PAGE,
+        cursor: isInitial ? undefined : nextCursor,
+        direction: "desc",
+        sortBy: "updatedAt",
+      };
+
+      try {
+        await getThreads(householdId, paginationOptions);
+      } catch (error) {
+        logger.error("Failed to load threads", { error, householdId });
+      }
+    },
+    [nextCursor, getThreads]
+  );
+
+  // Load initial threads once when households are available
+  useEffect(() => {
+    if (!selectedHouseholds?.length) {
+      logger.info("Waiting for households from layout");
+      return;
+    }
+
+    logger.info("Loading initial threads", {
+      householdCount: selectedHouseholds.length,
+      households: selectedHouseholds.map((h) => h.id),
+    });
+
+    // Load threads for each household
+    selectedHouseholds.forEach((household) => {
+      loadThreads(household.id, true);
+    });
+  }, [selectedHouseholds, loadThreads]);
+
+  // Load thread details when thread is selected
+  useEffect(() => {
+    if (!threadId || !selectedThread?.householdId) return;
+
+    const loadThreadDetails = async () => {
+      logger.info("Loading thread details", { threadId });
+
+      try {
+        await getMessages(selectedThread.householdId, threadId);
+        await getThreadDetails(selectedThread.householdId, threadId);
+      } catch (error) {
+        logger.error("Failed to load thread details", { error, threadId });
+      }
     };
 
-    try {
-      await getThreads(householdId, paginationOptions);
-    } catch (error) {
-      console.error("Failed to load threads:", error);
-    }
-  };
-
-  // Initial load of threads for each household
-  useEffect(() => {
-    if (selectedHouseholds?.length > 0) {
-      selectedHouseholds.forEach((household) => {
-        loadThreads(household.id, true);
-      });
-    }
-  }, [selectedHouseholds]);
-
-  // Load thread details when a thread is selected
-  useEffect(() => {
-    if (threadId && selectedThread?.householdId) {
-      getMessages(selectedThread.householdId, threadId);
-      getThreadDetails(selectedThread.householdId, threadId)
-        .then((thread) => {
-          if (thread && "participants" in thread) {
-            setThreadWithParticipants(thread as ThreadWithParticipants);
-          }
-        })
-        .catch((error) => {
-          console.error("Failed to load thread details:", error);
-        });
-    }
-  }, [threadId, selectedThread?.householdId, getMessages, getThreadDetails]);
+    loadThreadDetails();
+  }, [threadId, selectedThread?.householdId]);
 
   // Handle loading more threads
   const handleLoadMore = () => {
     if (selectedHouseholds?.length > 0 && hasMore) {
+      logger.info("Loading more threads");
       selectedHouseholds.forEach((household) => {
         loadThreads(household.id);
       });
@@ -121,11 +122,12 @@ const MessagesPage: React.FC<MessagesPageProps> = ({
         </div>
         <div className="flex-1 overflow-y-auto">
           <ThreadList
-            threads={threads}
+            threads={threads as ThreadWithDetails[]}
             selectedThreadId={threadId}
             loadMore={handleLoadMore}
             hasMore={hasMore}
             isLoading={threadStatus.list === "loading"}
+            selectedHouseholds={selectedHouseholds || []}
           />
         </div>
       </div>
@@ -133,8 +135,8 @@ const MessagesPage: React.FC<MessagesPageProps> = ({
       {/* Main message area */}
       {selectedThread ? (
         <div className="flex-1 flex flex-col">
-          {threadWithParticipants ? (
-            <ThreadHeader thread={threadWithParticipants} />
+          {threadWithDetails ? (
+            <ThreadHeader thread={threadWithDetails} />
           ) : (
             <div className="px-6 py-4 border-b border-neutral-200 dark:border-neutral-700">
               <Spinner className="h-5 w-5" />

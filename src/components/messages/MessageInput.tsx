@@ -13,10 +13,14 @@ import {
 import { logger } from "@/lib/api/logger";
 
 interface MessageInputProps {
-  selectedThread: ThreadWithMessages;
+  householdId: string;
+  threadId: string;
 }
 
-const MessageInput: React.FC<MessageInputProps> = ({ selectedThread }) => {
+const MessageInput: React.FC<MessageInputProps> = ({
+  householdId,
+  threadId,
+}) => {
   const [message, setMessage] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
@@ -25,22 +29,18 @@ const MessageInput: React.FC<MessageInputProps> = ({ selectedThread }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if ((!message.trim() && !pendingFiles.length) || !selectedThread) return;
+    if ((!message.trim() && !pendingFiles.length) || !threadId) return;
 
-    logger.info("Submitting message", { threadId: selectedThread.id });
+    logger.info("Submitting message", { threadId });
 
     try {
       const messageData: CreateMessageDTO = {
-        threadId: selectedThread.id,
+        threadId,
         content: message.trim(),
       };
 
       // Send the message
-      const response = await sendMessage(
-        selectedThread.householdId,
-        selectedThread.id,
-        messageData
-      );
+      const response = await sendMessage(householdId, threadId, messageData);
 
       // Upload any pending files
       if (pendingFiles.length > 0 && response) {
@@ -53,12 +53,7 @@ const MessageInput: React.FC<MessageInputProps> = ({ selectedThread }) => {
         try {
           await Promise.all(
             pendingFiles.map((file) =>
-              addAttachment(
-                selectedThread.householdId,
-                selectedThread.id,
-                response.id,
-                file
-              )
+              addAttachment(householdId, threadId, response.id, file)
             )
           );
         } catch (error) {

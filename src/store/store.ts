@@ -1,4 +1,5 @@
-import { configureStore, useDispatch } from "@reduxjs/toolkit";
+import { configureStore } from "@reduxjs/toolkit";
+import { useDispatch } from "react-redux";
 import authReducer from "./slices/authSlice";
 import messagesReducer from "./slices/messagesSlice";
 import financesReducer from "./slices/financesSlice";

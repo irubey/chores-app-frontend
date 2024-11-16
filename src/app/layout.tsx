@@ -120,10 +120,15 @@ function AppContent({ children }: AppContentProps) {
   useEffect(() => {
     const fetchSelectedHouseholds = async () => {
       if (isAuthenticated && !selectedHouseholds?.length) {
-        logger.info("Fetching selected households for authenticated user");
+        logger.info("Fetching selected households for authenticated user", {
+          userId: user?.id,
+        });
+
         try {
           await getSelectedHouseholds();
-          logger.debug("Successfully fetched selected households");
+          logger.info("Successfully fetched selected households", {
+            userId: user?.id,
+          });
         } catch (error) {
           if (error instanceof ApiError) {
             logger.error("Failed to fetch selected households", {
@@ -145,13 +150,11 @@ function AppContent({ children }: AppContentProps) {
       }
     };
 
-    fetchSelectedHouseholds();
-  }, [
-    isAuthenticated,
-    getSelectedHouseholds,
-    selectedHouseholds?.length,
-    user?.id,
-  ]);
+    // Only fetch when authenticated changes
+    if (isAuthenticated) {
+      fetchSelectedHouseholds();
+    }
+  }, [isAuthenticated, getSelectedHouseholds]); // Remove selectedHouseholds.length dependency
 
   if (!isInitialized) {
     logger.debug("Rendering initialization spinner");

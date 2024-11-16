@@ -1,118 +1,118 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import AuthLayout from "../layout";
-import { useAuth } from "../../../hooks/useAuth";
-import Input from "../../../components/common/Input";
-import Button from "../../../components/common/Button";
+import { useAuth } from "@/hooks/useAuth";
+import Input from "@/components/common/Input";
+import Button from "@/components/common/Button";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { logger } from "@/lib/api/logger";
 
 const LoginPage: React.FC = () => {
   const { loginUser, isLoading, error, isAuthenticated } = useAuth();
   const [formData, setFormData] = useState({ email: "", password: "" });
+  const [formErrors, setFormErrors] = useState({ email: "", password: "" });
   const router = useRouter();
-  const { email, password } = formData;
 
   useEffect(() => {
     if (isAuthenticated) {
       const redirectPath =
         sessionStorage.getItem("redirectAfterLogin") || "/dashboard";
       sessionStorage.removeItem("redirectAfterLogin");
+      logger.info("Redirecting authenticated user", { redirectPath });
       router.push(redirectPath);
     }
   }, [isAuthenticated, router]);
 
+  const validateForm = () => {
+    const errors = { email: "", password: "" };
+    let isValid = true;
+
+    if (!formData.email) {
+      errors.email = "Email is required";
+      isValid = false;
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      errors.email = "Please enter a valid email";
+      isValid = false;
+    }
+
+    if (!formData.password) {
+      errors.password = "Password is required";
+      isValid = false;
+    }
+
+    setFormErrors(errors);
+    return isValid;
+  };
+
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+    // Clear error when user starts typing
+    if (formErrors[e.target.name as keyof typeof formErrors]) {
+      setFormErrors({ ...formErrors, [e.target.name]: "" });
+    }
   };
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    logger.info("Attempting login", { email: formData.email });
+
+    if (!validateForm()) return;
+
     try {
-      await loginUser({ email, password });
+      await loginUser(formData);
     } catch (err) {
-      // Error is already handled by the auth slice
-      console.error("Login failed:", err);
+      logger.error("Login failed", { error: err });
     }
   };
 
   return (
-    <AuthLayout>
-      <h2 className="text-h2 text-primary-dark dark:text-primary-light text-center mb-8">
-        Welcome back
-      </h2>
+    <div className="space-y-6">
+      <div className="text-center">
+        <h2 className="text-h3 text-primary-dark dark:text-primary-light">
+          Welcome back
+        </h2>
+        <p className="mt-2 text-sm text-text-secondary">
+          Sign in to your account
+        </p>
+      </div>
 
       {error && (
-        <div className="mb-4 p-4 bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-800 text-red-700 dark:text-red-400 rounded-md">
+        <div className="p-4 bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-800 text-red-700 dark:text-red-400 rounded-md text-sm">
           {error}
         </div>
       )}
 
-      <form onSubmit={onSubmit} className="space-y-6">
-        <div className="space-y-4">
-          <Input
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            required
-            placeholder="Email address"
-            value={email}
-            onChange={onChange}
-            label="Email address"
-            disabled={isLoading}
-            variant="filled"
-            fullWidth
-            startIcon={
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"
-                />
-              </svg>
-            }
-          />
+      <form onSubmit={onSubmit} className="space-y-4">
+        <Input
+          id="email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          required
+          placeholder="Email address"
+          value={formData.email}
+          onChange={onChange}
+          error={formErrors.email}
+          disabled={isLoading}
+          variant="filled"
+          fullWidth
+        />
 
-          <Input
-            id="password"
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            required
-            placeholder="Password"
-            value={password}
-            onChange={onChange}
-            label="Password"
-            disabled={isLoading}
-            variant="filled"
-            fullWidth
-            startIcon={
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                />
-              </svg>
-            }
-          />
-        </div>
+        <Input
+          id="password"
+          name="password"
+          type="password"
+          autoComplete="current-password"
+          required
+          placeholder="Password"
+          value={formData.password}
+          onChange={onChange}
+          error={formErrors.password}
+          disabled={isLoading}
+          variant="filled"
+          fullWidth
+        />
 
         <Button
           type="submit"
@@ -120,22 +120,30 @@ const LoginPage: React.FC = () => {
           size="lg"
           fullWidth
           isLoading={isLoading}
-          className="btn-primary"
         >
           Sign in
         </Button>
       </form>
 
-      <p className="text-center text-sm text-text-secondary">
-        Don't have an account?{" "}
-        <a
-          href="/register"
-          className="text-primary hover:text-primary-dark dark:hover:text-primary-light"
+      <div className="text-center space-y-4">
+        <Link
+          href="/forgot-password"
+          className="text-sm text-primary hover:text-primary-dark dark:hover:text-primary-light"
         >
-          Create one
-        </a>
-      </p>
-    </AuthLayout>
+          Forgot your password?
+        </Link>
+
+        <p className="text-sm text-text-secondary">
+          Don't have an account?{" "}
+          <Link
+            href="/register"
+            className="text-primary hover:text-primary-dark dark:hover:text-primary-light"
+          >
+            Create one
+          </Link>
+        </p>
+      </div>
+    </div>
   );
 };
 

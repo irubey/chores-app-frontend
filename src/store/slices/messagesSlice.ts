@@ -20,9 +20,10 @@ import {
 import type { RootState } from "../store";
 import { ApiError } from "@api/errors";
 import { PaginationOptions } from "@shared/interfaces";
+import { ReactionType } from "@shared/enums";
 
 // State interface
-interface MessageState {
+export interface MessageState {
   messages: MessageWithDetails[];
   selectedMessage: MessageWithDetails | null;
   status: {
@@ -377,16 +378,22 @@ export const removeReaction = createAsyncThunk<
 );
 
 export const getReactionAnalytics = createAsyncThunk<
-  any,
-  { householdId: string },
+  Record<ReactionType, number>,
+  {
+    householdId: string;
+    threadId: string;
+    messageId: string;
+  },
   { rejectValue: string }
 >(
   "messages/getReactionAnalytics",
-  async ({ householdId }, { rejectWithValue }) => {
+  async ({ householdId, threadId, messageId }, { rejectWithValue }) => {
     try {
       const response =
         await apiClient.threads.messages.reactions.getReactionAnalytics(
-          householdId
+          householdId,
+          threadId,
+          messageId
         );
       return response.data;
     } catch (error) {

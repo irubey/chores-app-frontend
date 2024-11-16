@@ -23,6 +23,8 @@ import {
   ThreadWithDetails,
 } from "@shared/types";
 import { BaseApiClient } from "../baseClient";
+import { ReactionType } from "@shared/enums";
+import { logger } from "@/lib/api/logger";
 
 export class ThreadService extends BaseApiClient {
   /**
@@ -37,6 +39,9 @@ export class ThreadService extends BaseApiClient {
       options?: PaginationOptions,
       signal?: AbortSignal
     ): Promise<ApiResponse<ThreadWithDetails[]>> => {
+      console.log("getThreads called");
+      logger.debug("Getting threads", { householdId, options });
+
       return this.handleRequest(() =>
         this.axiosInstance.get<ApiResponse<ThreadWithDetails[]>>(
           `/households/${householdId}/threads`,
@@ -316,11 +321,13 @@ export class ThreadService extends BaseApiClient {
        */
       getReactionAnalytics: async (
         householdId: string,
+        threadId: string,
+        messageId: string,
         signal?: AbortSignal
-      ): Promise<ApiResponse<any>> => {
+      ): Promise<ApiResponse<Record<ReactionType, number>>> => {
         return this.handleRequest(() =>
-          this.axiosInstance.get<ApiResponse<any>>(
-            `/households/${householdId}/messages/reaction-analytics`,
+          this.axiosInstance.get<ApiResponse<Record<ReactionType, number>>>(
+            `/households/${householdId}/threads/${threadId}/messages/${messageId}/reactions/analytics`,
             { signal }
           )
         );
@@ -685,6 +692,23 @@ export class ThreadService extends BaseApiClient {
         this.axiosInstance.post<ApiResponse<MessageReadWithUser>>(
           `/households/${householdId}/threads/${threadId}/messages/${messageId}/read`,
           {},
+          { signal }
+        )
+      );
+    },
+
+    /**
+     * Get read status for a message
+     */
+    getMessageReadStatus: async (
+      householdId: string,
+      threadId: string,
+      messageId: string,
+      signal?: AbortSignal
+    ): Promise<ApiResponse<MessageReadStatus>> => {
+      return this.handleRequest(() =>
+        this.axiosInstance.get<ApiResponse<MessageReadStatus>>(
+          `/households/${householdId}/threads/${threadId}/messages/${messageId}/read-status`,
           { signal }
         )
       );
