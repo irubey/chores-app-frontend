@@ -7,6 +7,7 @@ import {
   UpdateHouseholdDTO,
   AddMemberDTO,
   HouseholdMemberWithUser,
+  HouseholdWithMembers,
 } from "@shared/types";
 import { HouseholdRole } from "@shared/enums";
 import { logger } from "../logger";
@@ -17,13 +18,16 @@ export class HouseholdService extends BaseApiClient {
    */
   public async getUserHouseholds(
     signal?: AbortSignal
-  ): Promise<ApiResponse<Household[]>> {
+  ): Promise<ApiResponse<HouseholdWithMembers[]>> {
     logger.debug("Fetching user households");
 
     return this.handleRequest(() =>
-      this.axiosInstance.get<ApiResponse<Household[]>>("/households", {
-        signal,
-      })
+      this.axiosInstance.get<ApiResponse<HouseholdWithMembers[]>>(
+        "/households",
+        {
+          signal,
+        }
+      )
     );
   }
 
@@ -49,11 +53,11 @@ export class HouseholdService extends BaseApiClient {
   public async getHousehold(
     householdId: string,
     signal?: AbortSignal
-  ): Promise<ApiResponse<Household>> {
+  ): Promise<ApiResponse<HouseholdWithMembers>> {
     logger.debug("Fetching household details", { householdId });
 
     return this.handleRequest(() =>
-      this.axiosInstance.get<ApiResponse<Household>>(
+      this.axiosInstance.get<ApiResponse<HouseholdWithMembers>>(
         `/households/${householdId}`,
         { signal }
       )
@@ -67,11 +71,11 @@ export class HouseholdService extends BaseApiClient {
     householdId: string,
     data: UpdateHouseholdDTO,
     signal?: AbortSignal
-  ): Promise<ApiResponse<Household>> {
+  ): Promise<ApiResponse<HouseholdWithMembers>> {
     logger.debug("Updating household", { householdId, data });
 
     return this.handleRequest(() =>
-      this.axiosInstance.patch<ApiResponse<Household>>(
+      this.axiosInstance.patch<ApiResponse<HouseholdWithMembers>>(
         `/households/${householdId}`,
         data,
         { signal }

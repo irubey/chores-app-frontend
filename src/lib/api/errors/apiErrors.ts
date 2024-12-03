@@ -1,18 +1,21 @@
 export enum ApiErrorType {
   NETWORK = "NETWORK_ERROR",
-  UNAUTHORIZED = "UNAUTHORIZED",
-  FORBIDDEN = "FORBIDDEN",
-  NOT_FOUND = "NOT_FOUND",
+  UNAUTHORIZED = "UNAUTHORIZED_ERROR",
+  FORBIDDEN = "FORBIDDEN_ERROR",
+  NOT_FOUND = "NOT_FOUND_ERROR",
   VALIDATION = "VALIDATION_ERROR",
-  CONFLICT = "CONFLICT",
+  CONFLICT = "CONFLICT_ERROR",
   SERVER = "SERVER_ERROR",
   UNKNOWN = "UNKNOWN_ERROR",
+  RATE_LIMIT = "RATE_LIMIT_ERROR",
+  ABORTED = "ABORTED_ERROR",
 }
 
 export interface ApiErrorData {
   code?: string;
   details?: Record<string, any>;
   validationErrors?: Record<string, string[]>;
+  retryAfter?: number;
 }
 
 export class ApiError extends Error {
@@ -74,10 +77,24 @@ export class ApiError extends Error {
           status,
           data
         );
+      case 429:
+        return new ApiError(
+          message || "Rate limit exceeded",
+          ApiErrorType.RATE_LIMIT,
+          status,
+          data
+        );
       case 500:
         return new ApiError(
           message || "Internal server error",
           ApiErrorType.SERVER,
+          status,
+          data
+        );
+      case 0:
+        return new ApiError(
+          message || "Request aborted",
+          ApiErrorType.ABORTED,
           status,
           data
         );
@@ -89,5 +106,12 @@ export class ApiError extends Error {
           data
         );
     }
+  }
+}
+
+export class NetworkError extends ApiError {
+  constructor(message: string = "Network error occurred") {
+    super(message, ApiErrorType.NETWORK, 0);
+    this.name = "NetworkError";
   }
 }

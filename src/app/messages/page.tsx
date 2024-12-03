@@ -1,133 +1,97 @@
 "use client";
 
 import { useMessages } from "@/hooks/useMessages";
-import { useEffect, useMemo, useCallback } from "react";
+import { useEffect, useMemo } from "react";
 import { useParams } from "next/navigation";
 import ThreadList from "@/components/messages/ThreadList/ThreadList";
 import MessageList from "@/components/messages/MessageList/MessageList";
 import ThreadHeader from "@/components/messages/ThreadHeader";
 import MessageInput from "@/components/messages/MessageInput";
 import NewThreadModal from "@/components/messages/NewThreadModal";
-import { useThreads } from "@/hooks/useThreads";
-import { User, ThreadWithDetails, HouseholdWithMembers } from "@shared/types";
-import { PaginationOptions } from "@shared/interfaces";
+import { useThread } from "@/hooks/useThreads";
 import Spinner from "@/components/common/Spinner";
 import { logger } from "@/lib/api/logger";
+import { useAuth } from "@/hooks/useAuth";
+import { useHousehold } from "@/hooks/useHousehold";
 
-// Move interfaces to separate types file
-interface MessagesPageProps {
-  user?: User;
-  selectedHouseholds?: HouseholdWithMembers[];
-}
-
-const THREADS_PER_PAGE = 20;
-
-const MessagesPage: React.FC<MessagesPageProps> = ({
-  user,
-  selectedHouseholds,
-}) => {
-  const { messages, messageStatus, getMessages } = useMessages();
-  const {
-    threads,
-    selectedThread,
-    threadStatus,
-    hasMore,
-    nextCursor,
-    getThreads,
-    getThreadDetails,
-  } = useThreads();
-
+const MessagesPage = () => {
   const params = useParams();
   const threadId = params?.threadId as string;
 
-  // Memoize thread with details to prevent unnecessary rerenders
-  const threadWithDetails = useMemo(() => {
-    if (!selectedThread) return null;
-    return selectedThread as ThreadWithDetails;
-  }, [selectedThread]);
+  // Get user and household from hooks
+  const { user } = useAuth();
+  const { currentHousehold } = useHousehold();
 
-  // Memoize the loadThreads function
-  const loadThreads = useCallback(
-    async (householdId: string, isInitial: boolean = false) => {
-      logger.info("Loading threads", { householdId, isInitial });
+  // Initialize hooks with current household
+  const {
+    threads,
+    selectedThread,
+    isLoading: isThreadLoading,
+    error: threadError,
+    hasMore,
+    createThread,
+    getThreadDetails,
+    loadMore,
+    refresh: refreshThreads,
+  } = useThread(currentHousehold?.id || "", {
+    pageSize: 20,
+  });
 
-      const paginationOptions: PaginationOptions = {
-        limit: THREADS_PER_PAGE,
-        cursor: isInitial ? undefined : nextCursor,
-        direction: "desc",
-        sortBy: "updatedAt",
-      };
-
-      try {
-        await getThreads(householdId, paginationOptions);
-      } catch (error) {
-        logger.error("Failed to load threads", { error, householdId });
-      }
-    },
-    [nextCursor, getThreads]
-  );
-
-  // Load initial threads once when households are available
-  useEffect(() => {
-    if (!selectedHouseholds?.length) {
-      logger.info("Waiting for households from layout");
-      return;
-    }
-
-    logger.info("Loading initial threads", {
-      householdCount: selectedHouseholds.length,
-      households: selectedHouseholds.map((h) => h.id),
-    });
-
-    // Load threads for each household
-    selectedHouseholds.forEach((household) => {
-      loadThreads(household.id, true);
-    });
-  }, [selectedHouseholds, loadThreads]);
+  const {
+    messages,
+    isLoading: isMessagesLoading,
+    error: messagesError,
+    hasMore: hasMoreMessages,
+    sendMessage,
+    loadMore: loadMoreMessages,
+    refresh: refreshMessages,
+  } = useMessages(currentHousehold?.id || "", threadId || "", {
+    pageSize: 20,
+  });
 
   // Load thread details when thread is selected
   useEffect(() => {
-    if (!threadId || !selectedThread?.householdId) return;
+    if (!threadId || !currentHousehold?.id) return;
 
-    const loadThreadDetails = async () => {
-      logger.info("Loading thread details", { threadId });
+    logger.debug("Loading thread details", {
+      threadId,
+      householdId: currentHousehold.id,
+    });
 
-      try {
-        await getMessages(selectedThread.householdId, threadId);
-        await getThreadDetails(selectedThread.householdId, threadId);
-      } catch (error) {
-        logger.error("Failed to load thread details", { error, threadId });
-      }
-    };
+    getThreadDetails(threadId).catch((error) => {
+      logger.error("Failed to load thread details", { error });
+    });
+  }, [threadId, currentHousehold?.id, getThreadDetails]);
 
-    loadThreadDetails();
-  }, [threadId, selectedThread?.householdId]);
+  // Memoize selected thread details
+  const threadWithDetails = useMemo(() => {
+    return selectedThread;
+  }, [selectedThread]);
 
-  // Handle loading more threads
-  const handleLoadMore = () => {
-    if (selectedHouseholds?.length > 0 && hasMore) {
-      logger.info("Loading more threads");
-      selectedHouseholds.forEach((household) => {
-        loadThreads(household.id);
-      });
-    }
-  };
+  if (!currentHousehold) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <p className="text-text-secondary">Please select a household first</p>
+      </div>
+    );
+  }
 
   return (
     <div className="h-[calc(100vh-4rem)] flex">
       {/* Left sidebar with threads */}
       <div className="w-80 border-r border-neutral-200 dark:border-neutral-700 flex flex-col">
         <div className="p-4 border-b border-neutral-200 dark:border-neutral-700">
-          <NewThreadModal />
+          <NewThreadModal onCreateThread={createThread} />
         </div>
         <div className="flex-1 overflow-y-auto">
           <ThreadList
-            threads={threads as ThreadWithDetails[]}
+            threads={threads}
             selectedThreadId={threadId}
-            loadMore={handleLoadMore}
+            loadMore={loadMore}
             hasMore={hasMore}
-            isLoading={threadStatus.list === "loading"}
-            selectedHouseholds={selectedHouseholds || []}
+            isLoading={isThreadLoading}
+            error={threadError}
+            selectedHousehold={currentHousehold}
           />
         </div>
       </div>
@@ -145,14 +109,18 @@ const MessagesPage: React.FC<MessagesPageProps> = ({
           <div className="flex-1 overflow-y-auto">
             <MessageList
               messages={messages}
-              isLoading={messageStatus.list === "loading"}
+              isLoading={isMessagesLoading}
+              error={messagesError}
+              hasMore={hasMoreMessages}
+              onLoadMore={loadMoreMessages}
               currentUser={user}
             />
           </div>
           <div className="p-4 border-t border-neutral-200 dark:border-neutral-700">
             <MessageInput
-              householdId={selectedThread.householdId}
-              threadId={selectedThread.id}
+              onSendMessage={sendMessage}
+              householdId={currentHousehold.id}
+              threadId={threadId}
             />
           </div>
         </div>
@@ -163,7 +131,7 @@ const MessagesPage: React.FC<MessagesPageProps> = ({
             <p className="text-text-secondary mb-6">
               Choose an existing thread or create a new one
             </p>
-            <NewThreadModal />
+            <NewThreadModal onCreateThread={createThread} />
           </div>
         </div>
       )}

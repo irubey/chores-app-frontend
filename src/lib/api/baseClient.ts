@@ -3,6 +3,22 @@ import { axiosInstance } from "./axiosInstance";
 import { ApiResponse } from "@shared/interfaces";
 import { logger } from "./logger";
 import { ApiError, ApiErrorType } from "./errors/apiErrors";
+import axios from "axios";
+
+// Type guard for ApiError-like objects
+function isApiErrorLike(error: unknown): error is {
+  type: ApiErrorType | number;
+  status: number;
+  message: string;
+} {
+  return (
+    error !== null &&
+    typeof error === "object" &&
+    "type" in error &&
+    "status" in error &&
+    "message" in error
+  );
+}
 
 export class BaseApiClient {
   protected axiosInstance: AxiosInstance;
@@ -21,17 +37,22 @@ export class BaseApiClient {
   }
 
   protected async handleRequest<T>(
-    requestFn: () => Promise<AxiosResponse<ApiResponse<T>>>
-  ): Promise<ApiResponse<T>> {
+    request: () => Promise<AxiosResponse<T>>
+  ): Promise<T> {
     try {
-      const response = await requestFn();
-      logger.logAPIResponse({
-        config: response.config,
+      const response = await request();
+      logger.debug("BaseClient successful response", {
+        url: response.config.url,
+        method: response.config.method,
         status: response.status,
-        data: response.data,
       });
 
-      if (!response.data || response.data.data === undefined) {
+      // Handle 204 No Content responses
+      if (response.status === 204) {
+        return undefined as T;
+      }
+
+      if (!response.data) {
         throw new ApiError(
           "Invalid API response structure",
           ApiErrorType.SERVER,
@@ -39,38 +60,41 @@ export class BaseApiClient {
         );
       }
 
-      return {
-        data: this.serializeDates(response.data.data),
-        pagination: response.data.pagination,
-        status: response.data.status,
-        message: response.data.message,
-        errors: response.data.errors,
-      };
+      return response.data;
     } catch (error) {
+      logger.debug("BaseClient handling error", {
+        errorType: error.constructor.name,
+        isApiError: error instanceof ApiError,
+        hasType: "type" in error,
+        hasStatus: "status" in error,
+        error:
+          error instanceof ApiError
+            ? {
+                type: error.type,
+                status: error.status,
+                message: error.message,
+              }
+            : error,
+      });
+
       if (error instanceof ApiError) {
-        logger.logAPIError(error);
+        logger.debug("BaseClient received ApiError-like error", {
+          type: error.type,
+          status: error.status,
+          message: error.message,
+        });
         throw error;
       }
 
-      if ((error as AxiosError).isAxiosError) {
-        const axiosError = error as AxiosError<any>;
-        const status = axiosError.response?.status || 500;
-        const message =
-          axiosError.response?.data?.message || axiosError.message;
-        const data = axiosError.response?.data;
-
-        const apiError = ApiError.fromHttpError(status, message, data);
-        logger.logAPIError(apiError);
-        throw apiError;
+      if (axios.isAxiosError(error)) {
+        throw ApiError.fromHttpError(
+          error.response?.status || 500,
+          error.response?.data?.message,
+          error.response?.data
+        );
       }
 
-      const unknownError = new ApiError(
-        "An unexpected error occurred",
-        ApiErrorType.UNKNOWN,
-        500
-      );
-      logger.logAPIError(unknownError);
-      throw unknownError;
+      throw error;
     }
   }
 

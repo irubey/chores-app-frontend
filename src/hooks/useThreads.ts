@@ -1,187 +1,332 @@
 "use client";
-import { useCallback } from "react";
-import { useDispatch, useSelector } from "react-redux";
-import { AppDispatch } from "../store/store";
-import { logger } from "../lib/api/logger";
-import {
-  fetchThreads,
-  createThread,
-  fetchThreadDetails,
-  updateThread,
-  deleteThread,
-  inviteUsersToThread,
-  resetThreads,
-  selectThread,
-  selectThreads,
-  selectSelectedThread,
-  selectThreadStatus,
-  selectThreadError,
-} from "../store/slices/threadSlice";
 
-import type {
-  ThreadWithMessages,
+import { useCallback, useEffect, useRef, useState } from "react";
+import { apiClient } from "@/lib/api/apiClient";
+import {
+  ThreadWithDetails,
   ThreadWithParticipants,
   CreateThreadDTO,
   UpdateThreadDTO,
+  ThreadWithMessages,
 } from "@shared/types";
-
 import { PaginationOptions } from "@shared/interfaces";
-import type { RootState } from "../store/store";
+import { logger } from "@/lib/api/logger";
+import { ApiError } from "@/lib/api/errors";
 
-export const useThreads = () => {
-  const dispatch = useDispatch<AppDispatch>();
+interface UseThreadState {
+  threads: ThreadWithDetails[];
+  selectedThread: ThreadWithDetails | null;
+  isLoading: boolean;
+  error: string | null;
+  hasMore: boolean;
+  nextCursor?: string;
+}
 
-  logger.info("useThreads hook initialized");
+interface UseThreadOptions {
+  initialThreads?: ThreadWithDetails[];
+  pageSize?: number;
+}
 
-  // Thread selectors
-  const threads = useSelector(selectThreads);
-  const selectedThread = useSelector(selectSelectedThread);
-  const threadStatus = useSelector(selectThreadStatus);
-  const threadError = useSelector(selectThreadError);
-  const hasMore = useSelector((state: RootState) => state.threads.hasMore);
-  const nextCursor = useSelector(
-    (state: RootState) => state.threads.nextCursor
-  );
+export function useThread(householdId: string, options: UseThreadOptions = {}) {
+  const [state, setState] = useState<UseThreadState>({
+    threads: options.initialThreads || [],
+    selectedThread: null,
+    isLoading: false,
+    error: null,
+    hasMore: true,
+    nextCursor: undefined,
+  });
 
-  // Thread actions
-  const getThreads = useCallback(
-    async (householdId: string, options?: PaginationOptions) => {
-      logger.info("Fetching threads", { householdId, options });
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Fetch threads with pagination
+  const fetchThreads = useCallback(
+    async (paginationOptions?: PaginationOptions) => {
       try {
-        const result = await dispatch(
-          fetchThreads({ householdId, options })
-        ).unwrap();
-        logger.info("Threads fetched successfully", {
-          threadCount: result.length,
-          hasMore: hasMore,
-          nextCursor: nextCursor,
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+        }
+
+        abortControllerRef.current = new AbortController();
+        setState((prev) => ({ ...prev, isLoading: true, error: null }));
+
+        logger.debug("Fetching threads", { householdId, paginationOptions });
+
+        const response = await apiClient.threads.threads.getThreads(
+          householdId,
+          {
+            limit: options.pageSize || 20,
+            ...paginationOptions,
+          },
+          abortControllerRef.current.signal
+        );
+
+        setState((prev) => ({
+          ...prev,
+          threads: paginationOptions?.cursor
+            ? [...prev.threads, ...response.data]
+            : response.data,
+          hasMore: response.pagination?.hasMore ?? false,
+          nextCursor: response.pagination?.nextCursor,
+          isLoading: false,
+        }));
+
+        logger.info("Successfully fetched threads", {
+          count: response.data.length,
+          hasMore: response.pagination?.hasMore,
         });
-        return result;
       } catch (error) {
+        if (error instanceof ApiError) {
+          setState((prev) => ({
+            ...prev,
+            error: error.message,
+            isLoading: false,
+          }));
+        }
         logger.error("Failed to fetch threads", { error });
-        throw error;
       }
     },
-    [dispatch, hasMore, nextCursor]
+    [householdId, options.pageSize]
   );
 
-  const startNewThread = useCallback(
-    async (householdId: string, threadData: CreateThreadDTO) => {
-      logger.info("Creating new thread", { householdId });
+  // Create a new thread
+  const createThread = useCallback(
+    async (threadData: CreateThreadDTO) => {
       try {
-        const thread = await dispatch(
-          createThread({ householdId, threadData })
-        ).unwrap();
-        logger.info("Thread created successfully", { threadId: thread.id });
-        return thread;
+        setState((prev) => ({ ...prev, isLoading: true, error: null }));
+        logger.debug("Creating thread", { householdId, threadData });
+
+        const response = await apiClient.threads.threads.createThread(
+          householdId,
+          threadData
+        );
+
+        setState((prev) => ({
+          ...prev,
+          threads: [response.data, ...prev.threads],
+          isLoading: false,
+        }));
+
+        logger.info("Successfully created thread", {
+          threadId: response.data.id,
+        });
+
+        return response.data;
       } catch (error) {
+        const errorMessage =
+          error instanceof ApiError ? error.message : "Failed to create thread";
+        setState((prev) => ({
+          ...prev,
+          error: errorMessage,
+          isLoading: false,
+        }));
         logger.error("Failed to create thread", { error });
         throw error;
       }
     },
-    [dispatch]
+    [householdId]
   );
 
+  // Get thread details
   const getThreadDetails = useCallback(
-    async (householdId: string, threadId: string) => {
-      logger.info("Fetching thread details", { threadId });
+    async (threadId: string) => {
       try {
-        const thread = await dispatch(
-          fetchThreadDetails({ householdId, threadId })
-        ).unwrap();
-        logger.info("Thread details fetched successfully", { threadId });
-        return thread;
+        setState((prev) => ({ ...prev, isLoading: true, error: null }));
+        logger.debug("Getting thread details", { householdId, threadId });
+
+        const response = await apiClient.threads.threads.getThreadDetails(
+          householdId,
+          threadId
+        );
+
+        setState((prev) => ({
+          ...prev,
+          selectedThread: response.data,
+          isLoading: false,
+        }));
+
+        logger.info("Successfully got thread details", { threadId });
+        return response.data;
       } catch (error) {
-        logger.error("Failed to fetch thread details", { threadId, error });
+        const errorMessage =
+          error instanceof ApiError
+            ? error.message
+            : "Failed to get thread details";
+        setState((prev) => ({
+          ...prev,
+          error: errorMessage,
+          isLoading: false,
+        }));
+        logger.error("Failed to get thread details", { error });
         throw error;
       }
     },
-    [dispatch]
+    [householdId]
   );
 
-  const editThread = useCallback(
-    async (
-      householdId: string,
-      threadId: string,
-      threadData: UpdateThreadDTO
-    ) => {
-      logger.info("Updating thread", { threadId });
+  // Update a thread
+  const updateThread = useCallback(
+    async (threadId: string, threadData: UpdateThreadDTO) => {
       try {
-        const thread = await dispatch(
-          updateThread({ householdId, threadId, threadData })
-        ).unwrap();
-        logger.info("Thread updated successfully", { threadId });
-        return thread;
+        setState((prev) => ({ ...prev, isLoading: true, error: null }));
+        logger.debug("Updating thread", { householdId, threadId, threadData });
+
+        const response = await apiClient.threads.threads.updateThread(
+          householdId,
+          threadId,
+          threadData
+        );
+
+        setState((prev) => ({
+          ...prev,
+          threads: prev.threads.map((thread) =>
+            thread.id === threadId ? response.data : thread
+          ),
+          selectedThread:
+            prev.selectedThread?.id === threadId
+              ? response.data
+              : prev.selectedThread,
+          isLoading: false,
+        }));
+
+        logger.info("Successfully updated thread", { threadId });
+        return response.data;
       } catch (error) {
-        logger.error("Failed to update thread", { threadId, error });
+        const errorMessage =
+          error instanceof ApiError ? error.message : "Failed to update thread";
+        setState((prev) => ({
+          ...prev,
+          error: errorMessage,
+          isLoading: false,
+        }));
+        logger.error("Failed to update thread", { error });
         throw error;
       }
     },
-    [dispatch]
+    [householdId]
   );
 
-  const removeThread = useCallback(
-    async (householdId: string, threadId: string) => {
-      logger.info("Deleting thread", { threadId });
+  // Delete a thread
+  const deleteThread = useCallback(
+    async (threadId: string) => {
       try {
-        await dispatch(deleteThread({ householdId, threadId })).unwrap();
-        logger.info("Thread deleted successfully", { threadId });
+        setState((prev) => ({ ...prev, isLoading: true, error: null }));
+        logger.debug("Deleting thread", { householdId, threadId });
+
+        await apiClient.threads.threads.deleteThread(householdId, threadId);
+
+        setState((prev) => ({
+          ...prev,
+          threads: prev.threads.filter((thread) => thread.id !== threadId),
+          selectedThread:
+            prev.selectedThread?.id === threadId ? null : prev.selectedThread,
+          isLoading: false,
+        }));
+
+        logger.info("Successfully deleted thread", { threadId });
       } catch (error) {
-        logger.error("Failed to delete thread", { threadId, error });
+        const errorMessage =
+          error instanceof ApiError ? error.message : "Failed to delete thread";
+        setState((prev) => ({
+          ...prev,
+          error: errorMessage,
+          isLoading: false,
+        }));
+        logger.error("Failed to delete thread", { error });
         throw error;
       }
     },
-    [dispatch]
+    [householdId]
   );
 
+  // Invite users to thread
   const inviteUsers = useCallback(
-    async (householdId: string, threadId: string, userIds: string[]) => {
-      logger.info("Inviting users to thread", {
-        threadId,
-        userCount: userIds.length,
-      });
+    async (threadId: string, userIds: string[]) => {
       try {
-        const thread = await dispatch(
-          inviteUsersToThread({ householdId, threadId, userIds })
-        ).unwrap();
-        logger.info("Users invited successfully", { threadId });
-        return thread;
+        setState((prev) => ({ ...prev, isLoading: true, error: null }));
+        logger.debug("Inviting users to thread", {
+          householdId,
+          threadId,
+          userIds,
+        });
+
+        const response = await apiClient.threads.threads.inviteUsers(
+          householdId,
+          threadId,
+          userIds
+        );
+
+        setState((prev) => ({
+          ...prev,
+          threads: prev.threads.map((thread) =>
+            thread.id === threadId
+              ? {
+                  ...thread,
+                  participants: response.data.participants,
+                }
+              : thread
+          ),
+          selectedThread:
+            prev.selectedThread?.id === threadId
+              ? {
+                  ...prev.selectedThread,
+                  participants: response.data.participants,
+                }
+              : prev.selectedThread,
+          isLoading: false,
+        }));
+
+        logger.info("Successfully invited users to thread", {
+          threadId,
+          userCount: userIds.length,
+        });
+        return response.data;
       } catch (error) {
-        logger.error("Failed to invite users", { threadId, error });
+        const errorMessage =
+          error instanceof ApiError
+            ? error.message
+            : "Failed to invite users to thread";
+        setState((prev) => ({
+          ...prev,
+          error: errorMessage,
+          isLoading: false,
+        }));
+        logger.error("Failed to invite users to thread", { error });
         throw error;
       }
     },
-    [dispatch]
+    [householdId]
   );
+
+  // Load more threads
+  const loadMore = useCallback(() => {
+    if (state.hasMore && !state.isLoading) {
+      fetchThreads({ cursor: state.nextCursor });
+    }
+  }, [state.hasMore, state.isLoading, state.nextCursor, fetchThreads]);
+
+  // Initial fetch
+  useEffect(() => {
+    fetchThreads();
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [fetchThreads]);
 
   return {
-    // State
-    threads,
-    selectedThread,
-    threadStatus,
-    threadError,
-    hasMore,
-    nextCursor,
-
-    // Thread actions
-    getThreads,
-    startNewThread,
+    threads: state.threads,
+    selectedThread: state.selectedThread,
+    isLoading: state.isLoading,
+    error: state.error,
+    hasMore: state.hasMore,
+    createThread,
     getThreadDetails,
-    editThread,
-    removeThread,
+    updateThread,
+    deleteThread,
     inviteUsers,
-    selectThread: useCallback(
-      (thread: ThreadWithMessages | null) => {
-        logger.info("Selecting thread", { threadId: thread?.id });
-        dispatch(selectThread(thread));
-      },
-      [dispatch]
-    ),
-
-    // Reset action
-    reset: useCallback(() => {
-      logger.info("Resetting threads state");
-      dispatch(resetThreads());
-    }, [dispatch]),
+    loadMore,
+    refresh: () => fetchThreads(),
   };
-};
+}

@@ -4,26 +4,15 @@ import {
   AxiosRequestConfig,
   AxiosInstance,
 } from "axios";
-import { tokenService } from "./services/tokenService";
 import { ApiError, NetworkError } from "./errors";
 import { logger } from "./logger";
 
 /**
- * Enhances RetryableAxiosRequestConfig with optional retry flag.
- */
-export interface RetryableAxiosRequestConfig extends AxiosRequestConfig {
-  _retry?: boolean;
-}
-
-/**
  * Handles network errors.
- * @param error - The Axios error.
- * @param originalRequest - The original Axios request config.
- * @returns A promise rejection with a NetworkError.
  */
 function handleNetworkError(
   error: AxiosError,
-  originalRequest: RetryableAxiosRequestConfig
+  originalRequest: AxiosRequestConfig
 ): Promise<never> {
   logger.error(`Network Error: ${error.message}`);
   return Promise.reject(new NetworkError("Network error. Please try again."));
@@ -31,67 +20,59 @@ function handleNetworkError(
 
 /**
  * Handles API errors.
- * @param error - The Axios error.
- * @param originalRequest - The original Axios request config.
- * @returns A promise rejection with an ApiError.
  */
 function handleApiError(
   error: AxiosError,
-  originalRequest: RetryableAxiosRequestConfig
+  originalRequest: AxiosRequestConfig
 ): Promise<never> {
-  const apiError = new ApiError(
-    (error.response?.data as { message?: string })?.message || "API Error",
+  logger.debug("Interceptor handling API error", {
+    originalStatus: error.response?.status,
+    originalUrl: originalRequest.url,
+    originalMethod: originalRequest.method,
+  });
+
+  const apiError = ApiError.fromHttpError(
     error.response?.status || 500,
+    (error.response?.data as { message?: string })?.message,
     error.response?.data
   );
-  logger.error(`API Error: ${apiError.message}`);
+
+  logger.debug("Interceptor created ApiError", {
+    transformedError: {
+      type: apiError.type,
+      status: apiError.status,
+      message: apiError.message,
+    },
+  });
+
   return Promise.reject(apiError);
 }
 
 /**
  * Sets up Axios response interceptors.
- * @param axiosInstance - The Axios instance to attach interceptors to.
  */
 export function setupInterceptors(axiosInstance: AxiosInstance) {
+  // Add request interceptor to ensure credentials are sent
+  axiosInstance.interceptors.request.use(
+    (config) => {
+      config.withCredentials = true;
+      return config;
+    },
+    (error) => {
+      return Promise.reject(error);
+    }
+  );
+
   axiosInstance.interceptors.response.use(
     (response: AxiosResponse) => response,
     async (error: AxiosError) => {
-      const originalRequest = error.config as RetryableAxiosRequestConfig;
+      const originalRequest = error.config as AxiosRequestConfig;
 
       if (!error.response) {
         return handleNetworkError(error, originalRequest);
       }
 
-      if (
-        error.response.status === 401 &&
-        !shouldSkipTokenRefresh(originalRequest)
-      ) {
-        try {
-          return await tokenService.handle401Error(originalRequest);
-        } catch (refreshError) {
-          return Promise.reject(refreshError);
-        }
-      }
-
       return handleApiError(error, originalRequest);
     }
-  );
-}
-
-/**
- * Determines whether token refresh should be skipped for specific endpoints.
- * @param request - The original Axios request config.
- * @returns Boolean indicating whether to skip token refresh.
- */
-export function shouldSkipTokenRefresh(
-  request: RetryableAxiosRequestConfig
-): boolean {
-  const skipRefreshEndpoints = [
-    "/auth/login",
-    "/auth/register",
-    "/auth/refresh-token",
-  ];
-  return skipRefreshEndpoints.some((endpoint) =>
-    request.url?.includes(endpoint)
   );
 }

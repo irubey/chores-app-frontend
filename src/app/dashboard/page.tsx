@@ -1,56 +1,54 @@
 "use client";
 
-import { useHousehold } from "@/hooks";
-import { useEffect } from "react";
+import React from "react";
+import { useHousehold } from "@/hooks/useHousehold";
+import { useAuth } from "@/hooks/useAuth";
+import { logger } from "@/lib/api/logger";
+import HouseholdCard from "@/components/household/HouseholdCard";
+import CreateHouseholdButton from "@/components/household/CreateHouseholdButton";
 
 export default function DashboardPage() {
-  const { households, status, error, fetchHouseholds } = useHousehold();
+  const { user } = useAuth();
+  const { userHouseholds, status } = useHousehold();
 
-  useEffect(() => {
-    if (status.list === "idle") {
-      fetchHouseholds();
-    }
-  }, [status.list, fetchHouseholds]);
+  logger.debug("Dashboard render state", {
+    hasUser: !!user,
+    householdsCount: userHouseholds.length,
+    status,
+  });
+
+  if (!user) {
+    logger.debug("Dashboard waiting for user");
+    return null;
+  }
+
+  const isLoading = status.list === "loading" && userHouseholds.length === 0;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-h1">Dashboard</h1>
-        {status.list === "loading" && (
-          <div className="animate-spin h-5 w-5 border-2 border-primary border-t-transparent rounded-full" />
-        )}
+    <div className="container mx-auto px-4 py-8">
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-h2">Your Households</h1>
+        <CreateHouseholdButton />
       </div>
 
-      {error && (
-        <div className="bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400 p-4 rounded-md">
-          {error}
+      {isLoading ? (
+        <div className="flex justify-center items-center py-12">
+          <div className="animate-pulse space-y-4">
+            <div className="h-4 bg-neutral-200 dark:bg-neutral-700 rounded w-3/4"></div>
+            <div className="h-4 bg-neutral-200 dark:bg-neutral-700 rounded w-1/2"></div>
+          </div>
         </div>
-      )}
-
-      {status.list === "succeeded" && households.length === 0 ? (
-        <div className="text-center p-8">
-          <p className="text-text-secondary">No households found.</p>
+      ) : userHouseholds.length === 0 ? (
+        <div className="text-center py-12">
+          <h2 className="text-h4 mb-4">No households yet</h2>
+          <p className="text-text-secondary mb-8">
+            Create your first household to get started
+          </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {households.map((household) => (
-            <div
-              key={household.id}
-              className="p-6 bg-white dark:bg-background-dark shadow-md hover:shadow-lg transition-shadow rounded-lg"
-            >
-              <h3 className="text-h3 mb-4">{household.name}</h3>
-              <div className="space-y-2">
-                <p className="text-sm text-text-secondary">
-                  Currency: {household.currency}
-                </p>
-                <p className="text-sm text-text-secondary">
-                  Language: {household.language}
-                </p>
-                <p className="text-sm text-text-secondary">
-                  Timezone: {household.timezone}
-                </p>
-              </div>
-            </div>
+        <div className="grid-auto-fit gap-6">
+          {userHouseholds.map((household) => (
+            <HouseholdCard key={household.id} household={household} />
           ))}
         </div>
       )}

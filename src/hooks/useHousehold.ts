@@ -1,410 +1,349 @@
 "use client";
 import { useCallback } from "react";
-import { useDispatch, useSelector } from "react-redux";
-import { AppDispatch } from "../store/store";
-import {
-  fetchUserHouseholds,
-  fetchHousehold,
-  fetchHouseholdMembers,
-  inviteMember,
-  removeMember,
-  createHousehold,
-  updateHousehold,
-  deleteHousehold,
-  updateMemberInvitationStatus,
-  fetchSelectedHouseholds,
-  toggleHouseholdSelection,
-  updateMemberRole,
-  addMember,
-  getInvitations,
-  sendInvitation,
-  setCurrentHousehold,
-  reset,
-  selectUserHouseholds,
-  selectSelectedHouseholds,
-  selectSelectedMembers,
-  selectCurrentHousehold,
-  selectHouseholdMembers,
-  selectHouseholdStatus,
-  selectHouseholdError,
-} from "../store/slices/householdSlice";
+import { useHouseholds } from "@/contexts/HouseholdsContext";
 import {
   Household,
+  HouseholdMember,
+  HouseholdMemberWithUser,
   CreateHouseholdDTO,
   UpdateHouseholdDTO,
   AddMemberDTO,
-  HouseholdMember,
-  HouseholdMemberWithUser,
+  HouseholdWithMembers,
 } from "@shared/types";
 import { HouseholdRole } from "@shared/enums";
 import { logger } from "@/lib/api/logger";
-import { ApiError } from "@/lib/api/errors";
 
-export const useHousehold = () => {
-  const dispatch = useDispatch<AppDispatch>();
+interface UseHouseholdReturn {
+  userHouseholds: HouseholdWithMembers[];
+  selectedHouseholds: HouseholdWithMembers[];
+  selectedMembers: HouseholdMemberWithUser[];
+  currentHousehold: HouseholdWithMembers | null;
+  members: HouseholdMember[];
+  isLoading: boolean;
+  error: string | null;
+  status: {
+    list: "idle" | "loading" | "succeeded" | "failed";
+    create: "idle" | "loading" | "succeeded" | "failed";
+    update: "idle" | "loading" | "succeeded" | "failed";
+    delete: "idle" | "loading" | "succeeded" | "failed";
+    member: "idle" | "loading" | "succeeded" | "failed";
+    invitation: "idle" | "loading" | "succeeded" | "failed";
+  };
 
-  // Use individual selectors for better performance
-  const households = useSelector(selectUserHouseholds);
-  const currentHousehold = useSelector(selectCurrentHousehold);
-  const members = useSelector(selectHouseholdMembers);
-  const selectedHouseholds = useSelector(selectSelectedHouseholds);
-  const selectedMembers = useSelector(selectSelectedMembers);
-  const status = useSelector(selectHouseholdStatus);
-  const error = useSelector(selectHouseholdError);
+  getUserHouseholds: () => Promise<void>;
+  getSelectedHouseholds: () => Promise<void>;
+  createHousehold: (data: CreateHouseholdDTO) => Promise<void>;
+  updateHousehold: (
+    householdId: string,
+    data: UpdateHouseholdDTO
+  ) => Promise<void>;
+  deleteHousehold: (householdId: string) => Promise<void>;
+  addMember: (householdId: string, data: AddMemberDTO) => Promise<void>;
+  removeMember: (householdId: string, memberId: string) => Promise<void>;
+  updateMemberRole: (
+    householdId: string,
+    memberId: string,
+    role: HouseholdRole
+  ) => Promise<void>;
+  updateMemberSelection: (
+    householdId: string,
+    memberId: string,
+    isSelected: boolean
+  ) => Promise<void>;
+  acceptInvitation: (
+    householdId: string,
+    memberId: string,
+    accept: boolean
+  ) => Promise<void>;
+  sendInvitation: (householdId: string, email: string) => Promise<void>;
+  getInvitations: () => Promise<void>;
+  setCurrentHousehold: (household: HouseholdWithMembers) => void;
+  reset: () => void;
+}
 
-  // Household Actions
-  const fetchHouseholds = useCallback(async (): Promise<Household[]> => {
-    logger.debug("Fetching households");
+export function useHousehold(): UseHouseholdReturn {
+  const {
+    userHouseholds,
+    selectedHouseholds,
+    selectedMembers,
+    currentHousehold,
+    members,
+    status,
+    error,
+    getUserHouseholds: contextGetUserHouseholds,
+    getSelectedHouseholds: contextGetSelectedHouseholds,
+    createHousehold: contextCreateHousehold,
+    updateHousehold: contextUpdateHousehold,
+    deleteHousehold: contextDeleteHousehold,
+    addMember: contextAddMember,
+    removeMember: contextRemoveMember,
+    updateMemberRole: contextUpdateMemberRole,
+    updateMemberSelection: contextUpdateMemberSelection,
+    acceptInvitation: contextAcceptInvitation,
+    sendInvitation: contextSendInvitation,
+    getInvitations: contextGetInvitations,
+    setCurrentHousehold: contextSetCurrentHousehold,
+    reset: contextReset,
+  } = useHouseholds();
+
+  const getUserHouseholds = useCallback(async () => {
+    logger.debug("useHousehold: Getting user households");
     try {
-      const result = await dispatch(fetchUserHouseholds()).unwrap();
-      logger.debug("Successfully fetched households", { count: result.length });
-      return result;
+      await contextGetUserHouseholds();
+      logger.info("useHousehold: Successfully got user households");
     } catch (error) {
-      if (error instanceof ApiError) {
-        logger.error("Failed to fetch households", {
-          type: error.type,
-          message: error.message,
-          status: error.status,
-        });
-      } else {
-        logger.error("Failed to fetch households with unknown error", {
-          error,
-        });
-      }
+      logger.error("useHousehold: Failed to get user households", { error });
       throw error;
     }
-  }, [dispatch]);
+  }, [contextGetUserHouseholds]);
 
-  const fetchHouseholdDetails = useCallback(
-    async (householdId: string): Promise<Household> => {
-      logger.debug("Fetching household details", { householdId });
+  const getSelectedHouseholds = useCallback(async () => {
+    logger.debug("useHousehold: Getting selected households");
+    try {
+      await contextGetSelectedHouseholds();
+      logger.info("useHousehold: Successfully got selected households");
+    } catch (error) {
+      logger.error("useHousehold: Failed to get selected households", {
+        error,
+      });
+      throw error;
+    }
+  }, [contextGetSelectedHouseholds]);
+
+  const createHousehold = useCallback(
+    async (data: CreateHouseholdDTO) => {
+      logger.debug("useHousehold: Creating household", { data });
       try {
-        const result = await dispatch(fetchHousehold(householdId)).unwrap();
-        logger.debug("Successfully fetched household details", { householdId });
-        return result;
+        await contextCreateHousehold(data);
+        logger.info("useHousehold: Successfully created household");
       } catch (error) {
-        if (error instanceof ApiError) {
-          logger.error("Failed to fetch household details", {
-            type: error.type,
-            message: error.message,
-            status: error.status,
-          });
-        } else {
-          logger.error("Failed to fetch household details with unknown error", {
-            error,
-          });
-        }
-        throw error;
-      }
-    },
-    [dispatch]
-  );
-
-  const createNewHousehold = useCallback(
-    async (data: CreateHouseholdDTO): Promise<Household> => {
-      logger.debug("Creating new household", { data });
-      try {
-        const result = await dispatch(createHousehold(data)).unwrap();
-        logger.debug("Successfully created household", {
-          householdId: result.id,
+        logger.error("useHousehold: Failed to create household", {
+          error,
+          data,
         });
-        return result;
-      } catch (error) {
-        if (error instanceof ApiError) {
-          logger.error("Failed to create household", {
-            type: error.type,
-            message: error.message,
-            status: error.status,
-          });
-        } else {
-          logger.error("Failed to create household with unknown error", {
-            error,
-          });
-        }
         throw error;
       }
     },
-    [dispatch]
+    [contextCreateHousehold]
   );
 
-  const updateHouseholdDetails = useCallback(
-    async (
-      householdId: string,
-      data: UpdateHouseholdDTO
-    ): Promise<Household> => {
-      logger.debug("Updating household", { householdId, data });
+  const updateHousehold = useCallback(
+    async (householdId: string, data: UpdateHouseholdDTO) => {
+      logger.debug("useHousehold: Updating household", { householdId, data });
       try {
-        const result = await dispatch(
-          updateHousehold({ householdId, data })
-        ).unwrap();
-        logger.debug("Successfully updated household", { householdId });
-        return result;
-      } catch (error) {
-        if (error instanceof ApiError) {
-          logger.error("Failed to update household", {
-            type: error.type,
-            message: error.message,
-            status: error.status,
-          });
-        } else {
-          logger.error("Failed to update household with unknown error", {
-            error,
-          });
-        }
-        throw error;
-      }
-    },
-    [dispatch]
-  );
-
-  const removeHousehold = useCallback(
-    async (householdId: string): Promise<void> => {
-      logger.debug("Removing household", { householdId });
-      try {
-        await dispatch(deleteHousehold(householdId)).unwrap();
-        logger.debug("Successfully removed household", { householdId });
-      } catch (error) {
-        if (error instanceof ApiError) {
-          logger.error("Failed to remove household", {
-            type: error.type,
-            message: error.message,
-            status: error.status,
-          });
-        } else {
-          logger.error("Failed to remove household with unknown error", {
-            error,
-          });
-        }
-        throw error;
-      }
-    },
-    [dispatch]
-  );
-
-  // Member Actions
-  const fetchMembers = useCallback(
-    async (householdId: string): Promise<HouseholdMember[]> => {
-      logger.debug("Fetching members", { householdId });
-      try {
-        const result = await dispatch(
-          fetchHouseholdMembers(householdId)
-        ).unwrap();
-        logger.debug("Successfully fetched members", {
+        await contextUpdateHousehold(householdId, data);
+        logger.info("useHousehold: Successfully updated household", {
           householdId,
-          count: result.length,
         });
-        return result;
       } catch (error) {
-        if (error instanceof ApiError) {
-          logger.error("Failed to fetch members", {
-            type: error.type,
-            message: error.message,
-            status: error.status,
-          });
-        } else {
-          logger.error("Failed to fetch members with unknown error", { error });
-        }
+        logger.error("useHousehold: Failed to update household", {
+          error,
+          householdId,
+          data,
+        });
         throw error;
       }
     },
-    [dispatch]
+    [contextUpdateHousehold]
   );
 
-  const inviteNewMember = useCallback(
-    async (householdId: string, email: string): Promise<HouseholdMember> => {
-      logger.debug("Inviting new member", { householdId, email });
+  const deleteHousehold = useCallback(
+    async (householdId: string) => {
+      logger.debug("useHousehold: Deleting household", { householdId });
       try {
-        const result = await dispatch(
-          inviteMember({ householdId, email })
-        ).unwrap();
-        logger.debug("Successfully invited member", { householdId, email });
-        return result;
+        await contextDeleteHousehold(householdId);
+        logger.info("useHousehold: Successfully deleted household", {
+          householdId,
+        });
       } catch (error) {
-        if (error instanceof ApiError) {
-          logger.error("Failed to invite member", {
-            type: error.type,
-            message: error.message,
-            status: error.status,
-          });
-        } else {
-          logger.error("Failed to invite member with unknown error", { error });
-        }
+        logger.error("useHousehold: Failed to delete household", {
+          error,
+          householdId,
+        });
         throw error;
       }
     },
-    [dispatch]
+    [contextDeleteHousehold]
   );
 
-  const removeMemberAction = useCallback(
-    async (householdId: string, memberId: string): Promise<string> => {
-      logger.debug("Removing member", { householdId, memberId });
+  const addMember = useCallback(
+    async (householdId: string, data: AddMemberDTO) => {
+      logger.debug("useHousehold: Adding member", { householdId, data });
       try {
-        const result = await dispatch(
-          removeMember({ householdId, memberId })
-        ).unwrap();
-        logger.debug("Successfully removed member", { householdId, memberId });
-        return result;
+        await contextAddMember(householdId, data);
+        logger.info("useHousehold: Successfully added member", { householdId });
       } catch (error) {
-        if (error instanceof ApiError) {
-          logger.error("Failed to remove member", {
-            type: error.type,
-            message: error.message,
-            status: error.status,
-          });
-        } else {
-          logger.error("Failed to remove member with unknown error", { error });
-        }
+        logger.error("useHousehold: Failed to add member", {
+          error,
+          householdId,
+          data,
+        });
         throw error;
       }
     },
-    [dispatch]
+    [contextAddMember]
   );
 
-  const updateMemberRoleAction = useCallback(
-    async (
-      householdId: string,
-      memberId: string,
-      role: HouseholdRole
-    ): Promise<HouseholdMember> => {
-      logger.debug("Updating member role", { householdId, memberId, role });
+  const removeMember = useCallback(
+    async (householdId: string, memberId: string) => {
+      logger.debug("useHousehold: Removing member", { householdId, memberId });
       try {
-        const result = await dispatch(
-          updateMemberRole({ householdId, memberId, role })
-        ).unwrap();
-        logger.debug("Successfully updated member role", {
+        await contextRemoveMember(householdId, memberId);
+        logger.info("useHousehold: Successfully removed member", {
+          householdId,
+          memberId,
+        });
+      } catch (error) {
+        logger.error("useHousehold: Failed to remove member", {
+          error,
+          householdId,
+          memberId,
+        });
+        throw error;
+      }
+    },
+    [contextRemoveMember]
+  );
+
+  const updateMemberRole = useCallback(
+    async (householdId: string, memberId: string, role: HouseholdRole) => {
+      logger.debug("useHousehold: Updating member role", {
+        householdId,
+        memberId,
+        role,
+      });
+      try {
+        await contextUpdateMemberRole(householdId, memberId, role);
+        logger.info("useHousehold: Successfully updated member role", {
           householdId,
           memberId,
           role,
         });
-        return result;
       } catch (error) {
-        if (error instanceof ApiError) {
-          logger.error("Failed to update member role", {
-            type: error.type,
-            message: error.message,
-            status: error.status,
-          });
-        } else {
-          logger.error("Failed to update member role with unknown error", {
-            error,
-          });
-        }
+        logger.error("useHousehold: Failed to update member role", {
+          error,
+          householdId,
+          memberId,
+          role,
+        });
         throw error;
       }
     },
-    [dispatch]
+    [contextUpdateMemberRole]
   );
 
-  // Selection Actions
-  const getSelectedHouseholds = useCallback(async (): Promise<
-    HouseholdMemberWithUser[]
-  > => {
-    logger.debug("Fetching selected households");
-    try {
-      const result = await dispatch(fetchSelectedHouseholds()).unwrap();
-      logger.debug("Successfully fetched selected households", {
-        count: result.length,
-      });
-      return result;
-    } catch (error) {
-      if (error instanceof ApiError) {
-        logger.error("Failed to fetch selected households", {
-          type: error.type,
-          message: error.message,
-          status: error.status,
-        });
-      } else {
-        logger.error("Failed to fetch selected households with unknown error", {
-          error,
-        });
-      }
-      throw error;
-    }
-  }, [dispatch]);
-
-  const toggleSelection = useCallback(
-    async (
-      householdId: string,
-      memberId: string,
-      isSelected: boolean
-    ): Promise<HouseholdMember> => {
-      logger.debug("Toggling household selection", {
+  const updateMemberSelection = useCallback(
+    async (householdId: string, memberId: string, isSelected: boolean) => {
+      logger.debug("useHousehold: Updating member selection", {
         householdId,
         memberId,
         isSelected,
       });
       try {
-        const result = await dispatch(
-          toggleHouseholdSelection({ householdId, memberId, isSelected })
-        ).unwrap();
-        logger.debug("Successfully toggled household selection", {
+        await contextUpdateMemberSelection(householdId, memberId, isSelected);
+        logger.info("useHousehold: Successfully updated member selection", {
           householdId,
           memberId,
           isSelected,
         });
-        return result;
       } catch (error) {
-        if (error instanceof ApiError) {
-          logger.error("Failed to toggle household selection", {
-            type: error.type,
-            message: error.message,
-            status: error.status,
-          });
-        } else {
-          logger.error(
-            "Failed to toggle household selection with unknown error",
-            { error }
-          );
-        }
+        logger.error("useHousehold: Failed to update member selection", {
+          error,
+          householdId,
+          memberId,
+          isSelected,
+        });
         throw error;
       }
     },
-    [dispatch]
+    [contextUpdateMemberSelection]
   );
 
-  // State Management
-  const setCurrent = useCallback(
-    (household: Household) => {
-      logger.debug("Setting current household", { householdId: household.id });
-      dispatch(setCurrentHousehold(household));
+  const acceptInvitation = useCallback(
+    async (householdId: string, memberId: string, accept: boolean) => {
+      logger.debug("useHousehold: Processing invitation", {
+        householdId,
+        memberId,
+        accept,
+      });
+      try {
+        await contextAcceptInvitation(householdId, memberId, accept);
+        logger.info("useHousehold: Successfully processed invitation", {
+          householdId,
+          memberId,
+          accept,
+        });
+      } catch (error) {
+        logger.error("useHousehold: Failed to process invitation", {
+          error,
+          householdId,
+          memberId,
+          accept,
+        });
+        throw error;
+      }
     },
-    [dispatch]
+    [contextAcceptInvitation]
   );
 
-  const resetHouseholdState = useCallback(() => {
-    logger.debug("Resetting household state");
-    dispatch(reset());
-  }, [dispatch]);
+  const sendInvitation = useCallback(
+    async (householdId: string, email: string) => {
+      logger.debug("useHousehold: Sending invitation", { householdId, email });
+      try {
+        await contextSendInvitation(householdId, email);
+        logger.info("useHousehold: Successfully sent invitation", {
+          householdId,
+          email,
+        });
+      } catch (error) {
+        logger.error("useHousehold: Failed to send invitation", {
+          error,
+          householdId,
+          email,
+        });
+        throw error;
+      }
+    },
+    [contextSendInvitation]
+  );
+
+  const getInvitations = useCallback(async () => {
+    logger.debug("useHousehold: Getting invitations");
+    try {
+      await contextGetInvitations();
+      logger.info("useHousehold: Successfully got invitations");
+    } catch (error) {
+      logger.error("useHousehold: Failed to get invitations", { error });
+      throw error;
+    }
+  }, [contextGetInvitations]);
+
+  const setCurrentHousehold = useCallback((household: HouseholdWithMembers) => {
+    contextSetCurrentHousehold(household);
+  }, []);
 
   return {
-    // State
-    households,
-    currentHousehold,
-    members,
+    userHouseholds,
     selectedHouseholds,
     selectedMembers,
-    status,
+    currentHousehold,
+    members,
+    isLoading: Object.values(status).includes("loading"),
     error,
-
-    // Household Actions
-    fetchHouseholds,
-    fetchHouseholdDetails,
-    createNewHousehold,
-    updateHouseholdDetails,
-    removeHousehold,
-
-    // Member Actions
-    fetchMembers,
-    inviteMember: inviteNewMember,
-    removeMember: removeMemberAction,
-    updateMemberRole: updateMemberRoleAction,
-
-    // Selection Actions
+    status,
+    getUserHouseholds,
     getSelectedHouseholds,
-    toggleHouseholdSelection: toggleSelection,
-
-    // State Management
-    setCurrent,
-    resetHouseholdState,
+    createHousehold,
+    updateHousehold,
+    deleteHousehold,
+    addMember,
+    removeMember,
+    updateMemberRole,
+    updateMemberSelection,
+    acceptInvitation,
+    sendInvitation,
+    getInvitations,
+    setCurrentHousehold,
+    reset: contextReset,
   };
-};
+}

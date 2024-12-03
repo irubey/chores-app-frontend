@@ -9,7 +9,8 @@
     "paths": {
       "@/*": ["src/*"],
       "@shared/*": ["node_modules/@irubey/chores-app-shared/dist/*"],
-      "@api/*": ["src/lib/api/*"]
+      "@api/*": ["src/lib/api/*"],
+      "@test/*": ["__tests__/*"]
     },
     "allowJs": true,
     "skipLibCheck": true,

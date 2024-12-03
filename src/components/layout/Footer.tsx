@@ -1,13 +1,10 @@
 "use client";
 import React from "react";
-import { useSelector } from "react-redux";
-import { selectAuth } from "../../store/slices/authSlice";
 import Link from "next/link";
-import { useTheme } from "../../contexts/ThemeContext";
+import { useAuth } from "@/hooks/useAuth";
 
 const Footer: React.FC = () => {
-  const { user } = useSelector(selectAuth);
-  // const { theme } = useTheme();
+  const { user } = useAuth();
 
   return (
     <footer

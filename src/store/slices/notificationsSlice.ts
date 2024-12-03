@@ -174,9 +174,5 @@ export const selectNotifications = (state: RootState): NotificationsState =>
 export const selectAllNotifications = (
   state: RootState
 ): NotificationWithUser[] => state.notifications.notifications;
-export const selectUnreadNotifications = (
-  state: RootState
-): NotificationWithUser[] =>
-  state.notifications.notifications.filter((n) => !n.isRead);
 
 export default notificationsSlice.reducer;

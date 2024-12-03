@@ -8,17 +8,22 @@ import {
   reset,
   selectNotifications,
   selectAllNotifications,
-  selectUnreadNotifications,
 } from "../store/slices/notificationsSlice";
 import { NotificationWithUser } from "@shared/types";
 import { logger } from "../lib/api/logger";
 import { ApiError } from "../lib/api/errors";
+import { createSelector } from "@reduxjs/toolkit";
+
+const selectUnreadNotificationsLocal = createSelector(
+  [(state: RootState) => state.notifications.notifications],
+  (notifications) => notifications.filter((n) => !n.isRead)
+);
 
 export const useNotifications = () => {
   const dispatch = useDispatch<AppDispatch>();
   const notificationsState = useSelector(selectNotifications);
   const allNotifications = useSelector(selectAllNotifications);
-  const unreadNotifications = useSelector(selectUnreadNotifications);
+  const unreadNotifications = useSelector(selectUnreadNotificationsLocal);
 
   const getNotifications = useCallback(async (): Promise<
     NotificationWithUser[]

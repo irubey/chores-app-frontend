@@ -1,152 +1,106 @@
 // frontend/src/hooks/useAuth.ts
 "use client";
 import { useCallback } from "react";
-import { useSelector, useDispatch } from "react-redux";
-import { AppDispatch, RootState } from "../store/store";
-import {
-  login,
-  register,
-  logout,
-  reset,
-  selectAuth,
-  initializeAuth,
-} from "../store/slices/authSlice";
-import { logger } from "../lib/api/logger";
-import { ApiError } from "../lib/api/errors";
+import { useUser } from "@/contexts/UserContext";
 import { User } from "@shared/types";
+import { logger } from "@/lib/api/logger";
 
-type LoginCredentials = {
-  email: string;
-  password: string;
-};
-
-type RegisterData = {
-  email: string;
-  password: string;
-  name: string;
-};
-
-interface AuthState {
+interface UseAuthReturn {
   user: User | null;
-  status: "idle" | "loading" | "succeeded" | "failed";
-  error: string | null;
   isAuthenticated: boolean;
+  isLoading: boolean;
+  error: string | null;
+  status: "idle" | "loading" | "authenticated" | "error";
+  login: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string, name: string) => Promise<void>;
+  logout: () => Promise<void>;
+  initAuth: () => Promise<User | null>;
+  resetAuth: () => void;
 }
 
-export const useAuth = () => {
-  const dispatch = useDispatch<AppDispatch>();
-  const authState = useSelector<RootState, AuthState>(selectAuth);
+export function useAuth(): UseAuthReturn {
+  const {
+    user,
+    isAuthenticated,
+    status,
+    error,
+    login: contextLogin,
+    register: contextRegister,
+    logout: contextLogout,
+    initializeAuth,
+  } = useUser();
 
-  const loginUser = useCallback(
-    async (credentials: LoginCredentials): Promise<User> => {
-      logger.info("Attempting login", { email: credentials.email });
+  const login = useCallback(
+    async (email: string, password: string) => {
+      logger.debug("useAuth: Initiating login", { email });
       try {
-        const resultAction = await dispatch(login(credentials)).unwrap();
-        logger.info("Login successful", { userId: resultAction.id });
-        return resultAction;
+        await contextLogin(email, password);
+        logger.info("useAuth: Login successful");
       } catch (error) {
-        if (error instanceof ApiError) {
-          logger.error("Login failed", {
-            type: error.type,
-            message: error.message,
-            status: error.status,
-          });
-        } else {
-          logger.error("Login failed with unknown error", { error });
-        }
+        logger.error("useAuth: Login failed", { error });
         throw error;
       }
     },
-    [dispatch]
+    [contextLogin]
   );
 
-  const registerUser = useCallback(
-    async (data: RegisterData): Promise<User> => {
-      logger.info("Attempting registration", { email: data.email });
+  const register = useCallback(
+    async (email: string, password: string, name: string) => {
+      logger.debug("useAuth: Initiating registration", { email, name });
       try {
-        const resultAction = await dispatch(register(data)).unwrap();
-        logger.info("Registration successful", { userId: resultAction.id });
-        return resultAction;
+        await contextRegister(email, password, name);
+        logger.info("useAuth: Registration successful");
       } catch (error) {
-        if (error instanceof ApiError) {
-          logger.error("Registration failed", {
-            type: error.type,
-            message: error.message,
-            status: error.status,
-          });
-        } else {
-          logger.error("Registration failed with unknown error", { error });
-        }
+        logger.error("useAuth: Registration failed", { error });
         throw error;
       }
     },
-    [dispatch]
+    [contextRegister]
   );
 
-  const logoutUser = useCallback(async (): Promise<void> => {
-    logger.info("Logging out");
+  const logout = useCallback(async () => {
+    logger.debug("useAuth: Initiating logout");
     try {
-      await dispatch(logout()).unwrap();
-      logger.info("Logout successful");
+      await contextLogout();
+      logger.info("useAuth: Logout successful");
     } catch (error) {
-      if (error instanceof ApiError) {
-        logger.error("Logout failed", {
-          type: error.type,
-          message: error.message,
-          status: error.status,
-        });
-      } else {
-        logger.error("Logout failed with unknown error", { error });
-      }
+      logger.error("useAuth: Logout failed", { error });
       throw error;
     }
-  }, [dispatch]);
+  }, [contextLogout]);
 
-  const initAuth = useCallback(async (): Promise<User | null> => {
-    logger.info("Initializing auth");
+  const initAuth = useCallback(async () => {
+    logger.debug("useAuth: Initiating auth initialization");
     try {
-      const resultAction = await dispatch(initializeAuth()).unwrap();
-      logger.info("Auth initialization complete", {
-        authenticated: !!resultAction,
+      await initializeAuth();
+      logger.info("useAuth: Auth initialization completed", {
+        isAuthenticated,
+        hasUser: !!user,
       });
-      return resultAction;
+      return user;
     } catch (error) {
-      if (error instanceof ApiError) {
-        if (error.status === 401) {
-          logger.info("Auth initialization - user not authenticated");
-          return null;
-        }
-        logger.error("Auth initialization failed", {
-          type: error.type,
-          message: error.message,
-          status: error.status,
-        });
-      } else {
-        logger.error("Auth initialization failed with unknown error", {
-          error,
-        });
-      }
+      logger.error("useAuth: Auth initialization failed", { error });
       throw error;
     }
-  }, [dispatch]);
+  }, [initializeAuth, isAuthenticated, user]);
 
   const resetAuth = useCallback(() => {
-    logger.debug("Resetting auth state");
-    dispatch(reset());
-  }, [dispatch]);
+    logger.debug("useAuth: Resetting auth state");
+    logout().catch((error) => {
+      logger.error("useAuth: Reset auth failed", { error });
+    });
+  }, [logout]);
 
   return {
-    // State
-    user: authState.user,
-    isAuthenticated: authState.isAuthenticated,
-    isLoading: authState.status === "loading",
-    error: authState.error,
-
-    // Actions
-    loginUser,
-    registerUser,
-    logoutUser,
+    user,
+    isAuthenticated,
+    isLoading: status === "loading",
+    error,
+    status,
+    login,
+    register,
+    logout,
     initAuth,
     resetAuth,
   };
-};
+}

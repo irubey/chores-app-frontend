@@ -14,13 +14,14 @@ import {
   FaSun,
   FaMoon,
 } from "react-icons/fa";
+import { logger } from "@/lib/api/logger";
 
 interface HeaderProps {
   user: User | null;
 }
 
 const Header: React.FC<HeaderProps> = ({ user }) => {
-  const { logoutUser } = useAuth();
+  const { logout } = useAuth();
   const { notifications } = useNotifications();
   const { theme, toggleTheme } = useTheme();
 
@@ -33,9 +34,11 @@ const Header: React.FC<HeaderProps> = ({ user }) => {
 
   const handleLogout = async () => {
     try {
-      await logoutUser();
+      logger.debug("Header: Initiating logout");
+      await logout();
+      logger.info("Header: Logout successful");
     } catch (error) {
-      console.error("Logout failed:", error);
+      logger.error("Header: Logout failed", { error });
       // Optionally show an error toast/notification here
     }
   };

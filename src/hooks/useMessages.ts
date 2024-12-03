@@ -1,360 +1,252 @@
 "use client";
-import { useCallback } from "react";
-import { useDispatch, useSelector } from "react-redux";
-import { AppDispatch } from "../store/store";
-import { logger } from "../lib/api/logger";
-import {
-  // Message actions
-  fetchMessages,
-  createMessage,
-  updateMessage,
-  deleteMessage,
-  // Reaction actions
-  addReaction,
-  removeReaction,
-  getReactions,
-  getReactionAnalytics,
-  getReactionsByType,
-  // Poll actions
-  createPoll,
-  updatePoll,
-  deletePoll,
-  votePoll,
-  removePollVote,
-  getPoll,
-  getPollsInThread,
-  getPollAnalytics,
-  // Attachment actions
-  addAttachment,
-  deleteAttachment,
-  getAttachment,
-  getAttachments,
-  // Read status actions
-  markMessageAsRead,
-  getMessageReadStatus,
-  // Mention actions
-  createMention,
-  deleteMention,
-  getUserMentions,
-  getMessageMentions,
-  getUnreadMentionsCount,
-  // State actions
-  resetMessages,
-  selectMessage,
-  // Selectors
-  selectMessages,
-  selectMessageStatus,
-  selectMessageError,
-  selectHasMore,
-  selectNextCursor,
-  selectSelectedMessage,
-} from "../store/slices/messagesSlice";
 
-import type {
+import { useCallback, useEffect, useRef, useState } from "react";
+import { apiClient } from "@/lib/api/apiClient";
+import {
   MessageWithDetails,
   CreateMessageDTO,
   UpdateMessageDTO,
-  CreateReactionDTO,
-  CreatePollDTO,
-  UpdatePollDTO,
-  CreatePollVoteDTO,
-  CreateMentionDTO,
-  MessageReadStatus,
-  PollWithDetails,
-  Attachment,
-  ReactionWithUser,
-  MentionWithUser,
 } from "@shared/types";
-
 import { PaginationOptions } from "@shared/interfaces";
-import type { RootState } from "../store/store";
+import { logger } from "@/lib/api/logger";
+import { ApiError } from "@/lib/api/errors";
 
-export const useMessages = () => {
-  const dispatch = useDispatch<AppDispatch>();
+interface UseMessagesState {
+  messages: MessageWithDetails[];
+  isLoading: boolean;
+  error: string | null;
+  hasMore: boolean;
+  nextCursor?: string;
+}
 
-  logger.info("useMessages hook initialized");
+interface UseMessagesOptions {
+  initialMessages?: MessageWithDetails[];
+  pageSize?: number;
+}
 
-  // Message selectors
-  const messages = useSelector(selectMessages);
-  const messageStatus = useSelector(selectMessageStatus);
-  const messageError = useSelector(selectMessageError);
-  const hasMore = useSelector(selectHasMore);
-  const nextCursor = useSelector(selectNextCursor);
-  const selectedMessage = useSelector(selectSelectedMessage);
+export function useMessages(
+  householdId: string,
+  threadId: string,
+  options: UseMessagesOptions = {}
+) {
+  const [state, setState] = useState<UseMessagesState>({
+    messages: options.initialMessages || [],
+    isLoading: false,
+    error: null,
+    hasMore: true,
+    nextCursor: undefined,
+  });
 
-  // Message actions
-  const getMessages = useCallback(
-    async (
-      householdId: string,
-      threadId: string,
-      options?: PaginationOptions
-    ) => {
-      logger.info("Fetching messages", { householdId, threadId, options });
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Fetch messages with pagination
+  const fetchMessages = useCallback(
+    async (paginationOptions?: PaginationOptions) => {
       try {
-        const result = await dispatch(
-          fetchMessages({ householdId, threadId, options })
-        ).unwrap();
-        logger.info("Messages fetched successfully", {
-          messageCount: result.length,
-          hasMore,
-          nextCursor,
+        // Cancel previous request if exists
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+        }
+
+        abortControllerRef.current = new AbortController();
+        setState((prev) => ({ ...prev, isLoading: true, error: null }));
+
+        logger.debug("Fetching messages", {
+          householdId,
+          threadId,
+          paginationOptions,
         });
-        return result;
+
+        const response = await apiClient.threads.messages.getMessages(
+          householdId,
+          threadId,
+          {
+            limit: options.pageSize || 20,
+            ...paginationOptions,
+          },
+          abortControllerRef.current.signal
+        );
+
+        setState((prev) => ({
+          ...prev,
+          messages: paginationOptions?.cursor
+            ? [...prev.messages, ...response.data]
+            : response.data,
+          hasMore: response.pagination?.hasMore ?? false,
+          nextCursor: response.pagination?.nextCursor,
+          isLoading: false,
+        }));
+
+        logger.info("Successfully fetched messages", {
+          count: response.data.length,
+          hasMore: response.pagination?.hasMore,
+        });
       } catch (error) {
+        if (error instanceof ApiError) {
+          setState((prev) => ({
+            ...prev,
+            error: error.message,
+            isLoading: false,
+          }));
+        }
         logger.error("Failed to fetch messages", { error });
-        throw error;
       }
     },
-    [dispatch, hasMore, nextCursor]
+    [householdId, threadId, options.pageSize]
   );
 
+  // Send a new message
   const sendMessage = useCallback(
-    async (
-      householdId: string,
-      threadId: string,
-      messageData: CreateMessageDTO
-    ) => {
-      logger.info("Sending message", { threadId });
+    async (messageData: CreateMessageDTO) => {
       try {
-        const result = await dispatch(
-          createMessage({ householdId, threadId, messageData })
-        ).unwrap();
-        logger.info("Message sent successfully", { messageId: result.id });
-        return result;
+        setState((prev) => ({ ...prev, isLoading: true, error: null }));
+        logger.debug("Sending message", { householdId, threadId, messageData });
+
+        const response = await apiClient.threads.messages.createMessage(
+          householdId,
+          threadId,
+          messageData
+        );
+
+        setState((prev) => ({
+          ...prev,
+          messages: [response.data, ...prev.messages],
+          isLoading: false,
+        }));
+
+        logger.info("Successfully sent message", {
+          messageId: response.data.id,
+        });
+
+        return response.data;
       } catch (error) {
+        const errorMessage =
+          error instanceof ApiError ? error.message : "Failed to send message";
+        setState((prev) => ({
+          ...prev,
+          error: errorMessage,
+          isLoading: false,
+        }));
         logger.error("Failed to send message", { error });
         throw error;
       }
     },
-    [dispatch]
+    [householdId, threadId]
   );
 
-  const editMessage = useCallback(
-    async (
-      householdId: string,
-      threadId: string,
-      messageId: string,
-      messageData: UpdateMessageDTO
-    ) => {
-      logger.info("Editing message", { messageId });
+  // Update an existing message
+  const updateMessage = useCallback(
+    async (messageId: string, messageData: UpdateMessageDTO) => {
       try {
-        const result = await dispatch(
-          updateMessage({ householdId, threadId, messageId, messageData })
-        ).unwrap();
-        logger.info("Message edited successfully", { messageId });
-        return result;
+        setState((prev) => ({ ...prev, isLoading: true, error: null }));
+        logger.debug("Updating message", {
+          householdId,
+          threadId,
+          messageId,
+          messageData,
+        });
+
+        const response = await apiClient.threads.messages.updateMessage(
+          householdId,
+          threadId,
+          messageId,
+          messageData
+        );
+
+        setState((prev) => ({
+          ...prev,
+          messages: prev.messages.map((msg) =>
+            msg.id === messageId ? response.data : msg
+          ),
+          isLoading: false,
+        }));
+
+        logger.info("Successfully updated message", { messageId });
+        return response.data;
       } catch (error) {
-        logger.error("Failed to edit message", { error });
+        const errorMessage =
+          error instanceof ApiError
+            ? error.message
+            : "Failed to update message";
+        setState((prev) => ({
+          ...prev,
+          error: errorMessage,
+          isLoading: false,
+        }));
+        logger.error("Failed to update message", { error });
         throw error;
       }
     },
-    [dispatch]
+    [householdId, threadId]
   );
 
-  const removeMessage = useCallback(
-    async (householdId: string, threadId: string, messageId: string) => {
-      logger.info("Removing message", { messageId });
+  // Delete a message
+  const deleteMessage = useCallback(
+    async (messageId: string) => {
       try {
-        await dispatch(
-          deleteMessage({ householdId, threadId, messageId })
-        ).unwrap();
-        logger.info("Message removed successfully", { messageId });
+        setState((prev) => ({ ...prev, isLoading: true, error: null }));
+        logger.debug("Deleting message", {
+          householdId,
+          threadId,
+          messageId,
+        });
+
+        await apiClient.threads.messages.deleteMessage(
+          householdId,
+          threadId,
+          messageId
+        );
+
+        setState((prev) => ({
+          ...prev,
+          messages: prev.messages.filter((msg) => msg.id !== messageId),
+          isLoading: false,
+        }));
+
+        logger.info("Successfully deleted message", { messageId });
       } catch (error) {
-        logger.error("Failed to remove message", { error });
+        const errorMessage =
+          error instanceof ApiError
+            ? error.message
+            : "Failed to delete message";
+        setState((prev) => ({
+          ...prev,
+          error: errorMessage,
+          isLoading: false,
+        }));
+        logger.error("Failed to delete message", { error });
         throw error;
       }
     },
-    [dispatch]
+    [householdId, threadId]
   );
 
-  // Reaction actions
-  const addReaction = useCallback(
-    async (
-      householdId: string,
-      threadId: string,
-      messageId: string,
-      reaction: CreateReactionDTO
-    ) => {
-      logger.info("Adding reaction", { messageId });
-      try {
-        const result = await dispatch(
-          addReaction(householdId, threadId, messageId, reaction)
-        ).unwrap();
-        logger.info("Reaction added successfully");
-        return result;
-      } catch (error) {
-        logger.error("Failed to add reaction", { error });
-        throw error;
-      }
-    },
-    [dispatch]
-  );
+  // Load more messages
+  const loadMore = useCallback(() => {
+    if (state.hasMore && !state.isLoading) {
+      fetchMessages({ cursor: state.nextCursor });
+    }
+  }, [state.hasMore, state.isLoading, state.nextCursor, fetchMessages]);
 
-  const removeReaction = useCallback(
-    async (
-      householdId: string,
-      threadId: string,
-      messageId: string,
-      reactionId: string
-    ) => {
-      logger.info("Removing reaction", { messageId, reactionId });
-      try {
-        const result = await dispatch(
-          removeReaction(householdId, threadId, messageId, reactionId)
-        ).unwrap();
-        logger.info("Reaction removed successfully");
-        return result;
-      } catch (error) {
-        logger.error("Failed to remove reaction", { error });
-        throw error;
+  // Initial fetch
+  useEffect(() => {
+    fetchMessages();
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
       }
-    },
-    [dispatch]
-  );
-
-  // Poll actions
-  const createPoll = useCallback(
-    async (
-      householdId: string,
-      threadId: string,
-      messageId: string,
-      pollData: CreatePollDTO
-    ) => {
-      logger.info("Creating poll", { messageId });
-      try {
-        const result = await dispatch(
-          createPoll(householdId, threadId, messageId, pollData)
-        ).unwrap();
-        logger.info("Poll created successfully");
-        return result;
-      } catch (error) {
-        logger.error("Failed to create poll", { error });
-        throw error;
-      }
-    },
-    [dispatch]
-  );
-
-  const votePoll = useCallback(
-    async (
-      householdId: string,
-      threadId: string,
-      messageId: string,
-      pollId: string,
-      vote: CreatePollVoteDTO
-    ) => {
-      logger.info("Voting on poll", { messageId, pollId });
-      try {
-        const result = await dispatch(
-          votePoll(householdId, threadId, messageId, pollId, vote)
-        ).unwrap();
-        logger.info("Poll vote submitted successfully");
-        return result;
-      } catch (error) {
-        logger.error("Failed to vote on poll", { error });
-        throw error;
-      }
-    },
-    [dispatch]
-  );
-
-  // Attachment actions
-  const addAttachment = useCallback(
-    async (
-      householdId: string,
-      threadId: string,
-      messageId: string,
-      file: File
-    ) => {
-      logger.info("Adding attachment", { messageId });
-      try {
-        const result = await dispatch(
-          addAttachment(householdId, threadId, messageId, file)
-        ).unwrap();
-        logger.info("Attachment added successfully");
-        return result;
-      } catch (error) {
-        logger.error("Failed to add attachment", { error });
-        throw error;
-      }
-    },
-    [dispatch]
-  );
-
-  const deleteAttachment = useCallback(
-    async (
-      householdId: string,
-      threadId: string,
-      messageId: string,
-      attachmentId: string
-    ) => {
-      logger.info("Deleting attachment", { messageId, attachmentId });
-      try {
-        const result = await dispatch(
-          deleteAttachment(householdId, threadId, messageId, attachmentId)
-        ).unwrap();
-        logger.info("Attachment deleted successfully");
-        return result;
-      } catch (error) {
-        logger.error("Failed to delete attachment", { error });
-        throw error;
-      }
-    },
-    [dispatch]
-  );
-
-  // Read status actions
-  const markAsRead = useCallback(
-    async (householdId: string, threadId: string, messageId: string) => {
-      logger.info("Marking message as read", { messageId });
-      try {
-        const result = await dispatch(
-          markMessageAsRead({ householdId, threadId, messageId })
-        ).unwrap();
-        logger.info("Message marked as read successfully");
-        return result;
-      } catch (error) {
-        logger.error("Failed to mark message as read", { error });
-        throw error;
-      }
-    },
-    [dispatch]
-  );
+    };
+  }, [fetchMessages]);
 
   return {
-    // State
-    messages,
-    selectedMessage,
-    messageStatus,
-    messageError,
-    hasMore,
-    nextCursor,
-
-    // Message actions
-    getMessages,
+    messages: state.messages,
+    isLoading: state.isLoading,
+    error: state.error,
+    hasMore: state.hasMore,
     sendMessage,
-    editMessage,
-    removeMessage,
-
-    // Poll actions
-    createPoll,
-    votePoll,
-
-    // Reaction actions
-    addReaction,
-    removeReaction,
-
-    // Attachment actions
-    addAttachment,
-    deleteAttachment,
-
-    // Read status actions
-    markAsRead,
-
-    // Reset action
-    reset: useCallback(() => {
-      logger.info("Resetting messages state");
-      dispatch(resetMessages());
-    }, [dispatch]),
+    updateMessage,
+    deleteMessage,
+    loadMore,
+    refresh: () => fetchMessages(),
   };
-};
+}

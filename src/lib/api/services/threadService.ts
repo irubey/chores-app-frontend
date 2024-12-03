@@ -1,13 +1,10 @@
 import { ApiResponse, PaginationOptions } from "@shared/interfaces";
 import {
-  Thread,
   UpdateThreadDTO,
   MessageWithDetails,
   CreateMessageDTO,
   UpdateMessageDTO,
   Attachment,
-  ThreadWithMessages,
-  ThreadWithParticipants,
   CreateThreadDTO,
   MessageReadStatus,
   ReactionWithUser,
@@ -60,9 +57,9 @@ export class ThreadService extends BaseApiClient {
       householdId: string,
       threadData: CreateThreadDTO,
       signal?: AbortSignal
-    ): Promise<ApiResponse<ThreadWithParticipants>> => {
+    ): Promise<ApiResponse<ThreadWithDetails>> => {
       return this.handleRequest(() =>
-        this.axiosInstance.post<ApiResponse<ThreadWithParticipants>>(
+        this.axiosInstance.post<ApiResponse<ThreadWithDetails>>(
           `/households/${householdId}/threads`,
           threadData,
           { signal }
@@ -77,9 +74,9 @@ export class ThreadService extends BaseApiClient {
       householdId: string,
       threadId: string,
       signal?: AbortSignal
-    ): Promise<ApiResponse<ThreadWithMessages>> => {
+    ): Promise<ApiResponse<ThreadWithDetails>> => {
       return this.handleRequest(() =>
-        this.axiosInstance.get<ApiResponse<ThreadWithMessages>>(
+        this.axiosInstance.get<ApiResponse<ThreadWithDetails>>(
           `/households/${householdId}/threads/${threadId}`,
           { signal }
         )
@@ -94,9 +91,9 @@ export class ThreadService extends BaseApiClient {
       threadId: string,
       threadData: UpdateThreadDTO,
       signal?: AbortSignal
-    ): Promise<ApiResponse<Thread>> => {
+    ): Promise<ApiResponse<ThreadWithDetails>> => {
       return this.handleRequest(() =>
-        this.axiosInstance.patch<ApiResponse<Thread>>(
+        this.axiosInstance.patch<ApiResponse<ThreadWithDetails>>(
           `/households/${householdId}/threads/${threadId}`,
           threadData,
           { signal }
@@ -105,7 +102,7 @@ export class ThreadService extends BaseApiClient {
     },
 
     /**
-     * Delete a thread
+     * Delete a ThreadWithDetails
      */
     deleteThread: async (
       householdId: string,
@@ -123,16 +120,16 @@ export class ThreadService extends BaseApiClient {
     },
 
     /**
-     * Invite users to a thread
+     * Invite users to a ThreadWithDetails
      */
     inviteUsers: async (
       householdId: string,
       threadId: string,
       userIds: string[],
       signal?: AbortSignal
-    ): Promise<ApiResponse<ThreadWithParticipants>> => {
+    ): Promise<ApiResponse<ThreadWithDetails>> => {
       return this.handleRequest(() =>
-        this.axiosInstance.post<ApiResponse<ThreadWithParticipants>>(
+        this.axiosInstance.post<ApiResponse<ThreadWithDetails>>(
           `/households/${householdId}/threads/${threadId}/invite`,
           { userIds },
           { signal }
@@ -146,7 +143,7 @@ export class ThreadService extends BaseApiClient {
    */
   public readonly messages = {
     /**
-     * Get all messages in a thread with pagination
+     * Get all messages in a ThreadWithDetails with pagination
      */
     getMessages: async (
       householdId: string,

@@ -28,7 +28,8 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
     },
     ref
   ) => {
-    const baseInputStyles = "input transition-all duration-200 w-full";
+    const baseInputStyles =
+      "input transition-all duration-200 w-full text-neutral-900 dark:text-neutral-100";
     const variantStyles = {
       outlined: `
         border-neutral-300 bg-transparent

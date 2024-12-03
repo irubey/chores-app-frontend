@@ -11,6 +11,7 @@ import React, {
 } from "react";
 import { socketClient } from "../lib/socketClient";
 import { User } from "@shared/types";
+import { logger } from "@/lib/api/logger";
 
 interface SocketContextType {
   isConnected: boolean;
@@ -38,25 +39,58 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    const handleConnect = () => setIsConnected(true);
-    const handleDisconnect = () => setIsConnected(false);
+    const handleConnect = () => {
+      setIsConnected(true);
+      logger.info("Socket connected successfully", {
+        userId: user?.id,
+        isAuthenticated,
+      });
+    };
+
+    const handleDisconnect = () => {
+      setIsConnected(false);
+      logger.warn("Socket disconnected", {
+        userId: user?.id,
+        wasAuthenticated: isAuthenticated,
+      });
+    };
+
     const handleError = (error: Error) => {
-      console.error("Socket connection error:", error);
+      logger.error("Socket connection error", {
+        error,
+        userId: user?.id,
+        isAuthenticated,
+        previouslyConnected: isConnected,
+      });
       setIsConnected(false);
     };
 
     // Connect socket when authenticated and user exists
     if (isAuthenticated && user) {
+      logger.debug("Attempting socket connection", {
+        userId: user.id,
+        isAuthenticated,
+      });
       socketClient.connect();
 
       // Set up event listeners
       socketClient.on("connect", handleConnect);
       socketClient.on("disconnect", handleDisconnect);
       socketClient.on("connect_error", handleError);
+    } else {
+      logger.debug("Skipping socket connection", {
+        hasUser: !!user,
+        isAuthenticated,
+      });
     }
 
     // Cleanup function
     return () => {
+      logger.debug("Cleaning up socket connection", {
+        userId: user?.id,
+        isConnected,
+        isAuthenticated,
+      });
       socketClient.off("connect", handleConnect);
       socketClient.off("disconnect", handleDisconnect);
       socketClient.off("connect_error", handleError);
@@ -65,16 +99,30 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({
         socketClient.disconnect();
       }
     };
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, user, isConnected]);
 
   const connect = () => {
     if (!isConnected && isAuthenticated && user) {
+      logger.debug("Manual socket connection attempt", {
+        userId: user.id,
+        isAuthenticated,
+      });
       socketClient.connect();
+    } else {
+      logger.debug("Manual socket connection skipped", {
+        isConnected,
+        hasUser: !!user,
+        isAuthenticated,
+      });
     }
   };
 
   const disconnect = () => {
     if (isConnected) {
+      logger.debug("Manual socket disconnection", {
+        userId: user?.id,
+        isAuthenticated,
+      });
       socketClient.disconnect();
     }
   };
