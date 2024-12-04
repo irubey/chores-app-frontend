@@ -5,6 +5,7 @@ import { User } from "@shared/types";
 import { useAuth } from "../../hooks/useAuth";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useNotifications } from "../../hooks/useNotifications";
+import { useRouter } from "next/navigation";
 import {
   FaTasks,
   FaMoneyBillWave,
@@ -21,6 +22,7 @@ interface HeaderProps {
 }
 
 const Header: React.FC<HeaderProps> = ({ user }) => {
+  const router = useRouter();
   const { logout } = useAuth();
   const { notifications } = useNotifications();
   const { theme, toggleTheme } = useTheme();
@@ -37,9 +39,9 @@ const Header: React.FC<HeaderProps> = ({ user }) => {
       logger.debug("Header: Initiating logout");
       await logout();
       logger.info("Header: Logout successful");
+      router.push("/login");
     } catch (error) {
       logger.error("Header: Logout failed", { error });
-      // Optionally show an error toast/notification here
     }
   };
 

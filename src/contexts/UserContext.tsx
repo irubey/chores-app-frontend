@@ -167,6 +167,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   // Initialize auth on mount
   useEffect(() => {
+    const abortController = new AbortController();
+
     logger.debug("Auth initialization effect running", {
       hasInitRef: !!initializationRef.current,
       currentStatus: status,
@@ -177,10 +179,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     if (!initializationRef.current) {
       logger.debug("Starting initial auth initialization");
       initializationRef.current = initializeAuth().catch((error) => {
-        logger.error("Failed to initialize auth on mount", {
-          error,
-          attempts: initializationAttempts.current,
-        });
+        if (!abortController.signal.aborted) {
+          logger.error("Failed to initialize auth on mount", {
+            error,
+            attempts: initializationAttempts.current,
+          });
+        }
       });
     }
 
@@ -191,14 +195,21 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         attempts: initializationAttempts.current,
         requestsInProgress: Object.keys(requestInProgressRef.current),
       });
-      // Only clear refs if component is unmounting
-      if (!document.hidden) {
-        initializationRef.current = null;
-        initializationAttempts.current = 0;
-        requestInProgressRef.current = {};
+
+      // Only clear refs if component is actually unmounting
+      if (document.hidden || abortController.signal.aborted) {
+        return;
       }
+
+      // Abort any in-flight requests
+      abortController.abort();
+
+      // Clear request tracking
+      Object.keys(requestInProgressRef.current).forEach((key) => {
+        delete requestInProgressRef.current[key];
+      });
     };
-  }, [initializeAuth]);
+  }, []); // Remove initializeAuth from deps since it's stable
 
   const login = useCallback(
     async (email: string, password: string) => {
@@ -226,22 +237,36 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const register = useCallback(
     async (email: string, password: string, name: string) => {
       try {
-        setStatus("loading");
-        setError(null);
+        setStatusWithLogging("loading");
+        setErrorWithLogging(null);
         logger.debug("Starting registration process", { email, name });
 
-        const response = await authService.register({ email, password, name });
-        setUser(response.data);
-        setStatus("authenticated");
+        const response = await dedupRequest("register", () =>
+          authService.register({ email, password, name })
+        );
+
+        if (!response?.data) {
+          throw new Error("Registration failed - no user data received");
+        }
+
+        // Initialize auth state after registration
+        await dedupRequest("initAuth", () => authService.initializeAuth());
+
+        setUserWithLogging(response.data);
+        setStatusWithLogging("authenticated");
         logger.info("Registration successful", { userId: response.data.id });
-      } catch (error) {
+      } catch (error: any) {
         logger.error("Registration failed", { error, email, name });
-        setStatus("error");
-        setError("Registration failed. Please try again.");
+        setStatusWithLogging("error");
+        setErrorWithLogging(
+          error?.response?.data?.message ||
+            error?.message ||
+            "Registration failed. Please try again."
+        );
         throw error;
       }
     },
-    []
+    [dedupRequest]
   );
 
   const logout = useCallback(async () => {

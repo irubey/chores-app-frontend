@@ -2,13 +2,12 @@
 import { useCallback } from "react";
 import { useHouseholds } from "@/contexts/HouseholdsContext";
 import {
-  Household,
+  HouseholdWithMembers,
   HouseholdMember,
   HouseholdMemberWithUser,
   CreateHouseholdDTO,
   UpdateHouseholdDTO,
   AddMemberDTO,
-  HouseholdWithMembers,
 } from "@shared/types";
 import { HouseholdRole } from "@shared/enums";
 import { logger } from "@/lib/api/logger";
@@ -19,8 +18,9 @@ interface UseHouseholdReturn {
   selectedMembers: HouseholdMemberWithUser[];
   currentHousehold: HouseholdWithMembers | null;
   members: HouseholdMember[];
+  pendingInvitations: HouseholdMemberWithUser[];
   isLoading: boolean;
-  error: string | null;
+  error: Error | null;
   status: {
     list: "idle" | "loading" | "succeeded" | "failed";
     create: "idle" | "loading" | "succeeded" | "failed";
@@ -50,12 +50,15 @@ interface UseHouseholdReturn {
     memberId: string,
     isSelected: boolean
   ) => Promise<void>;
-  acceptInvitation: (
+  handleInvitationResponse: (
     householdId: string,
     memberId: string,
     accept: boolean
   ) => Promise<void>;
-  sendInvitation: (householdId: string, email: string) => Promise<void>;
+  sendInvitation: (
+    householdId: string,
+    email: string
+  ) => Promise<{ isPending: boolean }>;
   getInvitations: () => Promise<void>;
   setCurrentHousehold: (household: HouseholdWithMembers) => void;
   reset: () => void;
@@ -68,6 +71,7 @@ export function useHousehold(): UseHouseholdReturn {
     selectedMembers,
     currentHousehold,
     members,
+    pendingInvitations,
     status,
     error,
     getUserHouseholds: contextGetUserHouseholds,
@@ -79,7 +83,7 @@ export function useHousehold(): UseHouseholdReturn {
     removeMember: contextRemoveMember,
     updateMemberRole: contextUpdateMemberRole,
     updateMemberSelection: contextUpdateMemberSelection,
-    acceptInvitation: contextAcceptInvitation,
+    handleInvitationResponse: contextHandleInvitationResponse,
     sendInvitation: contextSendInvitation,
     getInvitations: contextGetInvitations,
     setCurrentHousehold: contextSetCurrentHousehold,
@@ -259,7 +263,7 @@ export function useHousehold(): UseHouseholdReturn {
     [contextUpdateMemberSelection]
   );
 
-  const acceptInvitation = useCallback(
+  const handleInvitationResponse = useCallback(
     async (householdId: string, memberId: string, accept: boolean) => {
       logger.debug("useHousehold: Processing invitation", {
         householdId,
@@ -267,7 +271,7 @@ export function useHousehold(): UseHouseholdReturn {
         accept,
       });
       try {
-        await contextAcceptInvitation(householdId, memberId, accept);
+        await contextHandleInvitationResponse(householdId, memberId, accept);
         logger.info("useHousehold: Successfully processed invitation", {
           householdId,
           memberId,
@@ -283,18 +287,19 @@ export function useHousehold(): UseHouseholdReturn {
         throw error;
       }
     },
-    [contextAcceptInvitation]
+    [contextHandleInvitationResponse]
   );
 
   const sendInvitation = useCallback(
     async (householdId: string, email: string) => {
       logger.debug("useHousehold: Sending invitation", { householdId, email });
       try {
-        await contextSendInvitation(householdId, email);
+        const response = await contextSendInvitation(householdId, email);
         logger.info("useHousehold: Successfully sent invitation", {
           householdId,
           email,
         });
+        return response;
       } catch (error) {
         logger.error("useHousehold: Failed to send invitation", {
           error,
@@ -318,9 +323,12 @@ export function useHousehold(): UseHouseholdReturn {
     }
   }, [contextGetInvitations]);
 
-  const setCurrentHousehold = useCallback((household: HouseholdWithMembers) => {
-    contextSetCurrentHousehold(household);
-  }, []);
+  const setCurrentHousehold = useCallback(
+    (household: HouseholdWithMembers) => {
+      contextSetCurrentHousehold(household);
+    },
+    [contextSetCurrentHousehold]
+  );
 
   return {
     userHouseholds,
@@ -328,6 +336,7 @@ export function useHousehold(): UseHouseholdReturn {
     selectedMembers,
     currentHousehold,
     members,
+    pendingInvitations,
     isLoading: Object.values(status).includes("loading"),
     error,
     status,
@@ -340,7 +349,7 @@ export function useHousehold(): UseHouseholdReturn {
     removeMember,
     updateMemberRole,
     updateMemberSelection,
-    acceptInvitation,
+    handleInvitationResponse,
     sendInvitation,
     getInvitations,
     setCurrentHousehold,

@@ -237,15 +237,13 @@ export class HouseholdService extends BaseApiClient {
       householdId: string,
       email: string,
       signal?: AbortSignal
-    ): Promise<ApiResponse<void>> => {
+    ): Promise<ApiResponse<HouseholdMemberWithUser | { pending: true }>> => {
       logger.debug("Sending household invitation", { householdId, email });
 
       return this.handleRequest(() =>
-        this.axiosInstance.post<ApiResponse<void>>(
-          `/households/${householdId}/invitations`,
-          { email },
-          { signal }
-        )
+        this.axiosInstance.post<
+          ApiResponse<HouseholdMemberWithUser | { pending: true }>
+        >(`/households/${householdId}/invitations`, { email }, { signal })
       );
     },
 
@@ -254,11 +252,11 @@ export class HouseholdService extends BaseApiClient {
      */
     getInvitations: async (
       signal?: AbortSignal
-    ): Promise<ApiResponse<HouseholdMember[]>> => {
+    ): Promise<ApiResponse<HouseholdMemberWithUser[]>> => {
       logger.debug("Fetching household invitations");
 
       return this.handleRequest(() =>
-        this.axiosInstance.get<ApiResponse<HouseholdMember[]>>(
+        this.axiosInstance.get<ApiResponse<HouseholdMemberWithUser[]>>(
           `/households/invitations`,
           { signal }
         )
@@ -270,19 +268,19 @@ export class HouseholdService extends BaseApiClient {
      */
     updateMemberInvitationStatus: async (
       householdId: string,
-      memberId: string,
+      userId: string,
       accept: boolean,
       signal?: AbortSignal
     ): Promise<ApiResponse<HouseholdMember>> => {
       logger.debug("Updating invitation status", {
         householdId,
-        memberId,
+        userId,
         accept,
       });
 
       return this.handleRequest(() =>
         this.axiosInstance.patch<ApiResponse<HouseholdMember>>(
-          `/households/${householdId}/members/${memberId}/status`,
+          `/households/${householdId}/members/${userId}/status`,
           { accept },
           { signal }
         )

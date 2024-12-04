@@ -9,7 +9,7 @@ import Link from "next/link";
 import { logger } from "@/lib/api/logger";
 
 const RegisterPage: React.FC = () => {
-  const { registerUser, isLoading, error } = useAuth();
+  const { register, isLoading, error } = useAuth();
   const router = useRouter();
   const [formData, setFormData] = useState({
     name: "",
@@ -77,11 +77,8 @@ const RegisterPage: React.FC = () => {
     if (!validateForm()) return;
 
     try {
-      await registerUser({
-        name: formData.name,
-        email: formData.email,
-        password: formData.password,
-      });
+      await register(formData.email, formData.password, formData.name);
+      await new Promise((resolve) => setTimeout(resolve, 100));
       router.replace("/dashboard");
     } catch (err) {
       logger.error("Registration failed", { error: err });

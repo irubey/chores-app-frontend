@@ -51,13 +51,6 @@ function AppContent({ children }: AppContentProps) {
     initAuth,
   } = useAuth();
 
-  const {
-    selectedHouseholds,
-    isLoading: householdLoading,
-    error: householdError,
-    status: householdStatus,
-  } = useHousehold();
-
   const router = useRouter();
   const pathname = usePathname();
   const isPublicRoute = PUBLIC_ROUTES.includes(
@@ -66,27 +59,29 @@ function AppContent({ children }: AppContentProps) {
   const initialLoadRef = useRef(true);
 
   // Check if contexts are still initializing
-  const isInitializing =
-    authStatus === "loading" ||
-    (isAuthenticated && !isPublicRoute && householdStatus.list === "loading");
+  const isInitializing = authStatus === "loading";
 
   // Check if initialization completed successfully
   const isInitialized =
-    authStatus === "authenticated" &&
-    (!isAuthenticated || isPublicRoute || householdStatus.list === "succeeded");
+    authStatus === "authenticated" || (!isAuthenticated && isPublicRoute);
 
   // Always memoize childProps to avoid unnecessary re-renders
   const childProps = useMemo(
     () => ({
       user,
-      selectedHouseholds,
     }),
-    [user, selectedHouseholds]
+    [user]
   );
 
   // Always memoize enhanced children
   const enhancedChildren = useMemo(() => {
-    return React.Children.map(children, (child) =>
+    const wrappedChildren = isAuthenticated ? (
+      <HouseholdsProvider>{children}</HouseholdsProvider>
+    ) : (
+      children
+    );
+
+    return React.Children.map(wrappedChildren, (child) =>
       React.isValidElement(child)
         ? React.cloneElement(
             child as React.ReactElement<WithUserProp>,
@@ -94,7 +89,7 @@ function AppContent({ children }: AppContentProps) {
           )
         : child
     );
-  }, [children, childProps]);
+  }, [children, childProps, isAuthenticated]);
 
   // Handle routing effects
   useEffect(() => {
@@ -104,7 +99,6 @@ function AppContent({ children }: AppContentProps) {
         pathname,
         isPublicRoute,
         authStatus,
-        householdStatus,
         isAuthenticated,
         isInitializing,
         isInitialized,
@@ -116,7 +110,6 @@ function AppContent({ children }: AppContentProps) {
     if (isInitializing) {
       logger.debug("Skipping redirect - still initializing", {
         authStatus,
-        householdStatus,
         isAuthenticated,
         pathname,
         isInitializing,
@@ -130,7 +123,6 @@ function AppContent({ children }: AppContentProps) {
       logger.debug("Initialization completed", {
         pathname,
         authStatus,
-        householdStatus,
         isAuthenticated,
         isInitializing,
         isInitialized,
@@ -152,7 +144,6 @@ function AppContent({ children }: AppContentProps) {
         isAuthenticated,
         isPublicRoute,
         authStatus,
-        householdStatus,
         isInitializing,
         isInitialized,
       });
@@ -163,7 +154,6 @@ function AppContent({ children }: AppContentProps) {
         isAuthenticated,
         isPublicRoute,
         authStatus,
-        householdStatus,
         isInitializing,
         isInitialized,
       });
@@ -174,7 +164,6 @@ function AppContent({ children }: AppContentProps) {
     isPublicRoute,
     router,
     authStatus,
-    householdStatus,
     isInitializing,
     isInitialized,
   ]);
@@ -187,7 +176,6 @@ function AppContent({ children }: AppContentProps) {
         pathname,
         isPublicRoute,
         authStatus,
-        householdStatus,
         isAuthenticated,
         isInitializing,
         isInitialized,
@@ -202,36 +190,6 @@ function AppContent({ children }: AppContentProps) {
     router,
     pathname,
     authStatus,
-    householdStatus,
-    isAuthenticated,
-    isInitializing,
-    isInitialized,
-  ]);
-
-  // Handle household errors
-  useEffect(() => {
-    if (householdError) {
-      logger.error("Household error in layout", {
-        householdError,
-        pathname,
-        isPublicRoute,
-        authStatus,
-        householdStatus,
-        isAuthenticated,
-        isInitializing,
-        isInitialized,
-      });
-      // Handle based on error type
-      if (householdError === "UNAUTHORIZED") {
-        router.replace("/login?error=session");
-      }
-    }
-  }, [
-    householdError,
-    router,
-    pathname,
-    authStatus,
-    householdStatus,
     isAuthenticated,
     isInitializing,
     isInitialized,
@@ -242,7 +200,6 @@ function AppContent({ children }: AppContentProps) {
     logger.debug("Showing loading state", {
       initialLoad: initialLoadRef.current,
       authStatus,
-      householdStatus,
       isAuthenticated,
       isPublicRoute,
       pathname,
@@ -257,12 +214,12 @@ function AppContent({ children }: AppContentProps) {
   }
 
   // Render error state if there's an error and we're not redirecting
-  if ((authError || householdError) && isPublicRoute) {
+  if (authError && isPublicRoute) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background-light dark:bg-background-dark">
         <div className="text-center">
           <h2 className="text-xl font-semibold mb-2">Something went wrong</h2>
-          <p className="text-text-secondary">{authError || householdError}</p>
+          <p className="text-text-secondary">{authError}</p>
           <button onClick={() => initAuth()} className="mt-4 btn-primary">
             Try Again
           </button>
@@ -315,11 +272,9 @@ export default function RootLayout({
         <ErrorBoundary>
           <Provider store={store}>
             <UserProvider>
-              <HouseholdsProvider>
-                <ThemeProvider>
-                  <AppContent>{children}</AppContent>
-                </ThemeProvider>
-              </HouseholdsProvider>
+              <ThemeProvider>
+                <AppContent>{children}</AppContent>
+              </ThemeProvider>
             </UserProvider>
           </Provider>
         </ErrorBoundary>

@@ -16,7 +16,8 @@ import Input from "@/components/common/Input";
 import Modal from "@/components/common/Modal";
 import { Select } from "@/components/common/Select";
 import { logger } from "@/lib/api/logger";
-import { ApiError } from "@/lib/api/errors";
+import { ApiError, ApiErrorType } from "@/lib/api/errors/apiErrors";
+import MembersList from "@/components/household/MembersList";
 import {
   FaUserPlus,
   FaEdit,
@@ -25,20 +26,26 @@ import {
   FaUserCog,
 } from "react-icons/fa";
 import Spinner from "@/components/common/Spinner";
+import InviteMemberModal from "@/components/household/InviteMemberModal";
 
 export default function HouseholdPage(): React.ReactElement {
   const router = useRouter();
   const { id } = useParams();
+  const searchParams = new URLSearchParams(window.location.search);
+  const invitationId = searchParams.get("invitation");
   const { user } = useAuth();
   const {
     userHouseholds,
+    pendingInvitations,
     updateHousehold,
     addMember,
     removeMember,
     deleteHousehold,
     updateMemberRole,
+    handleInvitationResponse,
     isLoading,
     error: householdError,
+    getUserHouseholds,
   } = useHousehold();
 
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -47,39 +54,85 @@ export default function HouseholdPage(): React.ReactElement {
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
   const [selectedMember, setSelectedMember] =
     useState<HouseholdMemberWithUser | null>(null);
-  const [inviteData, setInviteData] = useState<AddMemberDTO>({
-    email: "",
-    role: HouseholdRole.MEMBER,
-  });
   const [editData, setEditData] = useState<UpdateHouseholdDTO>({});
   const [error, setError] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
 
-  const household = userHouseholds.find((h) => h.id === id);
+  const household =
+    userHouseholds.find((h) => h.id === id) ||
+    pendingInvitations.find((inv) => inv.household?.id === id)?.household;
+  const invitation = invitationId
+    ? pendingInvitations.find((inv) => inv.id === invitationId)
+    : pendingInvitations.find((inv) => inv.household?.id === id);
+  const isPending = !!invitation;
+
+  logger.debug("Household page state", {
+    householdId: id,
+    hasHousehold: !!household,
+    hasInvitation: !!invitation,
+    isPending,
+    invitationId,
+    pendingInvitationsCount: pendingInvitations.length,
+  });
+
   const currentUserMember = household?.members?.find(
     (m) => m.userId === user?.id
   );
   const isAdmin = currentUserMember?.role === HouseholdRole.ADMIN;
 
-  const handleInviteMember = async () => {
-    if (!household) return;
+  const handleAcceptInvitation = async () => {
+    if (!household || !invitation) return;
 
     try {
       setIsUpdating(true);
       setError(null);
-      await addMember(household.id, inviteData);
-      setIsInviteModalOpen(false);
-      setInviteData({ email: "", role: HouseholdRole.MEMBER });
+      logger.debug("Accepting invitation", {
+        householdId: household.id,
+        userId: invitation.userId,
+      });
+      await handleInvitationResponse(household.id, invitation.userId, true);
+      await getUserHouseholds();
+      router.push("/dashboard");
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
       } else {
-        setError("Failed to invite member");
+        setError("Failed to accept invitation");
       }
-      logger.error("Failed to invite member", { error: err });
+      logger.error("Failed to accept invitation", { error: err });
     } finally {
       setIsUpdating(false);
     }
+  };
+
+  const handleRejectInvitation = async () => {
+    if (!household || !invitation) return;
+
+    try {
+      setIsUpdating(true);
+      setError(null);
+      logger.debug("Rejecting invitation", {
+        householdId: household.id,
+        userId: invitation.userId,
+      });
+      await handleInvitationResponse(household.id, invitation.userId, false);
+      await getUserHouseholds();
+      router.push("/dashboard");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError("Failed to reject invitation");
+      }
+      logger.error("Failed to reject invitation", { error: err });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleInviteMember = async (data: AddMemberDTO) => {
+    if (!household) return;
+    await addMember(household.id, data);
   };
 
   const handleUpdateHousehold = async () => {
@@ -187,6 +240,85 @@ export default function HouseholdPage(): React.ReactElement {
     );
   }
 
+  if (isPending) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+        <Card>
+          <div className="text-center space-y-4">
+            <h1 className="text-h1">Invitation to {household.name}</h1>
+            <p className="text-text-secondary">
+              You have been invited to join this household. Would you like to
+              accept or reject the invitation?
+            </p>
+            {error && (
+              <div className="bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-100 p-4 rounded-md">
+                {error}
+              </div>
+            )}
+            <div className="flex justify-center gap-4">
+              <Button
+                variant="ghost"
+                onClick={handleRejectInvitation}
+                disabled={isUpdating}
+              >
+                {isUpdating ? "Rejecting..." : "Reject"}
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleAcceptInvitation}
+                disabled={isUpdating}
+              >
+                {isUpdating ? "Accepting..." : "Accept"}
+              </Button>
+            </div>
+          </div>
+        </Card>
+
+        <Card>
+          <h2 className="text-h2 mb-4">Details</h2>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium text-text-secondary">
+                Currency
+              </label>
+              <p className="text-text-primary">{household.currency}</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-text-secondary">
+                Timezone
+              </label>
+              <p className="text-text-primary">{household.timezone}</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-text-secondary">
+                Language
+              </label>
+              <p className="text-text-primary">{household.language}</p>
+            </div>
+            {household.icon && (
+              <div>
+                <label className="text-sm font-medium text-text-secondary">
+                  Icon
+                </label>
+                <p className="text-text-primary">{household.icon}</p>
+              </div>
+            )}
+          </div>
+        </Card>
+
+        <Card>
+          <h2 className="text-h2 mb-4">Members</h2>
+          <MembersList
+            members={household.members}
+            currentUserId={user?.id}
+            maxDisplay={10}
+            isAdmin={false}
+          />
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
       {/* Household Name Section */}
@@ -236,77 +368,25 @@ export default function HouseholdPage(): React.ReactElement {
             <Button
               variant="primary"
               onClick={() => setIsInviteModalOpen(true)}
+              className="p-2"
+              title="Invite Member"
             >
-              <FaUserPlus className="h-4 w-4 mr-2" />
-              Invite Member
+              <FaUserPlus className="h-4 w-4" />
             </Button>
           )}
         </div>
         <div className="space-y-3">
-          {household.members
-            ?.filter(
-              (m): m is HouseholdMemberWithUser => "user" in m && m.isAccepted
-            )
-            .sort((a, b) => {
-              if (a.userId === user?.id) return -1;
-              if (b.userId === user?.id) return 1;
-              if (
-                a.role === HouseholdRole.ADMIN &&
-                b.role !== HouseholdRole.ADMIN
-              )
-                return -1;
-              if (
-                b.role === HouseholdRole.ADMIN &&
-                a.role !== HouseholdRole.ADMIN
-              )
-                return 1;
-              return (a.user?.name || "").localeCompare(b.user?.name || "");
-            })
-            .map((member) => (
-              <div
-                key={member.id}
-                className="flex items-center justify-between p-3 bg-neutral-50 dark:bg-neutral-800 rounded-md"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full bg-secondary-dark dark:bg-secondary-light" />
-                  <div>
-                    <p className="font-medium">
-                      {member.user?.name}
-                      {member.userId === user?.id && " (You)"}
-                    </p>
-                    <p className="text-sm text-text-secondary">
-                      {member.role === HouseholdRole.ADMIN ? "Admin" : "Member"}
-                    </p>
-                  </div>
-                </div>
-                {isAdmin && member.userId !== user?.id && (
-                  <div className="flex gap-2">
-                    <Button
-                      variant="ghost"
-                      className="text-primary dark:text-primary-light"
-                      onClick={() => {
-                        setSelectedMember(member);
-                        setIsRoleModalOpen(true);
-                      }}
-                    >
-                      {member.role === HouseholdRole.ADMIN ? (
-                        <FaCrown className="h-4 w-4" />
-                      ) : (
-                        <FaUserCog className="h-4 w-4" />
-                      )}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      className="btn-icon text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                      onClick={() => handleRemoveMember(member.id)}
-                      aria-label={`Remove ${member.user?.name || "member"}`}
-                    >
-                      <FaTrash className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ))}
+          <MembersList
+            members={household.members}
+            currentUserId={user?.id}
+            maxDisplay={10}
+            isAdmin={isAdmin}
+            onChangeRole={(member) => {
+              setSelectedMember(member);
+              setIsRoleModalOpen(true);
+            }}
+            onRemoveMember={handleRemoveMember}
+          />
         </div>
       </Card>
 
@@ -344,58 +424,11 @@ export default function HouseholdPage(): React.ReactElement {
       </Card>
 
       {/* Modals */}
-      <Modal
+      <InviteMemberModal
         isOpen={isInviteModalOpen}
-        onClose={() => {
-          setIsInviteModalOpen(false);
-          setInviteData({ email: "", role: HouseholdRole.MEMBER });
-          setError(null);
-        }}
-        title="Invite Member"
-      >
-        <div className="space-y-4">
-          <Input
-            label="Email"
-            type="email"
-            value={inviteData.email}
-            onChange={(e) =>
-              setInviteData({ ...inviteData, email: e.target.value })
-            }
-            placeholder="member@example.com"
-          />
-          <Select
-            label="Role"
-            value={inviteData.role}
-            onChange={(value) =>
-              setInviteData({ ...inviteData, role: value as HouseholdRole })
-            }
-            options={[
-              { value: HouseholdRole.MEMBER, label: "Member" },
-              { value: HouseholdRole.ADMIN, label: "Admin" },
-            ]}
-          />
-          <div className="flex justify-end gap-4">
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setIsInviteModalOpen(false);
-                setInviteData({ email: "", role: HouseholdRole.MEMBER });
-                setError(null);
-              }}
-              disabled={isUpdating}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              onClick={handleInviteMember}
-              disabled={isUpdating || !inviteData.email}
-            >
-              {isUpdating ? "Inviting..." : "Invite"}
-            </Button>
-          </div>
-        </div>
-      </Modal>
+        onClose={() => setIsInviteModalOpen(false)}
+        onInvite={handleInviteMember}
+      />
 
       <Modal
         isOpen={isEditModalOpen}
