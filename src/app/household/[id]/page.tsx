@@ -42,10 +42,12 @@ export default function HouseholdPage(): React.ReactElement {
     removeMember,
     deleteHousehold,
     updateMemberRole,
+    updateMemberSelection,
     handleInvitationResponse,
     isLoading,
     error: householdError,
     getUserHouseholds,
+    setCurrentHousehold,
   } = useHousehold();
 
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -205,14 +207,15 @@ export default function HouseholdPage(): React.ReactElement {
   };
 
   const handleRemoveMember = async (memberId: string) => {
-    if (
-      !household ||
-      !window.confirm("Are you sure you want to remove this member?")
-    )
-      return;
+    if (!household) return;
 
     try {
+      setIsUpdating(true);
       setError(null);
+      logger.debug("Removing member", {
+        householdId: household.id,
+        memberId,
+      });
       await removeMember(household.id, memberId);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -221,209 +224,219 @@ export default function HouseholdPage(): React.ReactElement {
         setError("Failed to remove member");
       }
       logger.error("Failed to remove member", { error: err });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleUpdateSelection = async (
+    memberId: string,
+    isSelected: boolean
+  ) => {
+    if (!household || !user) return;
+
+    // Optimistically update the UI
+    const updatedHousehold = {
+      ...household,
+      members: household.members?.map((m) =>
+        m.userId === user.id ? { ...m, isSelected } : m
+      ),
+    };
+    setCurrentHousehold(updatedHousehold);
+
+    try {
+      setIsUpdating(true);
+      setError(null);
+      logger.debug("useHousehold: Updating member selection", {
+        householdId: household.id,
+        memberId: user.id,
+        isSelected,
+      });
+      await updateMemberSelection(household.id, user.id, isSelected);
+    } catch (err) {
+      // Revert optimistic update on error
+      setCurrentHousehold(household);
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError("Failed to update notification settings");
+      }
+      logger.error("Failed to update notification settings", { error: err });
+    } finally {
+      setIsUpdating(false);
     }
   };
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center min-h-[50vh]">
-        <Spinner className="h-8 w-8" />
+      <div className="flex items-center justify-center min-h-screen">
+        <Spinner size="large" className="text-primary" />
       </div>
     );
   }
 
   if (!household) {
     return (
-      <div className="text-center py-8">
-        <h2 className="text-h2 text-text-secondary">Household not found</h2>
-      </div>
-    );
-  }
-
-  if (isPending) {
-    return (
-      <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
-        <Card>
-          <div className="text-center space-y-4">
-            <h1 className="text-h1">Invitation to {household.name}</h1>
-            <p className="text-text-secondary">
-              You have been invited to join this household. Would you like to
-              accept or reject the invitation?
-            </p>
-            {error && (
-              <div className="bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-100 p-4 rounded-md">
-                {error}
-              </div>
-            )}
-            <div className="flex justify-center gap-4">
-              <Button
-                variant="ghost"
-                onClick={handleRejectInvitation}
-                disabled={isUpdating}
-              >
-                {isUpdating ? "Rejecting..." : "Reject"}
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handleAcceptInvitation}
-                disabled={isUpdating}
-              >
-                {isUpdating ? "Accepting..." : "Accept"}
-              </Button>
-            </div>
-          </div>
-        </Card>
-
-        <Card>
-          <h2 className="text-h2 mb-4">Details</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-medium text-text-secondary">
-                Currency
-              </label>
-              <p className="text-text-primary">{household.currency}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-text-secondary">
-                Timezone
-              </label>
-              <p className="text-text-primary">{household.timezone}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-text-secondary">
-                Language
-              </label>
-              <p className="text-text-primary">{household.language}</p>
-            </div>
-            {household.icon && (
-              <div>
-                <label className="text-sm font-medium text-text-secondary">
-                  Icon
-                </label>
-                <p className="text-text-primary">{household.icon}</p>
-              </div>
-            )}
-          </div>
-        </Card>
-
-        <Card>
-          <h2 className="text-h2 mb-4">Members</h2>
-          <MembersList
-            members={household.members}
-            currentUserId={user?.id}
-            maxDisplay={10}
-            isAdmin={false}
-          />
-        </Card>
+      <div className="flex flex-col items-center justify-center min-h-screen">
+        <h1 className="text-h1 mb-6">Household not found</h1>
+        <Button
+          variant="primary"
+          onClick={() => router.push("/dashboard")}
+          className="animate-slide-up"
+        >
+          Return to Dashboard
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
-      {/* Household Name Section */}
-      <div className="flex justify-between items-center">
-        <h1 className="text-h1">{household.name}</h1>
-        {isAdmin && (
-          <div className="flex gap-2">
-            <Button
-              variant="ghost"
-              className="text-primary dark:text-primary-light"
-              onClick={() => {
-                setEditData({
-                  name: household.name,
-                  currency: household.currency,
-                  timezone: household.timezone,
-                  language: household.language,
-                });
-                setIsEditModalOpen(true);
-              }}
-            >
-              <FaEdit className="h-4 w-4 mr-2" />
-              Edit
-            </Button>
-            <Button
-              variant="ghost"
-              className="btn-icon text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-              onClick={() => setIsDeleteModalOpen(true)}
-              aria-label="Delete household"
-            >
-              <FaTrash className="h-4 w-4" />
-            </Button>
+    <div className="container-custom py-8 animate-fade-in">
+      <Card className="mb-8">
+        <div className="flex justify-between items-center mb-6 border-b border-neutral-200 dark:border-neutral-700 pb-4">
+          <div>
+            <h1 className="text-h2 mb-1">{household.name}</h1>
+            <div className="flex items-center gap-4">
+              <p className="text-text-secondary text-sm">
+                {household.members?.length || 0} members
+              </p>
+              {currentUserMember && (
+                <button
+                  onClick={() =>
+                    handleUpdateSelection(
+                      currentUserMember.id,
+                      !currentUserMember.isSelected
+                    )
+                  }
+                  className={`text-sm flex items-center gap-2 ${
+                    currentUserMember.isSelected
+                      ? "text-text-secondary hover:text-text-primary"
+                      : "text-red-500 hover:text-red-600"
+                  } transition-colors duration-200`}
+                  disabled={isUpdating}
+                >
+                  {currentUserMember.isSelected ? (
+                    <>
+                      <span className="w-2 h-2 rounded-full bg-secondary animate-pulse" />
+                      Receiving Updates
+                    </>
+                  ) : (
+                    <>
+                      <span className="w-2 h-2 rounded-full bg-red-500" />
+                      Muted
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
           </div>
-        )}
-      </div>
-
-      {error && (
-        <div className="bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-100 p-4 rounded-md">
-          {error}
-        </div>
-      )}
-
-      {/* Members Section */}
-      <Card>
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-h2">Members</h2>
           {isAdmin && (
-            <Button
-              variant="primary"
-              onClick={() => setIsInviteModalOpen(true)}
-              className="p-2"
-              title="Invite Member"
-            >
-              <FaUserPlus className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
-        <div className="space-y-3">
-          <MembersList
-            members={household.members}
-            currentUserId={user?.id}
-            maxDisplay={10}
-            isAdmin={isAdmin}
-            onChangeRole={(member) => {
-              setSelectedMember(member);
-              setIsRoleModalOpen(true);
-            }}
-            onRemoveMember={handleRemoveMember}
-          />
-        </div>
-      </Card>
-
-      {/* Household Details Section */}
-      <Card>
-        <h2 className="text-h2 mb-4">Details</h2>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="text-sm font-medium text-text-secondary">
-              Currency
-            </label>
-            <p className="text-text-primary">{household.currency}</p>
-          </div>
-          <div>
-            <label className="text-sm font-medium text-text-secondary">
-              Timezone
-            </label>
-            <p className="text-text-primary">{household.timezone}</p>
-          </div>
-          <div>
-            <label className="text-sm font-medium text-text-secondary">
-              Language
-            </label>
-            <p className="text-text-primary">{household.language}</p>
-          </div>
-          {household.icon && (
-            <div>
-              <label className="text-sm font-medium text-text-secondary">
-                Icon
-              </label>
-              <p className="text-text-primary">{household.icon}</p>
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => setIsEditModalOpen(true)}
+                icon={<FaEdit className="w-5 h-5 text-primary" />}
+                className="btn-icon"
+                aria-label="Edit Household"
+                title="Edit Household"
+              />
+              <Button
+                variant="ghost"
+                onClick={() => setIsDeleteModalOpen(true)}
+                icon={<FaTrash className="w-5 h-5 text-red-500" />}
+                className="btn-icon"
+                aria-label="Delete Household"
+                title="Delete Household"
+              />
             </div>
           )}
         </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          <div className="card bg-primary-light/10 dark:bg-primary-dark/10">
+            <h3 className="text-h4 mb-2">Currency</h3>
+            <p className="text-text-primary dark:text-text-secondary">
+              {household.currency || "USD"}
+            </p>
+          </div>
+          <div className="card bg-primary-light/10 dark:bg-primary-dark/10">
+            <h3 className="text-h4 mb-2">Language</h3>
+            <p className="text-text-primary dark:text-text-secondary">
+              {household.language || "en"}
+            </p>
+          </div>
+          <div className="card bg-primary-light/10 dark:bg-primary-dark/10">
+            <h3 className="text-h4 mb-2">Created</h3>
+            <p className="text-text-primary dark:text-text-secondary">
+              {new Date(household.createdAt).toLocaleDateString(undefined, {
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              })}
+            </p>
+          </div>
+        </div>
+
+        {isPending ? (
+          <div className="flex flex-col items-center justify-center p-8 bg-accent-light/10 dark:bg-accent-dark/10 rounded-lg">
+            <h2 className="text-h3 mb-4">Pending Invitation</h2>
+            <div className="flex gap-4">
+              <Button
+                variant="primary"
+                onClick={handleAcceptInvitation}
+                disabled={isUpdating}
+                className="min-w-[120px]"
+              >
+                {isUpdating ? (
+                  <Spinner size="small" className="mx-auto" />
+                ) : (
+                  "Accept"
+                )}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={handleRejectInvitation}
+                disabled={isUpdating}
+                className="min-w-[120px]"
+              >
+                {isUpdating ? (
+                  <Spinner size="small" className="mx-auto" />
+                ) : (
+                  "Reject"
+                )}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-h3">Members</h2>
+              {isAdmin && (
+                <Button
+                  variant="ghost"
+                  onClick={() => setIsInviteModalOpen(true)}
+                  icon={<FaUserPlus className="w-5 h-5 text-primary" />}
+                  className="btn-icon"
+                  aria-label="Invite Member"
+                  title="Invite Member"
+                />
+              )}
+            </div>
+            <MembersList
+              members={household.members || []}
+              currentUserId={user?.id}
+              isAdmin={isAdmin}
+              onChangeRole={(member) => {
+                setSelectedMember(member);
+                setIsRoleModalOpen(true);
+              }}
+              onRemoveMember={handleRemoveMember}
+              className="animate-fade-in"
+            />
+          </div>
+        )}
       </Card>
 
-      {/* Modals */}
       <InviteMemberModal
         isOpen={isInviteModalOpen}
         onClose={() => setIsInviteModalOpen(false)}
@@ -432,70 +445,103 @@ export default function HouseholdPage(): React.ReactElement {
 
       <Modal
         isOpen={isEditModalOpen}
-        onClose={() => {
-          setIsEditModalOpen(false);
-          setEditData({});
-          setError(null);
-        }}
+        onClose={() => setIsEditModalOpen(false)}
         title="Edit Household"
       >
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleUpdateHousehold();
+          }}
+        >
+          <div className="space-y-4">
+            <Input
+              label="Name"
+              value={editData.name || household.name}
+              onChange={(e) =>
+                setEditData({ ...editData, name: e.target.value })
+              }
+              required
+              className="input"
+            />
+            <Select
+              label="Currency"
+              value={editData.currency || household.currency || "USD"}
+              onChange={(value) =>
+                setEditData({ ...editData, currency: value })
+              }
+              options={[
+                { value: "USD", label: "USD" },
+                { value: "EUR", label: "EUR" },
+                { value: "GBP", label: "GBP" },
+              ]}
+              className="input"
+            />
+            <Select
+              label="Language"
+              value={editData.language || household.language || "en"}
+              onChange={(value) =>
+                setEditData({ ...editData, language: value })
+              }
+              options={[
+                { value: "en", label: "English" },
+                { value: "es", label: "Spanish" },
+                { value: "fr", label: "French" },
+              ]}
+              className="input"
+            />
+            {error && <p className="form-error">{error}</p>}
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setIsEditModalOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" disabled={isUpdating}>
+                {isUpdating ? (
+                  <Spinner size="small" className="mx-auto" />
+                ) : (
+                  "Save"
+                )}
+              </Button>
+            </div>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        title="Delete Household"
+      >
         <div className="space-y-4">
-          <Input
-            label="Name"
-            value={editData.name || ""}
-            onChange={(e) => setEditData({ ...editData, name: e.target.value })}
-            placeholder="Household name"
-          />
-          <Select
-            label="Currency"
-            value={editData.currency || household.currency}
-            onChange={(value) => setEditData({ ...editData, currency: value })}
-            options={[
-              { value: "USD", label: "USD" },
-              { value: "EUR", label: "EUR" },
-              { value: "GBP", label: "GBP" },
-            ]}
-          />
-          <Select
-            label="Timezone"
-            value={editData.timezone || household.timezone}
-            onChange={(value) => setEditData({ ...editData, timezone: value })}
-            options={[
-              { value: "UTC", label: "UTC" },
-              { value: "America/New_York", label: "Eastern Time" },
-              { value: "America/Chicago", label: "Central Time" },
-              { value: "America/Denver", label: "Mountain Time" },
-              { value: "America/Los_Angeles", label: "Pacific Time" },
-            ]}
-          />
-          <Select
-            label="Language"
-            value={editData.language || household.language}
-            onChange={(value) => setEditData({ ...editData, language: value })}
-            options={[
-              { value: "en", label: "English" },
-              { value: "es", label: "Spanish" },
-              { value: "fr", label: "French" },
-            ]}
-          />
-          <div className="flex justify-end gap-4">
+          <div className="bg-red-100 dark:bg-red-900/20 p-4 rounded-lg">
+            <p className="text-red-700 dark:text-red-300">
+              Are you sure you want to delete this household? This action cannot
+              be undone.
+            </p>
+          </div>
+          {error && <p className="form-error">{error}</p>}
+          <div className="flex justify-end gap-2">
             <Button
-              variant="ghost"
-              onClick={() => {
-                setIsEditModalOpen(false);
-                setEditData({});
-                setError(null);
-              }}
-              disabled={isUpdating}
+              variant="secondary"
+              onClick={() => setIsDeleteModalOpen(false)}
             >
               Cancel
             </Button>
             <Button
               variant="primary"
-              onClick={handleUpdateHousehold}
-              disabled={isUpdating || !editData.name}
+              onClick={handleDeleteHousehold}
+              disabled={isUpdating}
+              className="bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700"
             >
-              {isUpdating ? "Saving..." : "Save Changes"}
+              {isUpdating ? (
+                <Spinner size="small" className="mx-auto" />
+              ) : (
+                "Delete"
+              )}
             </Button>
           </div>
         </div>
@@ -503,60 +549,48 @@ export default function HouseholdPage(): React.ReactElement {
 
       <Modal
         isOpen={isRoleModalOpen}
-        onClose={() => {
-          setIsRoleModalOpen(false);
-          setSelectedMember(null);
-          setError(null);
-        }}
-        title="Change Member Role"
+        onClose={() => setIsRoleModalOpen(false)}
+        title="Update Member Role"
       >
         <div className="space-y-4">
-          <p className="text-text-secondary">
-            Change role for {selectedMember?.user?.name}
-          </p>
-          <Select
-            label="Role"
-            value={selectedMember?.role || HouseholdRole.MEMBER}
-            onChange={(value) =>
-              selectedMember &&
-              handleUpdateMemberRole(selectedMember.id, value as HouseholdRole)
-            }
-            options={[
-              { value: HouseholdRole.MEMBER, label: "Member" },
-              { value: HouseholdRole.ADMIN, label: "Admin" },
-            ]}
-          />
-        </div>
-      </Modal>
-
-      <Modal
-        isOpen={isDeleteModalOpen}
-        onClose={() => {
-          setIsDeleteModalOpen(false);
-          setError(null);
-        }}
-        title="Delete Household"
-      >
-        <div className="space-y-4">
-          <p className="text-text-secondary">
-            Are you sure you want to delete this household? This action cannot
-            be undone.
-          </p>
-          <div className="flex justify-end gap-4">
+          {selectedMember && (
+            <>
+              <div className="bg-primary-light/10 dark:bg-primary-dark/10 p-4 rounded-lg">
+                <p className="text-text-primary dark:text-text-secondary">
+                  Update role for{" "}
+                  <span className="font-medium">
+                    {selectedMember.user?.name}
+                  </span>
+                  <span className="text-text-secondary">
+                    {" "}
+                    ({selectedMember.user?.email})
+                  </span>
+                </p>
+              </div>
+              <Select
+                label="Role"
+                value={selectedMember.role}
+                onChange={(value) =>
+                  handleUpdateMemberRole(
+                    selectedMember.id,
+                    value as HouseholdRole
+                  )
+                }
+                options={[
+                  { value: HouseholdRole.ADMIN, label: "Admin" },
+                  { value: HouseholdRole.MEMBER, label: "Member" },
+                ]}
+                className="input"
+              />
+            </>
+          )}
+          {error && <p className="form-error">{error}</p>}
+          <div className="flex justify-end gap-2">
             <Button
-              variant="ghost"
-              onClick={() => setIsDeleteModalOpen(false)}
-              disabled={isUpdating}
+              variant="secondary"
+              onClick={() => setIsRoleModalOpen(false)}
             >
-              Cancel
-            </Button>
-            <Button
-              variant="ghost"
-              className="text-red-500 hover:text-red-700"
-              onClick={handleDeleteHousehold}
-              disabled={isUpdating}
-            >
-              {isUpdating ? "Deleting..." : "Delete Household"}
+              Close
             </Button>
           </div>
         </div>

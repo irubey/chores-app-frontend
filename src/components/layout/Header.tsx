@@ -78,7 +78,7 @@ const Header: React.FC<HeaderProps> = ({ user }) => {
         {user ? (
           <nav className="flex items-center space-x-6">
             <NavigationLink
-              href="/messages"
+              href="/threads"
               icon={<FaComments className="text-xl" />}
               label="Messaging"
               notificationType="MESSAGE"

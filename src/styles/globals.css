@@ -189,18 +189,6 @@
            dark:focus:ring-offset-background-dark;
   }
 
-  .animate-fade {
-    @apply animate-fade-in;
-  }
-
-  .animate-slide-up {
-    @apply animate-slide-up;
-  }
-
-  .animate-slide-down {
-    @apply animate-slide-down;
-  }
-
   .glass {
     @apply bg-white bg-opacity-20 backdrop-blur-lg
            dark:bg-background-dark dark:bg-opacity-20;
