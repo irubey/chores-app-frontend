@@ -10,11 +10,12 @@ import React, {
 import { User } from "@shared/types";
 import { authService } from "@/lib/api/services/authService";
 import { logger } from "@/lib/api/logger";
+import { requestManager } from "@/lib/api/requestManager";
 
 interface UserContextState {
   user: User | null;
   isAuthenticated: boolean;
-  status: "idle" | "loading" | "authenticated" | "error";
+  status: "idle" | "loading" | "authenticated" | "unauthenticated" | "error";
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name: string) => Promise<void>;
@@ -30,7 +31,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const initializationRef = useRef<Promise<void> | null>(null);
   const initializationAttempts = useRef(0);
-  const requestInProgressRef = useRef<{ [key: string]: Promise<any> }>({});
   const MAX_INIT_ATTEMPTS = 3;
 
   // Log state changes
@@ -61,35 +61,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     setError(newError);
   };
 
-  const dedupRequest = useCallback(
-    async <T,>(key: string, request: () => Promise<T>): Promise<T> => {
-      if (requestInProgressRef.current[key]) {
-        logger.debug("Using existing request", {
-          key,
-          currentRequests: Object.keys(requestInProgressRef.current),
-        });
-        return requestInProgressRef.current[key];
-      }
-
-      logger.debug("Starting new request", {
-        key,
-        currentRequests: Object.keys(requestInProgressRef.current),
-      });
-      requestInProgressRef.current[key] = request().finally(() => {
-        logger.debug("Request completed", {
-          key,
-          remainingRequests: Object.keys(requestInProgressRef.current).filter(
-            (k) => k !== key
-          ),
-        });
-        delete requestInProgressRef.current[key];
-      });
-
-      return requestInProgressRef.current[key];
-    },
-    []
-  );
-
   const initializeAuth = useCallback(async () => {
     try {
       // Prevent multiple concurrent initializations
@@ -119,6 +90,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           currentStatus: status,
           hasUser: !!user,
         });
+        setStatusWithLogging("unauthenticated");
         throw new Error("Max initialization attempts exceeded");
       }
 
@@ -129,9 +101,10 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         hasUser: !!user,
       });
 
-      // Use dedupRequest to prevent duplicate API calls
-      const response = await dedupRequest("initAuth", () =>
-        authService.initializeAuth()
+      const response = await requestManager.dedupRequest(
+        "initAuth",
+        () => authService.initializeAuth(),
+        { requiresAuth: false }
       );
 
       if (response?.data) {
@@ -143,7 +116,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         });
       } else {
         setUserWithLogging(null);
-        setStatusWithLogging("idle");
+        setStatusWithLogging("unauthenticated");
         logger.debug("Auth initialization complete - no user found", {
           attempts: initializationAttempts.current,
         });
@@ -151,88 +124,53 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
       setErrorWithLogging(null);
       initializationAttempts.current = 0; // Reset counter on success
-    } catch (error) {
+    } catch (error: any) {
       logger.error("Auth initialization failed", {
         error,
         attempts: initializationAttempts.current,
         currentStatus: status,
         hasUser: !!user,
       });
+
+      // Handle 401 specifically
+      if (error?.status === 401 || error?.response?.status === 401) {
+        setUserWithLogging(null);
+        setStatusWithLogging("unauthenticated");
+        setErrorWithLogging(null);
+        logger.info("User not authenticated");
+        initializationAttempts.current = 0; // Reset counter on 401
+        return;
+      }
+
       setUserWithLogging(null);
       setStatusWithLogging("error");
       setErrorWithLogging("Failed to initialize authentication");
       throw error;
     }
-  }, [status, user, dedupRequest]);
+  }, [status, user]);
 
-  // Initialize auth on mount
-  useEffect(() => {
-    const abortController = new AbortController();
+  const login = useCallback(async (email: string, password: string) => {
+    try {
+      setStatusWithLogging("loading");
+      setErrorWithLogging(null);
+      logger.debug("Starting login process", { email });
 
-    logger.debug("Auth initialization effect running", {
-      hasInitRef: !!initializationRef.current,
-      currentStatus: status,
-      hasUser: !!user,
-      attempts: initializationAttempts.current,
-    });
+      const response = await requestManager.dedupRequest(
+        "login",
+        () => authService.login({ email, password }),
+        { requiresAuth: false }
+      );
 
-    if (!initializationRef.current) {
-      logger.debug("Starting initial auth initialization");
-      initializationRef.current = initializeAuth().catch((error) => {
-        if (!abortController.signal.aborted) {
-          logger.error("Failed to initialize auth on mount", {
-            error,
-            attempts: initializationAttempts.current,
-          });
-        }
-      });
+      setUserWithLogging(response.data);
+      setStatusWithLogging("authenticated");
+      logger.info("Login successful", { userId: response.data.id });
+    } catch (error) {
+      logger.error("Login failed", { error });
+      setStatusWithLogging("error");
+      setErrorWithLogging("Login failed. Please check your credentials.");
+      throw error;
     }
-
-    return () => {
-      logger.debug("Auth initialization effect cleanup", {
-        isHidden: document.hidden,
-        hasInitRef: !!initializationRef.current,
-        attempts: initializationAttempts.current,
-        requestsInProgress: Object.keys(requestInProgressRef.current),
-      });
-
-      // Only clear refs if component is actually unmounting
-      if (document.hidden || abortController.signal.aborted) {
-        return;
-      }
-
-      // Abort any in-flight requests
-      abortController.abort();
-
-      // Clear request tracking
-      Object.keys(requestInProgressRef.current).forEach((key) => {
-        delete requestInProgressRef.current[key];
-      });
-    };
-  }, []); // Remove initializeAuth from deps since it's stable
-
-  const login = useCallback(
-    async (email: string, password: string) => {
-      try {
-        setStatus("loading");
-        setError(null);
-        logger.debug("Starting login process", { email });
-
-        const response = await dedupRequest("login", () =>
-          authService.login({ email, password })
-        );
-        setUser(response.data);
-        setStatus("authenticated");
-        logger.info("Login successful", { userId: response.data.id });
-      } catch (error) {
-        logger.error("Login failed", { error });
-        setStatus("error");
-        setError("Login failed. Please check your credentials.");
-        throw error;
-      }
-    },
-    [dedupRequest]
-  );
+  }, []);
 
   const register = useCallback(
     async (email: string, password: string, name: string) => {
@@ -241,8 +179,10 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         setErrorWithLogging(null);
         logger.debug("Starting registration process", { email, name });
 
-        const response = await dedupRequest("register", () =>
-          authService.register({ email, password, name })
+        const response = await requestManager.dedupRequest(
+          "register",
+          () => authService.register({ email, password, name }),
+          { requiresAuth: false }
         );
 
         if (!response?.data) {
@@ -250,7 +190,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         }
 
         // Initialize auth state after registration
-        await dedupRequest("initAuth", () => authService.initializeAuth());
+        await requestManager.dedupRequest(
+          "initAuth",
+          () => authService.initializeAuth(),
+          { requiresAuth: false }
+        );
 
         setUserWithLogging(response.data);
         setStatusWithLogging("authenticated");
@@ -266,21 +210,24 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         throw error;
       }
     },
-    [dedupRequest]
+    []
   );
 
   const logout = useCallback(async () => {
     try {
-      setStatus("loading");
+      setStatusWithLogging("loading");
       logger.debug("Starting logout process", {
         currentUser: user?.id,
         currentStatus: status,
       });
 
-      await authService.logout();
-      setUser(null);
-      setStatus("idle");
-      setError(null);
+      await requestManager.dedupRequest("logout", () => authService.logout(), {
+        requiresAuth: true,
+      });
+
+      setUserWithLogging(null);
+      setStatusWithLogging("idle");
+      setErrorWithLogging(null);
       logger.info("Logout successful", { previousUserId: user?.id });
     } catch (error) {
       logger.error("Logout failed", {
@@ -288,28 +235,49 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         currentUser: user?.id,
         currentStatus: status,
       });
-      setStatus("error");
-      setError("Logout failed. Please try again.");
+      setStatusWithLogging("error");
+      setErrorWithLogging("Logout failed. Please try again.");
       throw error;
     }
   }, [user, status]);
 
-  return (
-    <UserContext.Provider
-      value={{
-        user,
-        isAuthenticated: status === "authenticated",
-        status,
-        error,
-        login,
-        register,
-        logout,
-        initializeAuth,
-      }}
-    >
-      {children}
-    </UserContext.Provider>
-  );
+  // Initialize auth on mount
+  useEffect(() => {
+    if (initializationRef.current) {
+      logger.debug("Auth initialization already in progress", {
+        currentStatus: status,
+        hasUser: !!user,
+      });
+      return;
+    }
+
+    logger.debug("Starting initial auth check", {
+      currentStatus: status,
+      hasUser: !!user,
+    });
+
+    initializationRef.current = initializeAuth()
+      .catch((error) => {
+        logger.error("Initial auth check failed", { error });
+      })
+      .finally(() => {
+        initializationRef.current = null;
+      });
+  }, []); // Only run on mount
+
+  // Provide the context value
+  const value = {
+    user,
+    isAuthenticated: status === "authenticated",
+    status,
+    error,
+    login,
+    register,
+    logout,
+    initializeAuth,
+  };
+
+  return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
 }
 
 export function useUser() {

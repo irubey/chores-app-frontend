@@ -6,10 +6,15 @@ import { ApiResponse } from "@shared/interfaces";
 import { logger } from "@/lib/api/logger";
 import { useAuth } from "@/hooks/useAuth";
 import { useHouseholds } from "@/contexts/HouseholdsContext";
+import { requestManager } from "@/lib/api/requestManager";
 
 interface UseThreadsOptions {
   initialPageSize?: number;
   autoRefreshInterval?: number;
+  filters?: {
+    householdIds?: string[];
+  };
+  enabled?: boolean;
 }
 
 interface ThreadsState {
@@ -22,93 +27,174 @@ interface ThreadsState {
 
 export function useThreads({
   initialPageSize = 20,
-  autoRefreshInterval = 30000, // 30 seconds
+  autoRefreshInterval = 30000,
+  filters,
+  enabled = true,
 }: UseThreadsOptions = {}) {
+  const { user } = useAuth();
+  const { selectedHouseholds } = useHouseholds();
+  const isMounted = useRef(true);
+  const isInitializedRef = useRef(false);
+  const threadService = useRef(new ThreadService()).current;
+
   const [state, setState] = useState<ThreadsState>({
     threads: [],
-    isLoading: true,
+    isLoading: false,
     error: null,
     hasMore: true,
     nextCursor: undefined,
   });
 
-  const { user } = useAuth();
-  const { selectedHouseholds, getSelectedHouseholds } = useHouseholds();
-  const threadService = useRef(new ThreadService()).current;
-  const abortControllerRef = useRef<AbortController>();
-
-  // Track if component is mounted
-  const isMounted = useRef(true);
+  // Set mounted on mount
   useEffect(() => {
+    isMounted.current = true;
     return () => {
       isMounted.current = false;
     };
   }, []);
 
-  // Fetch threads with pagination
   const fetchThreads = useCallback(
-    async (options?: PaginationOptions) => {
-      if (!user || !selectedHouseholds.length) return;
+    async (options?: { cursor?: string }) => {
+      if (!enabled || !user || !isMounted.current) {
+        logger.debug("Threads fetch skipped", {
+          enabled,
+          hasUser: !!user,
+          isMounted: isMounted.current,
+        });
+        return;
+      }
+
+      const householdsToFetch =
+        selectedHouseholds?.filter(
+          (h) =>
+            h.id &&
+            typeof h.id === "string" &&
+            h.members?.some(
+              (m) => m.userId === user.id && m.isAccepted && m.isSelected
+            )
+        ) || [];
+
+      if (!householdsToFetch.length) {
+        logger.debug("No accessible households to fetch threads for", {
+          selectedHouseholdIds: selectedHouseholds?.map((h) => h.id),
+          userId: user.id,
+          selectedHouseholds,
+        });
+        setState((prev) => ({
+          ...prev,
+          threads: [],
+          isLoading: false,
+          error: null,
+          hasMore: false,
+          nextCursor: undefined,
+        }));
+        return;
+      }
 
       try {
-        // Cancel previous request if exists
-        abortControllerRef.current?.abort();
-        abortControllerRef.current = new AbortController();
-
         setState((prev) => ({ ...prev, isLoading: true, error: null }));
 
         logger.debug("Fetching threads for selected households", {
           options,
-          selectedHouseholdIds: selectedHouseholds.map((h) => h.id),
+          householdIds: householdsToFetch.map((h) => h.id),
+          filters,
+          enabled,
+          householdsToFetch,
         });
 
-        // Fetch threads for each selected household
-        const threadsPromises = selectedHouseholds.map((household) =>
-          threadService.threads.getThreads(
-            household.id,
-            {
-              limit: initialPageSize,
-              cursor: options?.cursor,
-              sortBy: "updatedAt",
-              direction: "desc",
-            },
-            abortControllerRef.current.signal
+        // Use requestManager to handle all household requests
+        const responses = await Promise.all(
+          householdsToFetch.map((household) =>
+            requestManager
+              .dedupRequest(
+                `threads-${household.id}-${options?.cursor || "initial"}`,
+                () =>
+                  threadService.threads.getThreads(household.id, {
+                    limit: initialPageSize,
+                    cursor: options?.cursor,
+                    sortBy: "updatedAt",
+                    direction: "desc",
+                  }),
+                {
+                  timeout: 10000,
+                  retry: {
+                    retries: 2,
+                    backoff: true,
+                  },
+                  requiresAuth: true,
+                }
+              )
+              .catch((error) => {
+                if (error.name === "AbortError") {
+                  throw error;
+                }
+                logger.error("Failed to fetch threads for household", {
+                  error,
+                  householdId: household.id,
+                });
+                return {
+                  data: [],
+                  pagination: { hasMore: false, nextCursor: undefined },
+                };
+              })
           )
         );
 
-        const responses = await Promise.all(threadsPromises);
-
         if (!isMounted.current) return;
 
-        // Combine and sort threads from all households
-        const allThreads = responses
-          .flatMap((response) => response.data)
-          .sort(
-            (a, b) =>
-              new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-          )
-          .slice(0, initialPageSize);
-
-        setState((prev) => ({
-          threads: options?.cursor
-            ? [...prev.threads, ...allThreads]
-            : allThreads,
-          isLoading: false,
-          error: null,
-          hasMore: responses.some(
-            (response) => response.pagination?.hasMore ?? false
-          ),
-          nextCursor: responses[0]?.pagination?.nextCursor, // Using first household's cursor for simplicity
-        }));
-
-        logger.info("Threads fetched successfully", {
-          threadCount: allThreads.length,
-          householdCount: selectedHouseholds.length,
+        // Process and combine threads from all responses
+        const allThreads = responses.flatMap((response) => {
+          logger.debug("Processing response", {
+            data: response.data,
+            pagination: response.pagination,
+          });
+          return response.data || [];
         });
+
+        // Sort threads by updatedAt
+        const sortedThreads = allThreads.sort(
+          (a, b) =>
+            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        );
+
+        // Apply pagination if needed
+        const paginatedThreads = options?.cursor
+          ? sortedThreads
+          : sortedThreads.slice(0, initialPageSize);
+
+        logger.debug("Processed threads", {
+          totalThreads: allThreads.length,
+          paginatedCount: paginatedThreads.length,
+          cursor: options?.cursor,
+        });
+
+        setState((prev) => {
+          const newThreads = options?.cursor
+            ? [...prev.threads, ...paginatedThreads]
+            : paginatedThreads;
+
+          logger.debug("Updating threads state", {
+            previousCount: prev.threads.length,
+            newCount: newThreads.length,
+            hasMore: responses.some((r) => r.pagination?.hasMore),
+          });
+
+          return {
+            ...prev,
+            threads: newThreads,
+            isLoading: false,
+            error: null,
+            hasMore: responses.some((r) => r.pagination?.hasMore),
+            nextCursor: responses.find((r) => r.pagination?.hasMore)?.pagination
+              ?.nextCursor,
+          };
+        });
+
+        return responses;
       } catch (error) {
         if (!isMounted.current) return;
 
-        logger.error("Error fetching threads", { error });
+        logger.error("Failed to fetch threads", { error, enabled });
         setState((prev) => ({
           ...prev,
           isLoading: false,
@@ -116,63 +202,77 @@ export function useThreads({
         }));
       }
     },
-    [initialPageSize, threadService, selectedHouseholds, user]
+    [enabled, user, selectedHouseholds, initialPageSize, threadService]
   );
 
-  // Load more threads
-  const loadMore = useCallback(() => {
-    if (state.isLoading || !state.hasMore) return;
-    return fetchThreads({ cursor: state.nextCursor });
-  }, [fetchThreads, state.isLoading, state.hasMore, state.nextCursor]);
-
-  // Auto refresh threads
+  // Initial fetch and auto-refresh
   useEffect(() => {
-    if (!autoRefreshInterval || !user) return;
-
-    const intervalId = setInterval(() => {
-      fetchThreads();
-    }, autoRefreshInterval);
-
-    return () => clearInterval(intervalId);
-  }, [autoRefreshInterval, fetchThreads, user]);
-
-  // Initial fetch and setup
-  useEffect(() => {
-    if (user) {
-      getSelectedHouseholds().then(() => {
-        fetchThreads();
+    if (!enabled || !user || !selectedHouseholds?.length) {
+      logger.debug("Skipping threads fetch and schedule", {
+        enabled,
+        hasUser: !!user,
+        householdsCount: selectedHouseholds?.length,
+        selectedHouseholds,
       });
+      return;
     }
-  }, [fetchThreads, user, getSelectedHouseholds]);
 
-  // Get unread count for a thread
-  const getThreadUnreadCount = useCallback(
-    (thread: ThreadWithDetails) => {
-      if (!user) return 0;
+    let intervalId: NodeJS.Timeout;
 
-      return thread.messages.reduce((count, message) => {
-        const isRead = message.reads?.some((read) => read.user.id === user.id);
-        return count + (isRead ? 0 : 1);
-      }, 0);
-    },
-    [user]
-  );
+    const initialize = async () => {
+      if (isInitializedRef.current) {
+        logger.debug("Threads already initialized", {
+          enabled,
+          hasUser: !!user,
+          householdsCount: selectedHouseholds?.length,
+        });
+        return;
+      }
 
-  // Update thread in cache
-  const updateThread = useCallback((updatedThread: ThreadWithDetails) => {
-    setState((prev) => ({
-      ...prev,
-      threads: prev.threads.map((thread) =>
-        thread.id === updatedThread.id ? updatedThread : thread
-      ),
-    }));
-  }, []);
+      try {
+        logger.debug("Starting initial threads fetch", {
+          enabled,
+          hasUser: !!user,
+          householdsCount: selectedHouseholds?.length,
+          selectedHouseholds,
+        });
+
+        await fetchThreads();
+        isInitializedRef.current = true;
+
+        if (isMounted.current && autoRefreshInterval > 0) {
+          intervalId = setInterval(() => {
+            if (isMounted.current) {
+              fetchThreads().catch((error) => {
+                logger.error("Auto-refresh failed", { error });
+              });
+            }
+          }, autoRefreshInterval);
+        }
+      } catch (error) {
+        logger.error("Failed to fetch initial threads", { error });
+      }
+    };
+
+    initialize();
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+      requestManager.abortAll();
+    };
+  }, [
+    enabled,
+    user?.id,
+    selectedHouseholds,
+    fetchThreads,
+    autoRefreshInterval,
+  ]);
 
   return {
     ...state,
-    loadMore,
-    refresh: () => fetchThreads(),
-    getThreadUnreadCount,
-    updateThread,
+    loadMore: useCallback(() => {
+      if (state.isLoading || !state.hasMore) return;
+      return fetchThreads({ cursor: state.nextCursor });
+    }, [state.isLoading, state.hasMore, state.nextCursor, fetchThreads]),
   };
 }

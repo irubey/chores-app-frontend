@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useMemo } from "react";
+import React, { useEffect, useRef, useMemo, useCallback } from "react";
 import { ThemeProvider } from "../contexts/ThemeContext";
 import { SocketProvider } from "../contexts/SocketContext";
 import Header from "../components/layout/Header";
@@ -12,14 +12,15 @@ import { User, HouseholdWithMembers } from "@shared/types";
 import { logger } from "@/lib/api/logger";
 import { ApiError } from "@/lib/api/errors";
 import { UserProvider } from "@/contexts/UserContext";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth, UseAuthReturn } from "../hooks/useAuth";
 import { useHousehold } from "@/hooks/useHousehold";
 import { HouseholdsProvider } from "@/contexts/HouseholdsContext";
 import { Provider } from "react-redux";
 import store from "../store/store";
 import { ErrorBoundary } from "../components/ErrorBoundary";
+import { requestManager } from "@/lib/api/requestManager";
 
-// Define public routes
+// Define public routes as a const to prevent recreation
 const PUBLIC_ROUTES = [
   "/login",
   "/register",
@@ -41,6 +42,9 @@ interface WithUserProp {
   selectedHouseholds?: HouseholdWithMembers[];
 }
 
+// Use the imported type
+type AuthStatus = UseAuthReturn["status"];
+
 function AppContent({ children }: AppContentProps) {
   const {
     isAuthenticated,
@@ -53,19 +57,26 @@ function AppContent({ children }: AppContentProps) {
 
   const router = useRouter();
   const pathname = usePathname();
-  const isPublicRoute = PUBLIC_ROUTES.includes(
-    pathname as (typeof PUBLIC_ROUTES)[number]
+
+  // Memoize isPublicRoute check
+  const isPublicRoute = useMemo(
+    () => PUBLIC_ROUTES.includes(pathname as (typeof PUBLIC_ROUTES)[number]),
+    [pathname]
   );
+
   const initialLoadRef = useRef(true);
 
-  // Check if contexts are still initializing
-  const isInitializing = authStatus === "loading";
+  // Memoize auth state to prevent unnecessary re-renders
+  const authState = useMemo(
+    () => ({
+      isInitializing: authStatus === "loading",
+      isInitialized:
+        authStatus === "authenticated" || (!isAuthenticated && isPublicRoute),
+    }),
+    [authStatus, isAuthenticated, isPublicRoute]
+  );
 
-  // Check if initialization completed successfully
-  const isInitialized =
-    authStatus === "authenticated" || (!isAuthenticated && isPublicRoute);
-
-  // Always memoize childProps to avoid unnecessary re-renders
+  // Memoize child props
   const childProps = useMemo(
     () => ({
       user,
@@ -73,14 +84,102 @@ function AppContent({ children }: AppContentProps) {
     [user]
   );
 
-  // Always memoize enhanced children
-  const enhancedChildren = useMemo(() => {
-    const wrappedChildren = isAuthenticated ? (
-      <HouseholdsProvider>{children}</HouseholdsProvider>
-    ) : (
-      children
-    );
+  // Handle cleanup on route changes
+  useEffect(() => {
+    logger.debug("Route changed", {
+      pathname,
+      isPublicRoute,
+      authStatus,
+      isAuthenticated,
+    });
 
+    // Cleanup pending requests on route change
+    return () => {
+      requestManager.abortAll();
+    };
+  }, [pathname]);
+
+  // Handle routing effects
+  useEffect(() => {
+    // Skip effect during initial load of protected routes
+    if (initialLoadRef.current && !isPublicRoute) {
+      logger.debug("Initial load of protected route", {
+        pathname,
+        isPublicRoute,
+        authStatus,
+        isAuthenticated,
+        isInitializing: authState.isInitializing,
+        isInitialized: authState.isInitialized,
+      });
+      return;
+    }
+
+    // Skip redirect if still loading
+    if (authLoading) {
+      logger.debug("Skipping redirect - waiting for auth", {
+        authStatus,
+        isAuthenticated,
+        pathname,
+      });
+      return;
+    }
+
+    // Update initial load ref after initialization completes
+    if (initialLoadRef.current && authState.isInitialized) {
+      logger.debug("Initialization completed", {
+        pathname,
+        authStatus,
+        isAuthenticated,
+      });
+      initialLoadRef.current = false;
+    }
+
+    // Only redirect if:
+    // 1. Unauthenticated and trying to access protected route
+    // 2. Authenticated and trying to access root
+    // 3. Not in loading state
+    const shouldRedirect =
+      (!isAuthenticated && !isPublicRoute) ||
+      (isAuthenticated && pathname === "/");
+
+    if (shouldRedirect && !authLoading) {
+      const redirectPath = !isAuthenticated
+        ? "/login?from=redirect"
+        : "/dashboard?from=redirect";
+
+      logger.info("Route redirect", {
+        from: pathname,
+        to: redirectPath,
+        isAuthenticated,
+        isPublicRoute,
+        authStatus,
+      });
+
+      // Abort any pending requests before redirect
+      requestManager.abortAll();
+      router.replace(redirectPath);
+    }
+  }, [isAuthenticated, pathname, isPublicRoute, router, authStatus, authState]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      logger.debug("AppContent unmounting", {
+        pathname,
+        authStatus,
+        isAuthenticated,
+      });
+      requestManager.abortAll();
+    };
+  }, []);
+
+  // Memoize the wrapped children to prevent unnecessary provider mounts
+  const wrappedChildren = useMemo(() => {
+    return <HouseholdsProvider>{children}</HouseholdsProvider>;
+  }, [children]);
+
+  // Memoize the enhanced children separately
+  const enhancedChildren = useMemo(() => {
     return React.Children.map(wrappedChildren, (child) =>
       React.isValidElement(child)
         ? React.cloneElement(
@@ -89,122 +188,16 @@ function AppContent({ children }: AppContentProps) {
           )
         : child
     );
-  }, [children, childProps, isAuthenticated]);
-
-  // Handle routing effects
-  useEffect(() => {
-    // Always show loading on first render of protected routes
-    if (initialLoadRef.current && !isPublicRoute) {
-      logger.debug("Initial load of protected route", {
-        pathname,
-        isPublicRoute,
-        authStatus,
-        isAuthenticated,
-        isInitializing,
-        isInitialized,
-      });
-      return;
-    }
-
-    // Don't redirect while initializing
-    if (isInitializing) {
-      logger.debug("Skipping redirect - still initializing", {
-        authStatus,
-        isAuthenticated,
-        pathname,
-        isInitializing,
-        isInitialized,
-      });
-      return;
-    }
-
-    // Update initial load ref after initialization completes
-    if (initialLoadRef.current && isInitialized) {
-      logger.debug("Initialization completed", {
-        pathname,
-        authStatus,
-        isAuthenticated,
-        isInitializing,
-        isInitialized,
-      });
-      initialLoadRef.current = false;
-    }
-
-    const shouldRedirect =
-      (!isAuthenticated && !isPublicRoute) ||
-      (isAuthenticated && pathname === "/");
-
-    if (shouldRedirect) {
-      const redirectPath = !isAuthenticated
-        ? "/login?from=redirect"
-        : "/dashboard?from=redirect";
-      logger.info("Route redirect", {
-        from: pathname,
-        to: redirectPath,
-        isAuthenticated,
-        isPublicRoute,
-        authStatus,
-        isInitializing,
-        isInitialized,
-      });
-      router.replace(redirectPath);
-    } else {
-      logger.debug("No redirect needed", {
-        pathname,
-        isAuthenticated,
-        isPublicRoute,
-        authStatus,
-        isInitializing,
-        isInitialized,
-      });
-    }
-  }, [
-    isAuthenticated,
-    pathname,
-    isPublicRoute,
-    router,
-    authStatus,
-    isInitializing,
-    isInitialized,
-  ]);
-
-  // Handle auth initialization errors
-  useEffect(() => {
-    if (authError) {
-      logger.error("Auth error in layout", {
-        authError,
-        pathname,
-        isPublicRoute,
-        authStatus,
-        isAuthenticated,
-        isInitializing,
-        isInitialized,
-      });
-      if (!isPublicRoute) {
-        router.replace("/login?error=auth");
-      }
-    }
-  }, [
-    authError,
-    isPublicRoute,
-    router,
-    pathname,
-    authStatus,
-    isAuthenticated,
-    isInitializing,
-    isInitialized,
-  ]);
+  }, [wrappedChildren, childProps]);
 
   // Show loading state while initializing
-  if (isInitializing || !isInitialized) {
+  if (authState.isInitializing || !authState.isInitialized) {
     logger.debug("Showing loading state", {
       initialLoad: initialLoadRef.current,
       authStatus,
       isAuthenticated,
       isPublicRoute,
       pathname,
-      isInitializing,
-      isInitialized,
     });
     return (
       <div className="min-h-screen flex items-center justify-center bg-background-light dark:bg-background-dark">

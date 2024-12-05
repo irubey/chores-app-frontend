@@ -5,12 +5,12 @@ import { useUser } from "@/contexts/UserContext";
 import { User } from "@shared/types";
 import { logger } from "@/lib/api/logger";
 
-interface UseAuthReturn {
+export interface UseAuthReturn {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
-  status: "idle" | "loading" | "authenticated" | "error";
+  status: "idle" | "loading" | "authenticated" | "unauthenticated" | "error";
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name: string) => Promise<void>;
   logout: () => Promise<void>;

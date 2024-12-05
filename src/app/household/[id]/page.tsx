@@ -10,43 +10,55 @@ import {
   HouseholdMemberWithUser,
   UpdateHouseholdDTO,
 } from "@shared/types";
-import Card from "@/components/common/Card";
+import { ApiError } from "@/lib/api/errors";
+import { logger } from "@/lib/api/logger";
 import Button from "@/components/common/Button";
 import Input from "@/components/common/Input";
-import Modal from "@/components/common/Modal";
 import { Select } from "@/components/common/Select";
-import { logger } from "@/lib/api/logger";
-import { ApiError, ApiErrorType } from "@/lib/api/errors/apiErrors";
-import MembersList from "@/components/household/MembersList";
-import {
-  FaUserPlus,
-  FaEdit,
-  FaTrash,
-  FaCrown,
-  FaUserCog,
-} from "react-icons/fa";
+import Modal from "@/components/common/Modal";
 import Spinner from "@/components/common/Spinner";
+import MembersList from "@/components/household/MembersList";
+import HouseholdStats from "@/components/household/HouseholdStats";
 import InviteMemberModal from "@/components/household/InviteMemberModal";
+import { FaUserPlus, FaEdit, FaTrash } from "react-icons/fa";
 
-export default function HouseholdPage(): React.ReactElement {
+const CURRENCY_OPTIONS = [
+  { value: "USD", label: "USD" },
+  { value: "EUR", label: "EUR" },
+  { value: "GBP", label: "GBP" },
+];
+
+const LANGUAGE_OPTIONS = [
+  { value: "en", label: "English" },
+  { value: "es", label: "Spanish" },
+  { value: "fr", label: "French" },
+];
+
+const TIMEZONE_OPTIONS = [
+  { value: "UTC", label: "UTC" },
+  { value: "America/New_York", label: "Eastern Time" },
+  { value: "America/Chicago", label: "Central Time" },
+  { value: "America/Denver", label: "Mountain Time" },
+  { value: "America/Los_Angeles", label: "Pacific Time" },
+];
+
+export default function HouseholdPage() {
+  const { id: householdId } = useParams<{ id: string }>();
   const router = useRouter();
-  const { id } = useParams();
-  const searchParams = new URLSearchParams(window.location.search);
-  const invitationId = searchParams.get("invitation");
   const { user } = useAuth();
+
   const {
-    userHouseholds,
+    userHouseholds: households,
     pendingInvitations,
+    status,
+    getUserHouseholds,
     updateHousehold,
+    deleteHousehold,
     addMember,
     removeMember,
-    deleteHousehold,
     updateMemberRole,
     updateMemberSelection,
     handleInvitationResponse,
-    isLoading,
-    error: householdError,
-    getUserHouseholds,
     setCurrentHousehold,
   } = useHousehold();
 
@@ -56,31 +68,36 @@ export default function HouseholdPage(): React.ReactElement {
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
   const [selectedMember, setSelectedMember] =
     useState<HouseholdMemberWithUser | null>(null);
-  const [editData, setEditData] = useState<UpdateHouseholdDTO>({});
-  const [error, setError] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [editData, setEditData] = useState<UpdateHouseholdDTO>({});
 
-  const household =
-    userHouseholds.find((h) => h.id === id) ||
-    pendingInvitations.find((inv) => inv.household?.id === id)?.household;
-  const invitation = invitationId
-    ? pendingInvitations.find((inv) => inv.id === invitationId)
-    : pendingInvitations.find((inv) => inv.household?.id === id);
-  const isPending = !!invitation;
-
-  logger.debug("Household page state", {
-    householdId: id,
-    hasHousehold: !!household,
-    hasInvitation: !!invitation,
-    isPending,
-    invitationId,
-    pendingInvitationsCount: pendingInvitations.length,
-  });
-
+  const household = households.find((h) => h.id === householdId);
+  const invitation = pendingInvitations.find(
+    (i) => i.householdId === householdId
+  );
   const currentUserMember = household?.members?.find(
     (m) => m.userId === user?.id
   );
   const isAdmin = currentUserMember?.role === HouseholdRole.ADMIN;
+
+  useEffect(() => {
+    if (!householdId || !user) return;
+
+    // If there's a pending invitation, show it
+    if (invitation) {
+      logger.debug("Found pending invitation", { invitation });
+      return;
+    }
+
+    // If there's no household data, fetch it
+    if (!household) {
+      logger.debug("Fetching household data", { householdId });
+      getUserHouseholds().catch((err) => {
+        logger.error("Failed to fetch household data", { error: err });
+      });
+    }
+  }, [householdId, user, household, invitation, getUserHouseholds]);
 
   const handleAcceptInvitation = async () => {
     if (!household || !invitation) return;
@@ -90,11 +107,10 @@ export default function HouseholdPage(): React.ReactElement {
       setError(null);
       logger.debug("Accepting invitation", {
         householdId: household.id,
-        userId: invitation.userId,
+        memberId: invitation.id,
       });
-      await handleInvitationResponse(household.id, invitation.userId, true);
+      await handleInvitationResponse(household.id, invitation.id, true);
       await getUserHouseholds();
-      router.push("/dashboard");
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
@@ -115,11 +131,10 @@ export default function HouseholdPage(): React.ReactElement {
       setError(null);
       logger.debug("Rejecting invitation", {
         householdId: household.id,
-        userId: invitation.userId,
+        memberId: invitation.id,
       });
-      await handleInvitationResponse(household.id, invitation.userId, false);
-      await getUserHouseholds();
-      router.push("/dashboard");
+      await handleInvitationResponse(household.id, invitation.id, false);
+      router.replace("/dashboard");
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
@@ -134,7 +149,21 @@ export default function HouseholdPage(): React.ReactElement {
 
   const handleInviteMember = async (data: AddMemberDTO) => {
     if (!household) return;
-    await addMember(household.id, data);
+    try {
+      setIsUpdating(true);
+      setError(null);
+      await addMember(household.id, data);
+      setIsInviteModalOpen(false);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError("Failed to invite member");
+      }
+      logger.error("Failed to invite member", { error: err });
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   const handleUpdateHousehold = async () => {
@@ -159,17 +188,13 @@ export default function HouseholdPage(): React.ReactElement {
   };
 
   const handleDeleteHousehold = async () => {
-    if (
-      !household ||
-      !window.confirm("Are you sure? This action cannot be undone.")
-    )
-      return;
+    if (!household) return;
 
     try {
       setIsUpdating(true);
       setError(null);
       await deleteHousehold(household.id);
-      router.push("/dashboard");
+      router.replace("/dashboard");
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
@@ -184,14 +209,14 @@ export default function HouseholdPage(): React.ReactElement {
 
   const handleUpdateMemberRole = async (
     memberId: string,
-    newRole: HouseholdRole
+    role: HouseholdRole
   ) => {
     if (!household) return;
 
     try {
       setIsUpdating(true);
       setError(null);
-      await updateMemberRole(household.id, memberId, newRole);
+      await updateMemberRole(household.id, memberId, role);
       setIsRoleModalOpen(false);
       setSelectedMember(null);
     } catch (err) {
@@ -267,10 +292,10 @@ export default function HouseholdPage(): React.ReactElement {
     }
   };
 
-  if (isLoading) {
+  if (status.list === "loading") {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <Spinner size="large" className="text-primary" />
+        <Spinner className="h-8 w-8" />
       </div>
     );
   }
@@ -278,121 +303,27 @@ export default function HouseholdPage(): React.ReactElement {
   if (!household) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen">
-        <h1 className="text-h1 mb-6">Household not found</h1>
-        <Button
-          variant="primary"
-          onClick={() => router.push("/dashboard")}
-          className="animate-slide-up"
-        >
-          Return to Dashboard
+        <h1 className="text-h2 mb-4">Household not found</h1>
+        <Button variant="primary" onClick={() => router.replace("/dashboard")}>
+          Go to Dashboard
         </Button>
       </div>
     );
   }
 
-  return (
-    <div className="container-custom py-8 animate-fade-in">
-      <Card className="mb-8">
-        <div className="flex justify-between items-center mb-6 border-b border-neutral-200 dark:border-neutral-700 pb-4">
-          <div>
-            <h1 className="text-h2 mb-1">{household.name}</h1>
-            <div className="flex items-center gap-4">
-              <p className="text-text-secondary text-sm">
-                {household.members?.length || 0} members
-              </p>
-              {currentUserMember && (
-                <button
-                  onClick={() =>
-                    handleUpdateSelection(
-                      currentUserMember.id,
-                      !currentUserMember.isSelected
-                    )
-                  }
-                  className={`text-sm flex items-center gap-2 ${
-                    currentUserMember.isSelected
-                      ? "text-text-secondary hover:text-text-primary"
-                      : "text-red-500 hover:text-red-600"
-                  } transition-colors duration-200`}
-                  disabled={isUpdating}
-                >
-                  {currentUserMember.isSelected ? (
-                    <>
-                      <span className="w-2 h-2 rounded-full bg-secondary animate-pulse" />
-                      Receiving Updates
-                    </>
-                  ) : (
-                    <>
-                      <span className="w-2 h-2 rounded-full bg-red-500" />
-                      Muted
-                    </>
-                  )}
-                </button>
-              )}
-            </div>
-          </div>
-          {isAdmin && (
-            <div className="flex gap-2">
-              <Button
-                variant="ghost"
-                onClick={() => setIsEditModalOpen(true)}
-                icon={<FaEdit className="w-5 h-5 text-primary" />}
-                className="btn-icon"
-                aria-label="Edit Household"
-                title="Edit Household"
-              />
-              <Button
-                variant="ghost"
-                onClick={() => setIsDeleteModalOpen(true)}
-                icon={<FaTrash className="w-5 h-5 text-red-500" />}
-                className="btn-icon"
-                aria-label="Delete Household"
-                title="Delete Household"
-              />
-            </div>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-          <div className="card bg-primary-light/10 dark:bg-primary-dark/10">
-            <h3 className="text-h4 mb-2">Currency</h3>
-            <p className="text-text-primary dark:text-text-secondary">
-              {household.currency || "USD"}
+  // Show invitation response UI if there's a pending invitation
+  if (invitation) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="max-w-2xl mx-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+            <h1 className="text-h2 mb-4">Household Invitation</h1>
+            <p className="text-text-secondary mb-6">
+              You have been invited to join {household.name}. Would you like to
+              accept this invitation?
             </p>
-          </div>
-          <div className="card bg-primary-light/10 dark:bg-primary-dark/10">
-            <h3 className="text-h4 mb-2">Language</h3>
-            <p className="text-text-primary dark:text-text-secondary">
-              {household.language || "en"}
-            </p>
-          </div>
-          <div className="card bg-primary-light/10 dark:bg-primary-dark/10">
-            <h3 className="text-h4 mb-2">Created</h3>
-            <p className="text-text-primary dark:text-text-secondary">
-              {new Date(household.createdAt).toLocaleDateString(undefined, {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })}
-            </p>
-          </div>
-        </div>
-
-        {isPending ? (
-          <div className="flex flex-col items-center justify-center p-8 bg-accent-light/10 dark:bg-accent-dark/10 rounded-lg">
-            <h2 className="text-h3 mb-4">Pending Invitation</h2>
-            <div className="flex gap-4">
-              <Button
-                variant="primary"
-                onClick={handleAcceptInvitation}
-                disabled={isUpdating}
-                className="min-w-[120px]"
-              >
-                {isUpdating ? (
-                  <Spinner size="small" className="mx-auto" />
-                ) : (
-                  "Accept"
-                )}
-              </Button>
+            {error && <p className="text-red-500 mb-4">{error}</p>}
+            <div className="flex justify-end gap-4">
               <Button
                 variant="secondary"
                 onClick={handleRejectInvitation}
@@ -405,37 +336,120 @@ export default function HouseholdPage(): React.ReactElement {
                   "Reject"
                 )}
               </Button>
+              <Button
+                variant="primary"
+                onClick={handleAcceptInvitation}
+                disabled={isUpdating}
+                className="min-w-[120px]"
+              >
+                {isUpdating ? (
+                  <Spinner size="small" className="mx-auto" />
+                ) : (
+                  "Accept"
+                )}
+              </Button>
             </div>
           </div>
-        ) : (
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-h3">Members</h2>
-              {isAdmin && (
-                <Button
-                  variant="ghost"
-                  onClick={() => setIsInviteModalOpen(true)}
-                  icon={<FaUserPlus className="w-5 h-5 text-primary" />}
-                  className="btn-icon"
-                  aria-label="Invite Member"
-                  title="Invite Member"
-                />
-              )}
-            </div>
-            <MembersList
-              members={household.members || []}
-              currentUserId={user?.id}
-              isAdmin={isAdmin}
-              onChangeRole={(member) => {
-                setSelectedMember(member);
-                setIsRoleModalOpen(true);
-              }}
-              onRemoveMember={handleRemoveMember}
-              className="animate-fade-in"
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container-custom py-8 animate-fade-in">
+      <div className="flex justify-between items-center mb-6 border-b border-neutral-200 dark:border-neutral-700 pb-4">
+        <div>
+          <h1 className="text-h2">{household.name}</h1>
+          <p className="text-text-secondary">
+            {household.members?.length || 0} members
+          </p>
+          {currentUserMember && (
+            <button
+              onClick={() =>
+                handleUpdateSelection(
+                  currentUserMember.id,
+                  !currentUserMember.isSelected
+                )
+              }
+              className={`mt-2 text-sm font-medium ${
+                currentUserMember.isSelected
+                  ? "text-primary"
+                  : "text-text-secondary"
+              }`}
+            >
+              {currentUserMember.isSelected ? "Selected" : "Not Selected"}
+            </button>
+          )}
+        </div>
+
+        {isAdmin && (
+          <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => setIsEditModalOpen(true)}
+              icon={<FaEdit className="w-5 h-5 text-primary" />}
+              className="btn-icon"
+              aria-label="Edit Household"
+              title="Edit Household"
+            />
+            <Button
+              variant="ghost"
+              onClick={() => setIsDeleteModalOpen(true)}
+              icon={<FaTrash className="w-5 h-5 text-red-500" />}
+              className="btn-icon"
+              aria-label="Delete Household"
+              title="Delete Household"
             />
           </div>
         )}
-      </Card>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        <div className="card bg-primary-light/10 dark:bg-primary-dark/10">
+          <h3 className="text-h4 mb-2">Currency</h3>
+          <p className="text-text-primary dark:text-text-secondary">
+            {household.currency}
+          </p>
+        </div>
+        <div className="card bg-primary-light/10 dark:bg-primary-dark/10">
+          <h3 className="text-h4 mb-2">Language</h3>
+          <p className="text-text-primary dark:text-text-secondary">
+            {household.language}
+          </p>
+        </div>
+        <div className="card bg-primary-light/10 dark:bg-primary-dark/10">
+          <h3 className="text-h4 mb-2">Timezone</h3>
+          <p className="text-text-primary dark:text-text-secondary">
+            {household.timezone}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-h3">Members</h2>
+        {isAdmin && (
+          <Button
+            variant="ghost"
+            onClick={() => setIsInviteModalOpen(true)}
+            icon={<FaUserPlus className="w-5 h-5 text-primary" />}
+            className="btn-icon"
+            aria-label="Invite Member"
+            title="Invite Member"
+          />
+        )}
+      </div>
+
+      <MembersList
+        members={household.members || []}
+        currentUserId={user?.id}
+        isAdmin={isAdmin}
+        onUpdateRole={(member) => {
+          setSelectedMember(member);
+          setIsRoleModalOpen(true);
+        }}
+        onRemoveMember={handleRemoveMember}
+        className="animate-fade-in"
+      />
 
       <InviteMemberModal
         isOpen={isInviteModalOpen}
@@ -462,51 +476,52 @@ export default function HouseholdPage(): React.ReactElement {
                 setEditData({ ...editData, name: e.target.value })
               }
               required
-              className="input"
             />
+
             <Select
               label="Currency"
-              value={editData.currency || household.currency || "USD"}
+              value={editData.currency || household.currency}
               onChange={(value) =>
                 setEditData({ ...editData, currency: value })
               }
-              options={[
-                { value: "USD", label: "USD" },
-                { value: "EUR", label: "EUR" },
-                { value: "GBP", label: "GBP" },
-              ]}
-              className="input"
+              options={CURRENCY_OPTIONS}
             />
+
             <Select
               label="Language"
-              value={editData.language || household.language || "en"}
+              value={editData.language || household.language}
               onChange={(value) =>
                 setEditData({ ...editData, language: value })
               }
-              options={[
-                { value: "en", label: "English" },
-                { value: "es", label: "Spanish" },
-                { value: "fr", label: "French" },
-              ]}
-              className="input"
+              options={LANGUAGE_OPTIONS}
             />
-            {error && <p className="form-error">{error}</p>}
-            <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => setIsEditModalOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" variant="primary" disabled={isUpdating}>
-                {isUpdating ? (
-                  <Spinner size="small" className="mx-auto" />
-                ) : (
-                  "Save"
-                )}
-              </Button>
-            </div>
+
+            <Select
+              label="Timezone"
+              value={editData.timezone || household.timezone}
+              onChange={(value) =>
+                setEditData({ ...editData, timezone: value })
+              }
+              options={TIMEZONE_OPTIONS}
+            />
+          </div>
+
+          {error && <p className="form-error mt-4">{error}</p>}
+
+          <div className="flex justify-end gap-2 mt-6">
+            <Button
+              variant="secondary"
+              onClick={() => setIsEditModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" disabled={isUpdating}>
+              {isUpdating ? (
+                <Spinner size="small" className="mx-auto" />
+              ) : (
+                "Save"
+              )}
+            </Button>
           </div>
         </form>
       </Modal>
@@ -555,18 +570,9 @@ export default function HouseholdPage(): React.ReactElement {
         <div className="space-y-4">
           {selectedMember && (
             <>
-              <div className="bg-primary-light/10 dark:bg-primary-dark/10 p-4 rounded-lg">
-                <p className="text-text-primary dark:text-text-secondary">
-                  Update role for{" "}
-                  <span className="font-medium">
-                    {selectedMember.user?.name}
-                  </span>
-                  <span className="text-text-secondary">
-                    {" "}
-                    ({selectedMember.user?.email})
-                  </span>
-                </p>
-              </div>
+              <p className="text-text-secondary">
+                Update role for {selectedMember.user.name}
+              </p>
               <Select
                 label="Role"
                 value={selectedMember.role}
@@ -580,19 +586,10 @@ export default function HouseholdPage(): React.ReactElement {
                   { value: HouseholdRole.ADMIN, label: "Admin" },
                   { value: HouseholdRole.MEMBER, label: "Member" },
                 ]}
-                className="input"
               />
             </>
           )}
           {error && <p className="form-error">{error}</p>}
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="secondary"
-              onClick={() => setIsRoleModalOpen(false)}
-            >
-              Close
-            </Button>
-          </div>
         </div>
       </Modal>
     </div>

@@ -11,7 +11,7 @@ interface MembersListProps {
   maxDisplay?: number;
   className?: string;
   isAdmin?: boolean;
-  onChangeRole?: (member: HouseholdMemberWithUser) => void;
+  onUpdateRole?: (member: HouseholdMemberWithUser) => void;
   onRemoveMember?: (memberId: string) => void;
 }
 
@@ -21,7 +21,7 @@ export default function MembersList({
   maxDisplay = 5,
   className,
   isAdmin = false,
-  onChangeRole,
+  onUpdateRole,
   onRemoveMember,
 }: MembersListProps) {
   logger.debug("Rendering members list", {
@@ -80,7 +80,7 @@ export default function MembersList({
                 <Button
                   variant="ghost"
                   className="btn-icon text-primary dark:text-primary-light"
-                  onClick={() => onChangeRole?.(member)}
+                  onClick={() => onUpdateRole?.(member)}
                 >
                   {member.role === HouseholdRole.ADMIN ? (
                     <FaCrown className="h-4 w-4" />

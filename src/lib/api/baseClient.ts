@@ -27,6 +27,8 @@ export class BaseApiClient {
     this.axiosInstance = axiosInstance;
 
     this.axiosInstance.interceptors.request.use((config) => {
+      config.withCredentials = true;
+
       logger.logAPIRequest({
         method: config.method?.toUpperCase(),
         url: config.url,

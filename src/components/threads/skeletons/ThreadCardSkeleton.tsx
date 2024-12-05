@@ -1,34 +1,41 @@
 // frontend/src/components/threads/skeletons/ThreadCardSkeleton.tsx
 import React from "react";
 
-export const ThreadCardSkeleton = () => {
-  return (
-    <div className="card">
-      <div className="flex justify-between items-start p-md">
-        {/* Header */}
-        <div className="flex-1">
-          <div className="h-6 w-3/4 skeleton mb-sm" />
-          <div className="h-4 w-1/4 skeleton" />
-        </div>
-        {/* Meta */}
-        <div className="h-5 w-16 skeleton" />
-      </div>
+interface ThreadListSkeletonProps {
+  count?: number;
+}
 
-      {/* Last message preview */}
-      <div className="px-md pb-md">
-        <div className="h-4 w-full skeleton mb-sm" />
-        <div className="h-4 w-2/3 skeleton" />
-      </div>
-    </div>
-  );
-};
-
-export const ThreadListSkeleton = () => {
+export function ThreadListSkeleton({ count = 6 }: ThreadListSkeletonProps) {
   return (
-    <div className="space-y-md">
-      {[...Array(3)].map((_, i) => (
+    <div className="grid-auto-fit gap-md animate-fade-in">
+      {Array.from({ length: count }).map((_, i) => (
         <ThreadCardSkeleton key={i} />
       ))}
     </div>
   );
-};
+}
+
+function ThreadCardSkeleton() {
+  return (
+    <div className="card">
+      <div className="flex items-start justify-between">
+        <div className="flex-1 space-y-2">
+          <div className="skeleton h-6 w-3/4" />
+          <div className="skeleton h-4 w-1/2" />
+        </div>
+        <div className="skeleton h-4 w-16" />
+      </div>
+
+      <div className="mt-4 space-y-2">
+        <div className="skeleton h-4 w-full" />
+        <div className="skeleton h-4 w-2/3" />
+      </div>
+
+      <div className="mt-4 flex items-center space-x-4">
+        <div className="skeleton h-4 w-8" />
+        <div className="skeleton h-4 w-8" />
+        <div className="skeleton h-4 w-8" />
+      </div>
+    </div>
+  );
+}
