@@ -48,8 +48,6 @@ export function ThreadList({ threads }: ThreadListProps) {
       className="grid gap-md"
       style={{
         gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-        height: "calc(100vh - 200px)",
-        overflowY: "auto",
       }}
     >
       {columnThreads().map((columnContent, columnIndex) => (

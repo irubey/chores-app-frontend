@@ -53,7 +53,7 @@ const Header: React.FC<HeaderProps> = ({ user }) => {
   }> = ({ href, icon, label, notificationType }) => (
     <Link
       href={href}
-      className="relative flex flex-col items-center hover:text-secondary-light transition-colors duration-200"
+      className="relative flex flex-col items-center text-white hover:text-accent-light transition-colors duration-200"
     >
       {icon}
       {notificationType && countUnseen(notificationType) > 0 && (
@@ -61,16 +61,16 @@ const Header: React.FC<HeaderProps> = ({ user }) => {
           {countUnseen(notificationType)}
         </span>
       )}
-      <span className="mt-1 text-sm">{label}</span>
+      <span className="mt-1 text-sm font-medium">{label}</span>
     </Link>
   );
 
   return (
-    <header className="bg-primary dark:bg-primary-dark text-white shadow-md">
+    <header className="bg-primary dark:bg-primary-dark text-white shadow-lg">
       <div className="container-custom flex items-center justify-between py-4">
         <Link
           href={user ? "/dashboard" : "/"}
-          className="text-2xl font-heading text-white hover:text-secondary-light transition-colors duration-200"
+          className="text-2xl font-heading text-white hover:text-accent-light transition-colors duration-200 font-bold"
         >
           roomies
         </Link>
@@ -113,7 +113,7 @@ const Header: React.FC<HeaderProps> = ({ user }) => {
 
             <button
               onClick={toggleTheme}
-              className="p-2 rounded-full hover:bg-primary-dark dark:hover:bg-primary-light transition-colors duration-200"
+              className="p-2 rounded-full bg-primary-dark hover:bg-primary-light text-white transition-colors duration-200"
               aria-label="Toggle theme"
             >
               {theme === "dark" ? (
@@ -124,10 +124,10 @@ const Header: React.FC<HeaderProps> = ({ user }) => {
             </button>
 
             <div className="flex items-center space-x-4">
-              <span className="text-sm font-medium">{user.name}</span>
+              <span className="text-sm font-semibold">{user.name}</span>
               <button
                 onClick={handleLogout}
-                className="px-4 py-2 text-sm font-medium text-white bg-accent hover:bg-accent-dark dark:bg-accent-light dark:hover:bg-accent transition-colors duration-200 rounded-md"
+                className="px-4 py-2 text-sm font-medium text-white bg-accent hover:bg-accent-dark dark:bg-accent-light dark:hover:bg-accent transition-colors duration-200 rounded-md shadow-sm hover:shadow-md"
               >
                 Logout
               </button>
@@ -137,19 +137,19 @@ const Header: React.FC<HeaderProps> = ({ user }) => {
           <div className="flex items-center space-x-4">
             <Link
               href="/login"
-              className="px-4 py-2 text-sm font-medium text-white bg-primary-dark hover:bg-primary-light transition-colors duration-200 rounded-md"
+              className="px-4 py-2 text-sm font-medium text-white bg-primary-dark hover:bg-accent transition-colors duration-200 rounded-md shadow-sm hover:shadow-md"
             >
               Login
             </Link>
             <Link
               href="/register"
-              className="px-4 py-2 text-sm font-medium bg-secondary hover:bg-secondary-dark transition-colors duration-200 rounded-md"
+              className="px-4 py-2 text-sm font-medium text-white bg-accent hover:bg-accent-dark transition-colors duration-200 rounded-md shadow-sm hover:shadow-md"
             >
               Register
             </Link>
             <button
               onClick={toggleTheme}
-              className="p-2 rounded-full hover:bg-primary-dark dark:hover:bg-primary-light transition-colors duration-200"
+              className="p-2 rounded-full bg-primary-dark hover:bg-primary-light text-white transition-colors duration-200"
               aria-label="Toggle theme"
             >
               {theme === "dark" ? (
