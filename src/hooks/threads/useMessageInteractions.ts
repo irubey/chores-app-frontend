@@ -1,5 +1,5 @@
 // frontend/src/hooks/threads/useMessageInteractions.ts
-import { useCallback, useState } from "react";
+import { useCallback, useState, useRef } from "react";
 import { ThreadService } from "@/lib/api/services/threadService";
 import {
   MessageWithDetails,
@@ -12,6 +12,7 @@ import {
 import { ReactionType } from "@shared/enums";
 import { useAuth } from "@/hooks/useAuth";
 import { logger } from "@/lib/api/logger";
+import { RequestManager } from "@/lib/api/requestManager";
 
 interface UseMessageInteractionsOptions {
   householdId: string;
@@ -53,12 +54,15 @@ export function useMessageInteractions({
   });
 
   const { user } = useAuth();
-  const threadService = new ThreadService();
+  const threadService = useRef(new ThreadService()).current;
+  const requestManager = useRef(RequestManager.getInstance()).current;
 
   // Toggle reaction (add/remove)
   const toggleReaction = useCallback(
     async (type: ReactionType, emoji: string) => {
       if (!user) return;
+
+      const requestKey = `reaction-toggle-${messageId}-${type}-${user.id}`;
 
       try {
         setState((prev) => ({
@@ -73,11 +77,16 @@ export function useMessageInteractions({
         );
 
         if (existingReaction) {
-          await threadService.messages.reactions.removeReaction(
-            householdId,
-            threadId,
-            messageId,
-            existingReaction.id
+          await requestManager.dedupRequest(
+            requestKey,
+            () =>
+              threadService.messages.reactions.removeReaction(
+                householdId,
+                threadId,
+                messageId,
+                existingReaction.id
+              ),
+            { timeout: 5000 }
           );
 
           setState((prev) => ({
@@ -88,11 +97,16 @@ export function useMessageInteractions({
           }));
         } else {
           const reactionData: CreateReactionDTO = { type, emoji };
-          const response = await threadService.messages.reactions.addReaction(
-            householdId,
-            threadId,
-            messageId,
-            reactionData
+          const response = await requestManager.dedupRequest(
+            requestKey,
+            () =>
+              threadService.messages.reactions.addReaction(
+                householdId,
+                threadId,
+                messageId,
+                reactionData
+              ),
+            { timeout: 5000 }
           );
 
           setState((prev) => ({

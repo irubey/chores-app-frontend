@@ -5,10 +5,12 @@ import { useThreads } from "@/hooks/threads/useThreads";
 import { ThreadList } from "@/components/threads/ThreadList";
 import { ThreadListSkeleton } from "@/components/threads/skeletons/ThreadCardSkeleton";
 import { useHouseholds } from "@/contexts/HouseholdsContext";
-import { ChatBubbleLeftRightIcon } from "@heroicons/react/24/outline";
+import { ChatBubbleLeftRightIcon, PlusIcon } from "@heroicons/react/24/outline";
 import { logger } from "@/lib/api/logger";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Card from "@/components/common/Card";
+import Button from "@/components/common/Button";
+import { ThreadCreator } from "@/components/threads/ThreadCreator";
 import { useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -36,6 +38,7 @@ export default function ThreadsPage() {
   const { user, status: authStatus, isAuthenticated } = useAuth();
   const { selectedHouseholds, isLoading: isLoadingHouseholds } =
     useHouseholds();
+  const [isCreatorOpen, setIsCreatorOpen] = useState(false);
 
   logger.debug("User and household data", {
     user: {
@@ -112,6 +115,11 @@ export default function ThreadsPage() {
     filters,
     enabled: isAuthenticated && !!user && accessibleHouseholds.length > 0,
   });
+
+  const handleThreadCreated = useCallback(() => {
+    // Thread list will auto-refresh due to polling
+    logger.debug("Thread created, waiting for refresh");
+  }, []);
 
   logger.debug("Rendering threads page", {
     threadsCount: threads?.length,
@@ -196,14 +204,22 @@ export default function ThreadsPage() {
     <ErrorBoundary>
       <main className="container-custom py-md">
         <div className="flex flex-col space-y-md">
-          <header className="flex justify-between items-start">
+          <header className="flex justify-between items-center">
             <div>
               <h1>Threads</h1>
               <p className="text-text-secondary">
                 View and manage threads across your households
               </p>
             </div>
-            {/* Add thread actions here later */}
+            {accessibleHouseholds.length > 0 && (
+              <Button
+                variant="primary"
+                onClick={() => setIsCreatorOpen(true)}
+                icon={<PlusIcon className="h-5 w-5" />}
+              >
+                New Thread
+              </Button>
+            )}
           </header>
 
           {isLoadingThreads ? (
@@ -213,12 +229,26 @@ export default function ThreadsPage() {
               icon={<ChatBubbleLeftRightIcon className="h-12 w-12" />}
               title="No threads yet"
               description="Start a conversation in one of your households"
-              action={<button className="btn-primary">Create Thread</button>}
+              action={
+                <Button
+                  variant="primary"
+                  onClick={() => setIsCreatorOpen(true)}
+                  disabled={accessibleHouseholds.length === 0}
+                >
+                  Create Thread
+                </Button>
+              }
             />
           ) : (
             <ThreadList threads={threads} />
           )}
         </div>
+
+        <ThreadCreator
+          isOpen={isCreatorOpen}
+          onClose={() => setIsCreatorOpen(false)}
+          onSuccess={handleThreadCreated}
+        />
       </main>
     </ErrorBoundary>
   );

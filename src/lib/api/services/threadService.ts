@@ -55,13 +55,13 @@ export class ThreadService extends BaseApiClient {
      */
     createThread: async (
       householdId: string,
-      threadData: CreateThreadDTO,
+      threadData: Omit<CreateThreadDTO, "householdId">,
       signal?: AbortSignal
     ): Promise<ApiResponse<ThreadWithDetails>> => {
       return this.handleRequest(() =>
         this.axiosInstance.post<ApiResponse<ThreadWithDetails>>(
           `/households/${householdId}/threads`,
-          threadData,
+          { ...threadData, householdId },
           { signal }
         )
       );

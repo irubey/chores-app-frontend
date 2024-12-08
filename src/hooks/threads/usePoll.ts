@@ -1,5 +1,5 @@
 // frontend/src/hooks/threads/usePoll.ts
-import { useCallback, useState } from "react";
+import { useCallback, useState, useRef } from "react";
 import { ThreadService } from "@/lib/api/services/threadService";
 import {
   PollWithDetails,
@@ -11,6 +11,7 @@ import {
 import { PollType, PollStatus } from "@shared/enums";
 import { useAuth } from "@/hooks/useAuth";
 import { logger } from "@/lib/api/logger";
+import { RequestManager } from "@/lib/api/requestManager";
 
 interface UsePollOptions {
   householdId: string;
@@ -48,12 +49,15 @@ export function usePoll({
   });
 
   const { user } = useAuth();
-  const threadService = new ThreadService();
+  const threadService = useRef(new ThreadService()).current;
+  const requestManager = useRef(RequestManager.getInstance()).current;
 
   // Create a new poll
   const createPoll = useCallback(
     async (data: CreatePollDTO) => {
       if (!user) return;
+
+      const requestKey = `poll-create-${messageId}-${user.id}`;
 
       try {
         setState((prev) => ({
@@ -63,11 +67,16 @@ export function usePoll({
 
         logger.debug("Creating poll", { messageId, data });
 
-        const response = await threadService.messages.polls.createPoll(
-          householdId,
-          threadId,
-          messageId,
-          data
+        const response = await requestManager.dedupRequest(
+          requestKey,
+          () =>
+            threadService.messages.polls.createPoll(
+              householdId,
+              threadId,
+              messageId,
+              data
+            ),
+          { timeout: 5000 }
         );
 
         setState((prev) => ({

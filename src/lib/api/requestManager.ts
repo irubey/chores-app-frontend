@@ -14,6 +14,7 @@ export class RequestManager {
   private static instance: RequestManager;
   private requestsInProgress: Map<string, Promise<any>> = new Map();
   private abortController: AbortController | null = null;
+  private cleanupTimeouts: Map<string, NodeJS.Timeout> = new Map();
 
   private constructor() {
     // Private constructor to enforce singleton
@@ -95,7 +96,7 @@ export class RequestManager {
     request: () => Promise<T>,
     options: RequestOptions = {}
   ): Promise<T> {
-    const { signal, requiresAuth } = options;
+    const { signal, requiresAuth, timeout = 10000 } = options;
 
     // Use provided signal or create new one
     if (!this.abortController || this.abortController.signal.aborted) {
@@ -104,12 +105,27 @@ export class RequestManager {
 
     const finalSignal = signal || this.abortController.signal;
 
+    // Clear any existing cleanup timeout for this key
+    if (this.cleanupTimeouts.has(key)) {
+      logger.debug("Clearing existing cleanup timeout", { key });
+      clearTimeout(this.cleanupTimeouts.get(key));
+      this.cleanupTimeouts.delete(key);
+    }
+
+    // Check if there's an existing request in progress
     if (this.requestsInProgress.has(key)) {
-      logger.debug("Using existing request", { key });
+      logger.debug("Reusing existing request", {
+        key,
+        activeRequests: this.getActiveRequests(),
+      });
       return this.requestsInProgress.get(key)!;
     }
 
-    logger.debug("Starting new request", { key, requiresAuth });
+    logger.debug("Starting new request", {
+      key,
+      requiresAuth,
+      activeRequests: this.getActiveRequests(),
+    });
 
     const promise = this.executeWithRetry(() => request(), options)
       .catch((error) => {
@@ -121,13 +137,22 @@ export class RequestManager {
         throw error;
       })
       .finally(() => {
+        // Only cleanup if this is still the active promise for this key
         if (this.requestsInProgress.get(key) === promise) {
-          logger.debug("Request completed and cleaned up", { key });
-          this.requestsInProgress.delete(key);
+          // Set a cleanup timeout
+          const cleanupTimeout = setTimeout(() => {
+            logger.debug("Cleaning up completed request", { key });
+            this.requestsInProgress.delete(key);
+            this.cleanupTimeouts.delete(key);
+          }, 1000); // 1 second cleanup delay
+
+          this.cleanupTimeouts.set(key, cleanupTimeout);
         }
       });
 
+    // Store the promise
     this.requestsInProgress.set(key, promise);
+
     return promise;
   }
 
@@ -135,6 +160,10 @@ export class RequestManager {
     logger.debug("Aborting all requests", {
       activeRequests: Array.from(this.requestsInProgress.keys()),
     });
+
+    // Clear all cleanup timeouts
+    this.cleanupTimeouts.forEach((timeout) => clearTimeout(timeout));
+    this.cleanupTimeouts.clear();
 
     if (this.abortController) {
       this.abortController.abort();
