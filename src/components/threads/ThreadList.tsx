@@ -7,7 +7,7 @@ interface ThreadListProps {
   threads: ThreadWithDetails[];
 }
 
-const MIN_CARD_WIDTH = 400; // Extracted as a constant
+const MIN_CARD_WIDTH = 400;
 
 export function ThreadList({ threads }: ThreadListProps) {
   const [columns, setColumns] = useState(1);
@@ -62,15 +62,33 @@ export function ThreadList({ threads }: ThreadListProps) {
   return (
     <div
       ref={containerRef}
-      className="grid gap-md auto-rows-min"
+      className="grid-auto-fit gap-md animate-fade-in"
       style={{
-        gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+        minWidth: MIN_CARD_WIDTH,
       }}
     >
       {columnThreads.map((columnContent, columnIndex) => (
-        <div key={columnIndex} className="space-y-md">
-          {columnContent.map((thread) => (
-            <ThreadCard key={thread.id} thread={thread} />
+        <div
+          key={columnIndex}
+          className="space-y-md"
+          style={{
+            // Stagger animation delay based on column index
+            animationDelay: `${columnIndex * 0.1}s`,
+          }}
+        >
+          {columnContent.map((thread, threadIndex) => (
+            <div
+              key={thread.id}
+              className="animate-slide-up"
+              style={{
+                // Stagger animation delay based on thread index
+                animationDelay: `${
+                  (columnIndex * columnContent.length + threadIndex) * 0.05
+                }s`,
+              }}
+            >
+              <ThreadCard thread={thread} />
+            </div>
           ))}
         </div>
       ))}

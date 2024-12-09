@@ -1,64 +1,38 @@
 import React from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/hooks/useAuth";
-import { HouseholdWithMembers } from "@shared/types";
-import { HouseholdRole } from "@shared/enums";
+import { HouseholdWithMembers } from "@shared/types/household";
 import { logger } from "@/lib/api/logger";
 import HouseholdCardPresentation from "./HouseholdCardPresentation";
 
-export interface HouseholdCardContainerProps {
-  household: HouseholdWithMembers & {
-    isPending?: boolean;
-    invitationId?: string;
-  };
-  isPending?: boolean;
-  memberId?: string;
+interface HouseholdCardContainerProps {
+  household: HouseholdWithMembers;
 }
 
 export default function HouseholdCardContainer({
   household,
-  isPending = false,
-  memberId,
 }: HouseholdCardContainerProps) {
   const router = useRouter();
-  const { user } = useAuth();
-
-  // For pending invitations, members might not be populated
-  const members = household.members || [];
-  const isAdmin = isPending
-    ? false
-    : members.find((m) => m.userId === user?.id)?.role === HouseholdRole.ADMIN;
+  const memberCount = household.members?.length ?? 0;
 
   logger.debug("Rendering household card container", {
     householdId: household.id,
-    isAdmin,
-    userId: user?.id,
-    isPending,
-    membersCount: members.length,
+    name: household.name,
+    memberCount,
   });
 
-  const handleManageClick = () => {
-    logger.debug("Navigating to household management", {
+  const handleSelect = () => {
+    logger.debug("Household card selected", {
       householdId: household.id,
-      isPending,
-      memberId,
+      name: household.name,
     });
-
-    // Pass invitation info in the URL if this is a pending invitation
-    const queryParams = isPending ? `?invitation=${memberId}` : "";
-    router.push(`/household/${household.id}${queryParams}`);
+    router.push(`/households/${household.id}`);
   };
 
   return (
     <HouseholdCardPresentation
-      household={{
-        ...household,
-        members,
-      }}
-      isAdmin={isAdmin}
-      currentUserId={user?.id}
-      isPending={isPending}
-      onManageClick={handleManageClick}
+      household={household}
+      memberCount={memberCount}
+      onSelect={handleSelect}
     />
   );
 }

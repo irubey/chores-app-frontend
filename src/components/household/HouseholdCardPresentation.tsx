@@ -1,91 +1,47 @@
 import React from "react";
-import { HouseholdWithMembers } from "@shared/types";
-import Card from "@/components/common/Card";
-import Button from "@/components/common/Button";
-import Badge from "@/components/common/Badge";
-import HouseholdStats from "./HouseholdStats";
-import MembersList from "./MembersList";
-import { logger } from "@/lib/api/logger";
+import Link from "next/link";
+import { HouseholdWithMembers } from "@shared/types/household";
 
 interface HouseholdCardPresentationProps {
   household: HouseholdWithMembers;
-  isAdmin: boolean;
-  currentUserId?: string;
-  isPending?: boolean;
-  onManageClick?: () => void;
+  memberCount: number;
+  onSelect?: () => void;
 }
 
 export default function HouseholdCardPresentation({
   household,
-  isAdmin,
-  currentUserId,
-  isPending = false,
-  onManageClick,
+  memberCount,
+  onSelect,
 }: HouseholdCardPresentationProps) {
-  const members = household.members || [];
-
-  logger.debug("Rendering household card presentation", {
-    householdId: household.id,
-    isAdmin,
-    isPending,
-    membersCount: members.length,
-  });
-
   return (
-    <Card
-      className={`relative transition-all duration-200 cursor-pointer hover:shadow-lg ${
-        isPending ? "border-2 border-primary/20" : ""
-      }`}
-      onClick={onManageClick}
+    <Link
+      href={`/households/${household.id}`}
+      onClick={onSelect}
+      className="block p-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200"
     >
-      {isPending && (
-        <Badge
-          count={1}
-          color="primary"
-          className="absolute -top-2 -right-2"
-          dot
-        />
-      )}
-
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <h3 className="text-h3">{household.name}</h3>
-          {isPending && (
-            <span className="text-sm text-primary mt-1">
-              Click to view and respond to invitation
-            </span>
-          )}
-        </div>
-        {isAdmin && !isPending && (
-          <Button
-            variant="ghost"
-            className="text-primary dark:text-primary-light"
-            onClick={(e) => {
-              e.stopPropagation();
-              onManageClick?.();
-            }}
-          >
-            Manage
-          </Button>
-        )}
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+          {household.name}
+        </h3>
+        <span className="text-sm text-gray-500 dark:text-gray-400">
+          {memberCount} {memberCount === 1 ? "member" : "members"}
+        </span>
       </div>
 
-      <HouseholdStats
-        stats={{
-          expenses: 0,
-          messages: 0,
-          tasks: 0,
-          events: 0,
-        }}
-        className="mb-4"
-      />
-
-      <MembersList
-        members={members}
-        currentUserId={currentUserId}
-        maxDisplay={5}
-        className="space-y-4"
-      />
-    </Card>
+      <div className="space-y-2">
+        <div className="flex items-center text-sm text-gray-600 dark:text-gray-300">
+          <span className="font-medium mr-2">Currency:</span>
+          {household.currency}
+        </div>
+        <div className="flex items-center text-sm text-gray-600 dark:text-gray-300">
+          <span className="font-medium mr-2">Language:</span>
+          {household.language}
+        </div>
+        <div className="flex items-center text-sm text-gray-600 dark:text-gray-300">
+          <span className="font-medium mr-2">Timezone:</span>
+          {household.timezone}
+        </div>
+      </div>
+    </Link>
   );
 }

@@ -1,31 +1,55 @@
+import {
+  handleApiRequest,
+  buildRequestConfig,
+  ApiRequestOptions,
+} from "../utils/apiUtils";
+import { axiosInstance } from "../axiosInstance";
 import { ApiResponse } from "@shared/interfaces";
 import { User, UpdateUserDTO } from "@shared/types";
-import { BaseApiClient } from "../baseClient";
-import { logger } from "../logger";
 
-export class UserService extends BaseApiClient {
-  /**
-   * Get the current user's profile
-   */
-  public async getProfile(signal?: AbortSignal): Promise<ApiResponse<User>> {
-    logger.debug("Getting user profile");
-    return this.handleRequest(() =>
-      this.axiosInstance.get<ApiResponse<User>>("/users/profile", { signal })
-    );
-  }
+export const userKeys = {
+  all: ["users"] as const,
+  profile: () => [...userKeys.all, "profile"] as const,
+  details: () => [...userKeys.all, "detail"] as const,
+  detail: (id: string) => [...userKeys.details(), id] as const,
+} as const;
 
-  /**
-   * Update the current user's profile
-   */
-  public async updateProfile(
-    userData: UpdateUserDTO,
-    signal?: AbortSignal
-  ): Promise<ApiResponse<User>> {
-    logger.debug("Updating user profile", { userData });
-    return this.handleRequest(() =>
-      this.axiosInstance.patch<ApiResponse<User>>("/users/profile", userData, {
-        signal,
-      })
-    );
-  }
-}
+export const userApi = {
+  users: {
+    getProfile: async (
+      config?: ApiRequestOptions
+    ): Promise<ApiResponse<User>> => {
+      return handleApiRequest<User>(
+        () =>
+          axiosInstance.get("/users/profile", {
+            ...buildRequestConfig(config),
+            withCredentials: true,
+          }),
+        {
+          operation: "Get User Profile",
+        }
+      );
+    },
+
+    updateProfile: async (
+      data: UpdateUserDTO,
+      config?: ApiRequestOptions
+    ): Promise<ApiResponse<User>> => {
+      return handleApiRequest<User>(
+        () =>
+          axiosInstance.patch("/users/profile", data, {
+            ...buildRequestConfig(config),
+            withCredentials: true,
+          }),
+        {
+          operation: "Update User Profile",
+          metadata: {
+            updatedFields: Object.keys(data),
+          },
+        }
+      );
+    },
+  },
+} as const;
+
+export type UserApi = typeof userApi;

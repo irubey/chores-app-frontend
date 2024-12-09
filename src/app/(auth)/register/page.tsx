@@ -1,7 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
-import { useAuth } from "@/hooks/useAuth";
+import React, { useState, useEffect } from "react";
+import {
+  useAuthUser,
+  useAuthActions,
+  useAuthStatus,
+} from "@/contexts/UserContext";
 import Input from "@/components/common/Input";
 import Button from "@/components/common/Button";
 import { useRouter } from "next/navigation";
@@ -9,7 +13,10 @@ import Link from "next/link";
 import { logger } from "@/lib/api/logger";
 
 const RegisterPage: React.FC = () => {
-  const { register, isLoading, error } = useAuth();
+  const user = useAuthUser();
+  const { register } = useAuthActions();
+  const { status, error: authError } = useAuthStatus();
+  const isLoading = status === "loading";
   const router = useRouter();
   const [formData, setFormData] = useState({
     name: "",
@@ -23,6 +30,12 @@ const RegisterPage: React.FC = () => {
     password: "",
     confirmPassword: "",
   });
+
+  useEffect(() => {
+    if (user) {
+      router.replace("/dashboard");
+    }
+  }, [user, router]);
 
   const validateForm = () => {
     const errors = {
@@ -96,9 +109,9 @@ const RegisterPage: React.FC = () => {
         </p>
       </div>
 
-      {error && (
+      {authError && (
         <div className="p-4 bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-800 text-red-700 dark:text-red-400 rounded-md text-sm">
-          {error}
+          {authError.message}
         </div>
       )}
 

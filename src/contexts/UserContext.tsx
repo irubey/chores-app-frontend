@@ -5,285 +5,308 @@ import React, {
   useCallback,
   useEffect,
   useState,
-  useRef,
+  useMemo,
 } from "react";
 import { User } from "@shared/types";
-import { authService } from "@/lib/api/services/authService";
+import { authApi } from "@/lib/api/services/authService";
 import { logger } from "@/lib/api/logger";
-import { requestManager } from "@/lib/api/requestManager";
+import { ApiError } from "@/lib/api/errors";
 
-interface UserContextState {
+interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   status: "idle" | "loading" | "authenticated" | "unauthenticated" | "error";
-  error: string | null;
+  error: {
+    message: string;
+    code?: string;
+    details?: unknown;
+  } | null;
+}
+
+interface AuthActions {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name: string) => Promise<void>;
   logout: () => Promise<void>;
-  initializeAuth: () => Promise<void>;
+  refreshAuthState: () => Promise<void>;
+  clearError: () => void;
 }
 
-const UserContext = createContext<UserContextState | undefined>(undefined);
+type AuthContextValue = AuthState & AuthActions;
 
-export function UserProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [status, setStatus] = useState<UserContextState["status"]>("idle");
-  const [error, setError] = useState<string | null>(null);
-  const initializationRef = useRef<Promise<void> | null>(null);
-  const initializationAttempts = useRef(0);
-  const MAX_INIT_ATTEMPTS = 3;
+const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+const initialState: AuthState = {
+  user: null,
+  isAuthenticated: false,
+  status: "idle",
+  error: null,
+};
+
+const getErrorMessage = (error: unknown): AuthState["error"] => {
+  if (error instanceof ApiError) {
+    return {
+      message: error.message,
+      code: error.type,
+      details: error.data,
+    };
+  }
+
+  if (error instanceof Error) {
+    return {
+      message: error.message,
+      code: "UNKNOWN_ERROR",
+    };
+  }
+
+  return {
+    message: "An unexpected error occurred",
+    code: "UNKNOWN_ERROR",
+    details: error,
+  };
+};
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [state, setState] = useState<AuthState>(initialState);
 
   // Log state changes
-  const setUserWithLogging = (newUser: User | null) => {
-    logger.debug("User state changing", {
-      from: user?.id,
-      to: newUser?.id,
-      currentStatus: status,
+  useEffect(() => {
+    logger.debug("Auth state changed", {
+      status: state.status,
+      isAuthenticated: state.isAuthenticated,
+      hasUser: !!state.user,
+      hasError: !!state.error,
     });
-    setUser(newUser);
-  };
+  }, [state.status, state.isAuthenticated, state.user, state.error]);
 
-  const setStatusWithLogging = (newStatus: UserContextState["status"]) => {
-    logger.debug("Status state changing", {
-      from: status,
-      to: newStatus,
-      hasUser: !!user,
+  const updateState = useCallback((updates: Partial<AuthState>) => {
+    setState((prev) => ({ ...prev, ...updates }));
+  }, []);
+
+  const setLoading = useCallback(() => {
+    updateState({ status: "loading", error: null });
+  }, [updateState]);
+
+  const setError = useCallback(
+    (error: unknown) => {
+      const errorState = getErrorMessage(error);
+      logger.error("Auth error", {
+        code: errorState.code,
+        message: errorState.message,
+      });
+      updateState({
+        status: "error",
+        error: errorState,
+        isAuthenticated: false,
+        user: null,
+      });
+    },
+    [updateState]
+  );
+
+  const clearError = useCallback(() => {
+    updateState({ error: null });
+  }, [updateState]);
+
+  const setAuthenticated = useCallback(
+    (user: User) => {
+      updateState({
+        user,
+        status: "authenticated",
+        isAuthenticated: true,
+        error: null,
+      });
+    },
+    [updateState]
+  );
+
+  const setUnauthenticated = useCallback(() => {
+    updateState({
+      user: null,
+      status: "unauthenticated",
+      isAuthenticated: false,
+      error: null,
     });
-    setStatus(newStatus);
-  };
+  }, [updateState]);
 
-  const setErrorWithLogging = (newError: string | null) => {
-    logger.debug("Error state changing", {
-      from: error,
-      to: newError,
-      currentStatus: status,
-    });
-    setError(newError);
-  };
-
-  const initializeAuth = useCallback(async () => {
+  const refreshAuthState = useCallback(async () => {
     try {
-      // Prevent multiple concurrent initializations
-      if (status === "loading") {
-        logger.debug("Skipping auth initialization - already loading", {
-          currentStatus: status,
-          hasUser: !!user,
-          attempts: initializationAttempts.current,
-        });
-        return;
-      }
+      setState((currentState) => {
+        if (currentState.status === "loading") return currentState;
 
-      // Prevent re-initialization if already authenticated
-      if (status === "authenticated" && user) {
-        logger.debug("Skipping auth initialization - already authenticated", {
-          userId: user.id,
-          attempts: initializationAttempts.current,
-        });
-        return;
-      }
-
-      // Track initialization attempts
-      initializationAttempts.current++;
-      if (initializationAttempts.current > MAX_INIT_ATTEMPTS) {
-        logger.error("Max auth initialization attempts exceeded", {
-          attempts: initializationAttempts.current,
-          currentStatus: status,
-          hasUser: !!user,
-        });
-        setStatusWithLogging("unauthenticated");
-        throw new Error("Max initialization attempts exceeded");
-      }
-
-      setStatusWithLogging("loading");
-      logger.debug("Starting auth initialization", {
-        attempt: initializationAttempts.current,
-        currentStatus: status,
-        hasUser: !!user,
+        setLoading();
+        return currentState;
       });
 
-      const response = await requestManager.dedupRequest(
-        "initAuth",
-        () => authService.initializeAuth(),
-        { requiresAuth: false }
-      );
+      const response = await authApi.auth.initializeAuth();
 
       if (response?.data) {
-        setUserWithLogging(response.data);
-        setStatusWithLogging("authenticated");
-        logger.info("Auth initialization successful", {
+        setAuthenticated(response.data);
+        logger.info("Auth refreshed", {
           userId: response.data.id,
-          attempts: initializationAttempts.current,
+          timestamp: new Date().toISOString(),
         });
       } else {
-        setUserWithLogging(null);
-        setStatusWithLogging("unauthenticated");
-        logger.debug("Auth initialization complete - no user found", {
-          attempts: initializationAttempts.current,
+        setUnauthenticated();
+        logger.info("No active session", {
+          timestamp: new Date().toISOString(),
         });
       }
-
-      setErrorWithLogging(null);
-      initializationAttempts.current = 0; // Reset counter on success
-    } catch (error: any) {
-      logger.error("Auth initialization failed", {
-        error,
-        attempts: initializationAttempts.current,
-        currentStatus: status,
-        hasUser: !!user,
-      });
-
-      // Handle 401 specifically
-      if (error?.status === 401 || error?.response?.status === 401) {
-        setUserWithLogging(null);
-        setStatusWithLogging("unauthenticated");
-        setErrorWithLogging(null);
-        logger.info("User not authenticated");
-        initializationAttempts.current = 0; // Reset counter on 401
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        setUnauthenticated();
         return;
       }
-
-      setUserWithLogging(null);
-      setStatusWithLogging("error");
-      setErrorWithLogging("Failed to initialize authentication");
+      setError(error);
       throw error;
     }
-  }, [status, user]);
+  }, [setLoading, setAuthenticated, setUnauthenticated, setError]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    try {
-      setStatusWithLogging("loading");
-      setErrorWithLogging(null);
-      logger.debug("Starting login process", { email });
-
-      const response = await requestManager.dedupRequest(
-        "login",
-        () => authService.login({ email, password }),
-        { requiresAuth: false }
-      );
-
-      setUserWithLogging(response.data);
-      setStatusWithLogging("authenticated");
-      logger.info("Login successful", { userId: response.data.id });
-    } catch (error) {
-      logger.error("Login failed", { error });
-      setStatusWithLogging("error");
-      setErrorWithLogging("Login failed. Please check your credentials.");
-      throw error;
-    }
-  }, []);
+  const login = useCallback(
+    async (email: string, password: string) => {
+      try {
+        setLoading();
+        const response = await authApi.auth.login({ email, password });
+        setAuthenticated(response.data);
+        logger.info("User authenticated", {
+          userId: response.data.id,
+          method: "login",
+          timestamp: new Date().toISOString(),
+        });
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          setError({
+            message: "Invalid email or password",
+            code: "INVALID_CREDENTIALS",
+          });
+        } else {
+          setError(error);
+        }
+        throw error;
+      }
+    },
+    [setLoading, setAuthenticated, setError]
+  );
 
   const register = useCallback(
     async (email: string, password: string, name: string) => {
       try {
-        setStatusWithLogging("loading");
-        setErrorWithLogging(null);
-        logger.debug("Starting registration process", { email, name });
-
-        const response = await requestManager.dedupRequest(
-          "register",
-          () => authService.register({ email, password, name }),
-          { requiresAuth: false }
-        );
-
+        setLoading();
+        const response = await authApi.auth.register({ email, password, name });
         if (!response?.data) {
           throw new Error("Registration failed - no user data received");
         }
 
-        // Initialize auth state after registration
-        await requestManager.dedupRequest(
-          "initAuth",
-          () => authService.initializeAuth(),
-          { requiresAuth: false }
-        );
-
-        setUserWithLogging(response.data);
-        setStatusWithLogging("authenticated");
-        logger.info("Registration successful", { userId: response.data.id });
-      } catch (error: any) {
-        logger.error("Registration failed", { error, email, name });
-        setStatusWithLogging("error");
-        setErrorWithLogging(
-          error?.response?.data?.message ||
-            error?.message ||
-            "Registration failed. Please try again."
-        );
+        setAuthenticated(response.data);
+        logger.info("User registered", {
+          userId: response.data.id,
+          method: "register",
+          timestamp: new Date().toISOString(),
+        });
+      } catch (error) {
+        if (error instanceof ApiError) {
+          switch (error.status) {
+            case 409:
+              setError({
+                message: "An account with this email already exists",
+                code: "EMAIL_EXISTS",
+              });
+              break;
+            case 400:
+              setError({
+                message: "Invalid registration data provided",
+                code: "INVALID_DATA",
+                details: error.data,
+              });
+              break;
+            default:
+              setError(error);
+          }
+        } else {
+          setError(error);
+        }
         throw error;
       }
     },
-    []
+    [setLoading, setAuthenticated, setError]
   );
 
   const logout = useCallback(async () => {
     try {
-      setStatusWithLogging("loading");
-      logger.debug("Starting logout process", {
-        currentUser: user?.id,
-        currentStatus: status,
+      setLoading();
+      setState((currentState) => {
+        const userId = currentState.user?.id;
+        if (userId) {
+          logger.info("User logged out", {
+            userId,
+            timestamp: new Date().toISOString(),
+          });
+        }
+        return currentState;
       });
 
-      await requestManager.dedupRequest("logout", () => authService.logout(), {
-        requiresAuth: true,
-      });
-
-      setUserWithLogging(null);
-      setStatusWithLogging("idle");
-      setErrorWithLogging(null);
-      logger.info("Logout successful", { previousUserId: user?.id });
+      await authApi.auth.logout();
+      setUnauthenticated();
     } catch (error) {
-      logger.error("Logout failed", {
-        error,
-        currentUser: user?.id,
-        currentStatus: status,
-      });
-      setStatusWithLogging("error");
-      setErrorWithLogging("Logout failed. Please try again.");
+      setError(error);
       throw error;
     }
-  }, [user, status]);
+  }, [setLoading, setUnauthenticated, setError]);
 
-  // Initialize auth on mount
+  // Initialize auth state on mount
   useEffect(() => {
-    if (initializationRef.current) {
-      logger.debug("Auth initialization already in progress", {
-        currentStatus: status,
-        hasUser: !!user,
+    logger.debug("Auth provider mounted");
+    refreshAuthState().catch((error) => {
+      logger.error("Auth initialization failed", {
+        code: error.code,
+        message: error.message,
       });
-      return;
-    }
-
-    logger.debug("Starting initial auth check", {
-      currentStatus: status,
-      hasUser: !!user,
     });
 
-    initializationRef.current = initializeAuth()
-      .catch((error) => {
-        logger.error("Initial auth check failed", { error });
-      })
-      .finally(() => {
-        initializationRef.current = null;
-      });
-  }, []); // Only run on mount
+    return () => {
+      logger.debug("Auth provider unmounting");
+    };
+  }, [refreshAuthState]);
 
-  // Provide the context value
-  const value = {
-    user,
-    isAuthenticated: status === "authenticated",
-    status,
-    error,
-    login,
-    register,
-    logout,
-    initializeAuth,
-  };
+  // Memoize the context value to prevent unnecessary re-renders
+  const value = useMemo(
+    () => ({
+      ...state,
+      login,
+      register,
+      logout,
+      refreshAuthState,
+      clearError,
+    }),
+    [state, login, register, logout, refreshAuthState, clearError]
+  );
 
-  return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-export function useUser() {
-  const context = useContext(UserContext);
+// Custom hook with memoized selector
+export function useAuth() {
+  const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error("useUser must be used within a UserProvider");
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
+}
+
+// Memoized selectors for specific auth state
+export function useAuthUser() {
+  const { user } = useAuth();
+  return useMemo(() => user, [user]);
+}
+
+export function useAuthStatus() {
+  const { status, error } = useAuth();
+  return useMemo(() => ({ status, error }), [status, error]);
+}
+
+export function useAuthActions() {
+  const { login, register, logout, refreshAuthState, clearError } = useAuth();
+  return useMemo(
+    () => ({ login, register, logout, refreshAuthState, clearError }),
+    [login, register, logout, refreshAuthState, clearError]
+  );
 }

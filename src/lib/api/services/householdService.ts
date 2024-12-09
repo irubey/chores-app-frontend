@@ -1,290 +1,186 @@
-import { ApiResponse } from "@shared/interfaces";
-import { BaseApiClient } from "../baseClient";
+// src/lib/api/services/householdService.ts
 import {
-  Household,
-  HouseholdMember,
+  handleApiRequest,
+  createQueryKeys,
+  ApiRequestOptions,
+  buildRequestConfig,
+} from "../utils/apiUtils";
+import { axiosInstance } from "../axiosInstance";
+import type {
+  HouseholdWithMembers,
   CreateHouseholdDTO,
   UpdateHouseholdDTO,
-  AddMemberDTO,
+  HouseholdMember,
   HouseholdMemberWithUser,
-  HouseholdWithMembers,
 } from "@shared/types";
-import { HouseholdRole } from "@shared/enums";
-import { logger } from "../logger";
+import type { PaginationOptions } from "@shared/interfaces";
+import { ApiResponse } from "@shared/interfaces/apiResponse";
 
-export class HouseholdService extends BaseApiClient {
-  /**
-   * Get all households for the current user
-   */
-  public async getUserHouseholds(
-    signal?: AbortSignal
-  ): Promise<ApiResponse<HouseholdWithMembers[]>> {
-    logger.debug("Fetching user households");
+export const householdKeys = {
+  all: ["households"] as const,
+  lists: () => [...householdKeys.all, "list"] as const,
+  list: (params?: PaginationOptions) =>
+    [...householdKeys.lists(), params] as const,
+  details: () => [...householdKeys.all, "detail"] as const,
+  detail: (id: string) => [...householdKeys.details(), id] as const,
+  members: (householdId: string) =>
+    [...householdKeys.detail(householdId), "members"] as const,
+  membersList: (householdId: string, params?: PaginationOptions) =>
+    [...householdKeys.members(householdId), params] as const,
+};
 
-    return this.handleRequest(() =>
-      this.axiosInstance.get<ApiResponse<HouseholdWithMembers[]>>(
-        "/households",
+export const householdApi = {
+  households: {
+    list: async (
+      config?: ApiRequestOptions
+    ): Promise<ApiResponse<HouseholdWithMembers[]>> => {
+      return handleApiRequest<HouseholdWithMembers[]>(
+        () => axiosInstance.get("/households", buildRequestConfig(config)),
         {
-          signal,
+          operation: "List Households",
+          metadata: { params: config?.params },
         }
-      )
-    );
-  }
+      );
+    },
 
-  /**
-   * Create a new household
-   */
-  public async createHousehold(
-    data: CreateHouseholdDTO,
-    signal?: AbortSignal
-  ): Promise<ApiResponse<Household>> {
-    logger.debug("Creating new household", { data });
-
-    return this.handleRequest(() =>
-      this.axiosInstance.post<ApiResponse<Household>>("/households", data, {
-        signal,
-      })
-    );
-  }
-
-  /**
-   * Get details of a specific household
-   */
-  public async getHousehold(
-    householdId: string,
-    signal?: AbortSignal
-  ): Promise<ApiResponse<HouseholdWithMembers>> {
-    logger.debug("Fetching household details", { householdId });
-
-    return this.handleRequest(() =>
-      this.axiosInstance.get<ApiResponse<HouseholdWithMembers>>(
-        `/households/${householdId}`,
-        { signal }
-      )
-    );
-  }
-
-  /**
-   * Update a household's details
-   */
-  public async updateHousehold(
-    householdId: string,
-    data: UpdateHouseholdDTO,
-    signal?: AbortSignal
-  ): Promise<ApiResponse<HouseholdWithMembers>> {
-    logger.debug("Updating household", { householdId, data });
-
-    return this.handleRequest(() =>
-      this.axiosInstance.patch<ApiResponse<HouseholdWithMembers>>(
-        `/households/${householdId}`,
-        data,
-        { signal }
-      )
-    );
-  }
-
-  /**
-   * Delete a household
-   */
-  public async deleteHousehold(
-    householdId: string,
-    signal?: AbortSignal
-  ): Promise<ApiResponse<void>> {
-    logger.debug("Deleting household", { householdId });
-
-    return this.handleRequest(() =>
-      this.axiosInstance.delete<ApiResponse<void>>(
-        `/households/${householdId}`,
+    get: async (
+      id: string,
+      config?: ApiRequestOptions
+    ): Promise<HouseholdWithMembers> => {
+      const result = await handleApiRequest<HouseholdWithMembers>(
+        () =>
+          axiosInstance.get(`/households/${id}`, buildRequestConfig(config)),
         {
-          signal,
+          operation: "Get Household",
+          metadata: { householdId: id },
         }
-      )
-    );
-  }
+      );
+      return result.data;
+    },
 
-  /**
-   * Get the currently selected households
-   */
-  public async getSelectedHouseholds(
-    signal?: AbortSignal
-  ): Promise<ApiResponse<HouseholdMemberWithUser[]>> {
-    logger.debug("Fetching selected households");
-
-    return this.handleRequest(() =>
-      this.axiosInstance.get<ApiResponse<HouseholdMemberWithUser[]>>(
-        "/households/selected",
+    create: async (data: CreateHouseholdDTO): Promise<HouseholdWithMembers> => {
+      const result = await handleApiRequest<HouseholdWithMembers>(
+        () => axiosInstance.post("/households", data),
         {
-          signal,
-          params: {
-            include: "household",
+          operation: "Create Household",
+          metadata: {
+            name: data.name,
+            currency: data.currency,
+            timezone: data.timezone,
+            language: data.language,
           },
         }
-      )
-    );
-  }
+      );
+      return result.data;
+    },
 
-  /**
-   * Member management operations
-   */
-  public readonly members = {
-    /**
-     * Get all members of a household
-     */
-    getMembers: async (
+    update: async (
+      id: string,
+      data: UpdateHouseholdDTO,
+      config?: ApiRequestOptions
+    ): Promise<HouseholdWithMembers> => {
+      const result = await handleApiRequest<HouseholdWithMembers>(
+        () =>
+          axiosInstance.patch(
+            `/households/${id}`,
+            data,
+            buildRequestConfig(config)
+          ),
+        {
+          operation: "Update Household",
+          metadata: {
+            householdId: id,
+            updatedFields: Object.keys(data),
+          },
+        }
+      );
+      return result.data;
+    },
+
+    delete: async (id: string, config?: ApiRequestOptions): Promise<void> => {
+      await handleApiRequest<void>(
+        () =>
+          axiosInstance.delete(`/households/${id}`, buildRequestConfig(config)),
+        {
+          operation: "Delete Household",
+          metadata: { householdId: id },
+        }
+      );
+    },
+  },
+
+  members: {
+    list: async (
       householdId: string,
-      signal?: AbortSignal
+      config?: ApiRequestOptions
     ): Promise<ApiResponse<HouseholdMember[]>> => {
-      logger.debug("Fetching household members", { householdId });
-
-      return this.handleRequest(() =>
-        this.axiosInstance.get<ApiResponse<HouseholdMember[]>>(
-          `/households/${householdId}/members`,
-          { signal }
-        )
+      return handleApiRequest<HouseholdMember[]>(
+        () =>
+          axiosInstance.get(
+            `/households/${householdId}/members`,
+            buildRequestConfig(config)
+          ),
+        {
+          operation: "List Household Members",
+          metadata: {
+            householdId,
+            params: config?.params,
+          },
+        }
       );
     },
 
-    /**
-     * Add a new member to the household
-     */
-    addMember: async (
-      householdId: string,
-      data: AddMemberDTO,
-      signal?: AbortSignal
-    ): Promise<ApiResponse<HouseholdMember>> => {
-      logger.debug("Adding household member", { householdId, data });
-
-      return this.handleRequest(() =>
-        this.axiosInstance.post<ApiResponse<HouseholdMember>>(
-          `/households/${householdId}/members`,
-          data,
-          { signal }
-        )
-      );
-    },
-
-    /**
-     * Remove a member from the household
-     */
-    removeMember: async (
+    update: async (
       householdId: string,
       memberId: string,
-      signal?: AbortSignal
-    ): Promise<ApiResponse<void>> => {
-      logger.debug("Removing household member", { householdId, memberId });
-
-      return this.handleRequest(() =>
-        this.axiosInstance.delete<ApiResponse<void>>(
-          `/households/${householdId}/members/${memberId}`,
-          { signal }
-        )
+      data: Partial<HouseholdMember>,
+      config?: ApiRequestOptions
+    ): Promise<HouseholdMember> => {
+      const result = await handleApiRequest<HouseholdMember>(
+        () =>
+          axiosInstance.patch(
+            `/households/${householdId}/members/${memberId}`,
+            data,
+            buildRequestConfig(config)
+          ),
+        {
+          operation: "Update Household Member",
+          metadata: {
+            householdId,
+            memberId,
+            updatedFields: Object.keys(data),
+          },
+        }
       );
+      return result.data;
     },
+  },
 
-    /**
-     * Update member role
-     */
-    updateMemberRole: async (
-      householdId: string,
-      memberId: string,
-      role: HouseholdRole,
-      signal?: AbortSignal
-    ): Promise<ApiResponse<HouseholdMember>> => {
-      logger.debug("Updating member role", { householdId, memberId, role });
-
-      return this.handleRequest(() =>
-        this.axiosInstance.patch<ApiResponse<HouseholdMember>>(
-          `/households/${householdId}/members/${memberId}/role`,
-          { role },
-          { signal }
-        )
-      );
-    },
-
-    /**
-     * Update selection status
-     */
-    updateSelection: async (
-      householdId: string,
-      memberId: string,
-      isSelected: boolean,
-      signal?: AbortSignal
-    ): Promise<ApiResponse<HouseholdMember>> => {
-      logger.debug("Updating member selection", {
-        householdId,
-        memberId,
-        isSelected,
-      });
-
-      return this.handleRequest(() =>
-        this.axiosInstance.patch<ApiResponse<HouseholdMember>>(
-          `/households/${householdId}/members/${memberId}/selection`,
-          { isSelected },
-          { signal }
-        )
-      );
-    },
-  };
-
-  /**
-   * Invitation operations
-   */
-  public readonly invitations = {
-    /**
-     * Send invitation
-     */
-    sendInvitation: async (
+  invitations: {
+    send: async (
       householdId: string,
       email: string,
-      signal?: AbortSignal
-    ): Promise<ApiResponse<HouseholdMemberWithUser | { pending: true }>> => {
-      logger.debug("Sending household invitation", { householdId, email });
-
-      return this.handleRequest(() =>
-        this.axiosInstance.post<
-          ApiResponse<HouseholdMemberWithUser | { pending: true }>
-        >(`/households/${householdId}/invitations`, { email }, { signal })
+      config?: ApiRequestOptions
+    ): Promise<HouseholdMemberWithUser> => {
+      const result = await handleApiRequest<HouseholdMemberWithUser>(
+        () =>
+          axiosInstance.post(
+            `/households/${householdId}/invitations`,
+            { email },
+            buildRequestConfig(config)
+          ),
+        {
+          operation: "Send Household Invitation",
+          metadata: {
+            householdId,
+            // Mask email in logs for privacy
+            emailDomain: email.split("@")[1],
+          },
+        }
       );
+      return result.data;
     },
+  },
+} as const;
 
-    /**
-     * Get invitations
-     */
-    getInvitations: async (
-      signal?: AbortSignal
-    ): Promise<ApiResponse<HouseholdMemberWithUser[]>> => {
-      logger.debug("Fetching household invitations");
-
-      return this.handleRequest(() =>
-        this.axiosInstance.get<ApiResponse<HouseholdMemberWithUser[]>>(
-          `/households/invitations`,
-          { signal }
-        )
-      );
-    },
-
-    /**
-     * Update invitation status
-     */
-    updateMemberInvitationStatus: async (
-      householdId: string,
-      userId: string,
-      accept: boolean,
-      signal?: AbortSignal
-    ): Promise<ApiResponse<HouseholdMember>> => {
-      logger.debug("Updating invitation status", {
-        householdId,
-        userId,
-        accept,
-      });
-
-      return this.handleRequest(() =>
-        this.axiosInstance.patch<ApiResponse<HouseholdMember>>(
-          `/households/${householdId}/members/${userId}/status`,
-          { accept },
-          { signal }
-        )
-      );
-    },
-  };
-}
+export type HouseholdApi = typeof householdApi;

@@ -1,344 +1,417 @@
 // frontend/src/hooks/threads/useMessageInteractions.ts
-import { useCallback, useState, useRef } from "react";
-import { ThreadService } from "@/lib/api/services/threadService";
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  type UseQueryOptions,
+  type UseMutationOptions,
+} from "@tanstack/react-query";
+import { threadApi, threadKeys } from "@/lib/api/services/threadService";
 import {
   MessageWithDetails,
-  CreateReactionDTO,
-  CreateMentionDTO,
-  ReactionWithUser,
-  MentionWithUser,
+  CreateMessageDTO,
+  UpdateMessageDTO,
+  MessageReadStatus,
   MessageReadWithUser,
+  ReactionWithUser,
+  CreateReactionDTO,
+  MentionWithUser,
+  CreateMentionDTO,
 } from "@shared/types";
 import { ReactionType } from "@shared/enums";
-import { useAuth } from "@/hooks/useAuth";
 import { logger } from "@/lib/api/logger";
-import { RequestManager } from "@/lib/api/requestManager";
+import { CACHE_TIMES, STALE_TIMES } from "@/lib/api/utils/apiUtils";
+import { ApiResponse } from "@shared/interfaces/apiResponse";
 
-interface UseMessageInteractionsOptions {
+// Types
+interface MessageOptions {
   householdId: string;
   threadId: string;
   messageId: string;
-  message?: MessageWithDetails;
-  onUpdate?: () => Promise<void>;
+  enabled?: boolean;
 }
 
-interface MessageInteractionsState {
-  reactions: ReactionWithUser[];
-  mentions: MentionWithUser[];
-  reads: MessageReadWithUser[];
-  isLoading: {
-    reactions: boolean;
-    mentions: boolean;
-    reads: boolean;
-  };
-  error: Error | null;
-}
+// Query hook for message details
+export const useMessage = (
+  { householdId, threadId, messageId, enabled = true }: MessageOptions,
+  options?: Omit<UseQueryOptions<MessageWithDetails>, "queryKey" | "queryFn">
+) => {
+  return useQuery({
+    queryKey: threadKeys.messages.detail(householdId, threadId, messageId),
+    queryFn: async () => {
+      const result = await threadApi.messages.list(householdId, threadId);
+      const message = result.data.find((m) => m.id === messageId);
+      if (!message) {
+        throw new Error("Message not found");
+      }
+      logger.debug("Message data fetched", {
+        messageId,
+        threadId,
+        householdId,
+      });
+      return message;
+    },
+    staleTime: STALE_TIMES.STANDARD,
+    gcTime: CACHE_TIMES.STANDARD,
+    enabled: enabled && !!messageId && !!threadId && !!householdId,
+    ...options,
+  });
+};
 
-export function useMessageInteractions({
+// Query hook for message read status
+export const useMessageReadStatus = (
+  { householdId, threadId, messageId, enabled = true }: MessageOptions,
+  options?: Omit<UseQueryOptions<MessageReadStatus>, "queryKey" | "queryFn">
+) => {
+  return useQuery({
+    queryKey: threadKeys.messages.readStatus(householdId, threadId, messageId),
+    queryFn: async () => {
+      const result = await threadApi.readStatus.get(
+        householdId,
+        threadId,
+        messageId
+      );
+      logger.debug("Message read status fetched", {
+        messageId,
+        threadId,
+        householdId,
+      });
+      return result;
+    },
+    staleTime: STALE_TIMES.SHORT,
+    gcTime: CACHE_TIMES.STANDARD,
+    enabled: enabled && !!messageId && !!threadId && !!householdId,
+    ...options,
+  });
+};
+
+// Query hook for message reactions
+export const useMessageReactions = (
+  { householdId, threadId, messageId, enabled = true }: MessageOptions,
+  options?: Omit<UseQueryOptions<ReactionWithUser[]>, "queryKey" | "queryFn">
+) => {
+  return useQuery({
+    queryKey: threadKeys.messages.reactions(householdId, threadId, messageId),
+    queryFn: async () => {
+      const result = await threadApi.messages.reactions.getMessageReactions(
+        householdId,
+        threadId,
+        messageId
+      );
+      logger.debug("Message reactions fetched", {
+        messageId,
+        threadId,
+        householdId,
+      });
+      return result.data;
+    },
+    staleTime: STALE_TIMES.SHORT,
+    gcTime: CACHE_TIMES.STANDARD,
+    enabled: enabled && !!messageId && !!threadId && !!householdId,
+    ...options,
+  });
+};
+
+// Query hook for message mentions
+export const useMessageMentions = (
+  { householdId, threadId, messageId, enabled = true }: MessageOptions,
+  options?: Omit<UseQueryOptions<MentionWithUser[]>, "queryKey" | "queryFn">
+) => {
+  return useQuery({
+    queryKey: threadKeys.messages.mentions(householdId, threadId, messageId),
+    queryFn: async () => {
+      const result = await threadApi.messages.mentions.getMessageMentions(
+        householdId,
+        threadId,
+        messageId
+      );
+      logger.debug("Message mentions fetched", {
+        messageId,
+        threadId,
+        householdId,
+      });
+      return result.data;
+    },
+    staleTime: STALE_TIMES.SHORT,
+    gcTime: CACHE_TIMES.STANDARD,
+    enabled: enabled && !!messageId && !!threadId && !!householdId,
+    ...options,
+  });
+};
+
+// Mutation hook for message operations
+export const useMessageOperations = ({
   householdId,
   threadId,
   messageId,
-  message,
-  onUpdate,
-}: UseMessageInteractionsOptions) {
-  const [state, setState] = useState<MessageInteractionsState>({
-    reactions: message?.reactions || [],
-    mentions: message?.mentions || [],
-    reads: message?.reads || [],
-    isLoading: {
-      reactions: false,
-      mentions: false,
-      reads: false,
+}: MessageOptions) => {
+  const queryClient = useQueryClient();
+
+  const updateMessage = useMutation({
+    mutationFn: async (data: UpdateMessageDTO) => {
+      const result = await threadApi.messages.update(
+        householdId,
+        threadId,
+        messageId,
+        data
+      );
+      logger.info("Message updated", {
+        messageId,
+        threadId,
+        householdId,
+        updatedFields: Object.keys(data),
+      });
+      return result;
     },
-    error: null,
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: threadKeys.messages.detail(householdId, threadId, messageId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: threadKeys.messages.list(householdId, threadId),
+      });
+    },
   });
 
-  const { user } = useAuth();
-  const threadService = useRef(new ThreadService()).current;
-  const requestManager = useRef(RequestManager.getInstance()).current;
-
-  // Toggle reaction (add/remove)
-  const toggleReaction = useCallback(
-    async (type: ReactionType, emoji: string) => {
-      if (!user) return;
-
-      const requestKey = `reaction-toggle-${messageId}-${type}-${user.id}`;
-
-      try {
-        setState((prev) => ({
-          ...prev,
-          isLoading: { ...prev.isLoading, reactions: true },
-        }));
-
-        logger.debug("Toggling reaction", { messageId, type, emoji });
-
-        const existingReaction = state.reactions.find(
-          (r) => r.type === type && r.user.id === user.id
-        );
-
-        if (existingReaction) {
-          await requestManager.dedupRequest(
-            requestKey,
-            () =>
-              threadService.messages.reactions.removeReaction(
-                householdId,
-                threadId,
-                messageId,
-                existingReaction.id
-              ),
-            { timeout: 5000 }
-          );
-
-          setState((prev) => ({
-            ...prev,
-            reactions: prev.reactions.filter(
-              (r) => r.id !== existingReaction.id
-            ),
-          }));
-        } else {
-          const reactionData: CreateReactionDTO = { type, emoji };
-          const response = await requestManager.dedupRequest(
-            requestKey,
-            () =>
-              threadService.messages.reactions.addReaction(
-                householdId,
-                threadId,
-                messageId,
-                reactionData
-              ),
-            { timeout: 5000 }
-          );
-
-          setState((prev) => ({
-            ...prev,
-            reactions: [...prev.reactions, response.data],
-          }));
-        }
-
-        onUpdate?.();
-        logger.info("Reaction toggled successfully", { messageId, type });
-      } catch (error) {
-        logger.error("Error toggling reaction", { error, messageId });
-        setState((prev) => ({ ...prev, error: error as Error }));
-        throw error;
-      } finally {
-        setState((prev) => ({
-          ...prev,
-          isLoading: { ...prev.isLoading, reactions: false },
-        }));
-      }
+  const deleteMessage = useMutation({
+    mutationFn: async () => {
+      await threadApi.messages.delete(householdId, threadId, messageId);
+      logger.info("Message deleted", {
+        messageId,
+        threadId,
+        householdId,
+      });
     },
-    [householdId, threadId, messageId, user, state.reactions, onUpdate]
-  );
-
-  // Add mention
-  const addMention = useCallback(
-    async (userId: string) => {
-      if (!user) return;
-
-      try {
-        setState((prev) => ({
-          ...prev,
-          isLoading: { ...prev.isLoading, mentions: true },
-        }));
-
-        logger.debug("Adding mention", { messageId, userId });
-
-        const mentionData: CreateMentionDTO = { userId };
-        const response = await threadService.messages.mentions.createMention(
-          householdId,
-          threadId,
-          messageId,
-          mentionData
-        );
-
-        setState((prev) => ({
-          ...prev,
-          mentions: [...prev.mentions, response.data],
-        }));
-
-        onUpdate?.();
-        logger.info("Mention added successfully", { messageId, userId });
-      } catch (error) {
-        logger.error("Error adding mention", { error, messageId });
-        setState((prev) => ({ ...prev, error: error as Error }));
-        throw error;
-      } finally {
-        setState((prev) => ({
-          ...prev,
-          isLoading: { ...prev.isLoading, mentions: false },
-        }));
-      }
+    onSuccess: () => {
+      queryClient.removeQueries({
+        queryKey: threadKeys.messages.detail(householdId, threadId, messageId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: threadKeys.messages.list(householdId, threadId),
+      });
     },
-    [householdId, threadId, messageId, user, onUpdate]
-  );
+  });
 
-  // Mark as read
-  const markAsRead = useCallback(async () => {
-    if (!user) return;
-
-    try {
-      setState((prev) => ({
-        ...prev,
-        isLoading: { ...prev.isLoading, reads: true },
-      }));
-
-      logger.debug("Marking message as read", { messageId });
-
-      const response = await threadService.messages.markAsRead(
+  const markAsRead = useMutation({
+    mutationFn: async () => {
+      const result = await threadApi.readStatus.mark(
         householdId,
         threadId,
         messageId
       );
-
-      setState((prev) => ({
-        ...prev,
-        reads: [...prev.reads, response.data],
-      }));
-
-      onUpdate?.();
-      logger.info("Message marked as read", { messageId });
-    } catch (error) {
-      logger.error("Error marking message as read", { error, messageId });
-      setState((prev) => ({ ...prev, error: error as Error }));
-      throw error;
-    } finally {
-      setState((prev) => ({
-        ...prev,
-        isLoading: { ...prev.isLoading, reads: false },
-      }));
-    }
-  }, [householdId, threadId, messageId, user, onUpdate]);
-
-  // Check if user has reacted with specific type
-  const hasReacted = useCallback(
-    (type: ReactionType) => {
-      if (!user) return false;
-      return state.reactions.some(
-        (r) => r.type === type && r.user.id === user.id
-      );
+      logger.info("Message marked as read", {
+        messageId,
+        threadId,
+        householdId,
+      });
+      return result;
     },
-    [state.reactions, user]
-  );
-
-  // Check if message is read by user
-  const isRead = useCallback(() => {
-    if (!user) return false;
-    return state.reads.some((r) => r.user.id === user.id);
-  }, [state.reads, user]);
-
-  // Get reaction count by type
-  const getReactionCount = useCallback(
-    (type: ReactionType) => {
-      return state.reactions.filter((r) => r.type === type).length;
-    },
-    [state.reactions]
-  );
-
-  // Update message
-  const updateMessage = useCallback(
-    async (content: string) => {
-      if (!user) return;
-
-      try {
-        logger.debug("Updating message", { messageId, content });
-
-        await threadService.messages.updateMessage(
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: threadKeys.messages.readStatus(
           householdId,
           threadId,
-          messageId,
-          { content }
-        );
-
-        onUpdate?.();
-        logger.info("Message updated successfully", { messageId });
-      } catch (error) {
-        logger.error("Error updating message", { error, messageId });
-        throw error;
-      }
+          messageId
+        ),
+      });
+      queryClient.invalidateQueries({
+        queryKey: threadKeys.messages.list(householdId, threadId),
+      });
     },
-    [householdId, threadId, messageId, user, onUpdate]
-  );
+  });
 
-  // Delete message
-  const deleteMessage = useCallback(async () => {
-    if (!user) return;
-
-    try {
-      logger.debug("Deleting message", { messageId });
-
-      await threadService.messages.deleteMessage(
+  const addReaction = useMutation({
+    mutationFn: async (data: CreateReactionDTO) => {
+      const result = await threadApi.messages.reactions.addReaction(
         householdId,
         threadId,
-        messageId
+        messageId,
+        data
       );
-
-      onUpdate?.();
-      logger.info("Message deleted successfully", { messageId });
-    } catch (error) {
-      logger.error("Error deleting message", { error, messageId });
-      throw error;
-    }
-  }, [householdId, threadId, messageId, user, onUpdate]);
-
-  const optimisticToggleReaction = useCallback(
-    (type: ReactionType, emoji: string) => {
-      if (!user) return;
-
-      // Optimistically update the UI
-      setState((prev) => {
-        const existingReaction = prev.reactions.find(
-          (r) => r.type === type && r.user.id === user.id
-        );
-
-        if (existingReaction) {
-          // Remove reaction optimistically
-          return {
-            ...prev,
-            reactions: prev.reactions.filter(
-              (r) => r.id !== existingReaction.id
-            ),
-          };
-        } else {
-          // Add reaction optimistically
-          const optimisticReaction: ReactionWithUser = {
-            id: `temp-${Date.now()}`,
-            type,
-            emoji,
-            user,
-            messageId,
-            userId: user.id,
-            createdAt: new Date(),
-          };
-          return {
-            ...prev,
-            reactions: [...prev.reactions, optimisticReaction],
-          };
-        }
+      logger.info("Reaction added", {
+        messageId,
+        threadId,
+        householdId,
+        type: data.type,
       });
-
-      // Perform actual API call
-      toggleReaction(type, emoji).catch(() => {
-        // Revert on error
-        setState((prev) => ({
-          ...prev,
-          reactions: message?.reactions || [],
-        }));
+      return result.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: threadKeys.messages.reactions(
+          householdId,
+          threadId,
+          messageId
+        ),
+      });
+      queryClient.invalidateQueries({
+        queryKey: threadKeys.messages.detail(householdId, threadId, messageId),
       });
     },
-    [user, toggleReaction, message]
-  );
+  });
+
+  const removeReaction = useMutation({
+    mutationFn: async (reactionId: string) => {
+      await threadApi.messages.reactions.removeReaction(
+        householdId,
+        threadId,
+        messageId,
+        reactionId
+      );
+      logger.info("Reaction removed", {
+        messageId,
+        threadId,
+        householdId,
+        reactionId,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: threadKeys.messages.reactions(
+          householdId,
+          threadId,
+          messageId
+        ),
+      });
+      queryClient.invalidateQueries({
+        queryKey: threadKeys.messages.detail(householdId, threadId, messageId),
+      });
+    },
+  });
+
+  const addMention = useMutation({
+    mutationFn: async (data: CreateMentionDTO) => {
+      const result = await threadApi.messages.mentions.createMention(
+        householdId,
+        threadId,
+        messageId,
+        data
+      );
+      logger.info("Mention added", {
+        messageId,
+        threadId,
+        householdId,
+        userId: data.userId,
+      });
+      return result.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: threadKeys.messages.mentions(
+          householdId,
+          threadId,
+          messageId
+        ),
+      });
+      queryClient.invalidateQueries({
+        queryKey: threadKeys.messages.detail(householdId, threadId, messageId),
+      });
+    },
+  });
+
+  const removeMention = useMutation({
+    mutationFn: async (mentionId: string) => {
+      await threadApi.messages.mentions.removeMention(
+        householdId,
+        threadId,
+        messageId,
+        mentionId
+      );
+      logger.info("Mention removed", {
+        messageId,
+        threadId,
+        householdId,
+        mentionId,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: threadKeys.messages.mentions(
+          householdId,
+          threadId,
+          messageId
+        ),
+      });
+      queryClient.invalidateQueries({
+        queryKey: threadKeys.messages.detail(householdId, threadId, messageId),
+      });
+    },
+  });
 
   return {
-    ...state,
-    toggleReaction,
-    addMention,
-    markAsRead,
     updateMessage,
     deleteMessage,
-    hasReacted,
-    isRead,
-    getReactionCount,
-    optimisticToggleReaction,
+    markAsRead,
+    addReaction,
+    removeReaction,
+    addMention,
+    removeMention,
   };
-}
+};
+
+// Utility functions
+export const messageUtils = {
+  isRead: (
+    readStatus: MessageReadStatus | undefined,
+    userId: string
+  ): boolean => {
+    if (!readStatus) return false;
+    return readStatus.readBy.some((r) => r.userId === userId);
+  },
+
+  getReadCount: (readStatus: MessageReadStatus | undefined): number => {
+    if (!readStatus) return 0;
+    return readStatus.readBy.length;
+  },
+
+  getLastReadAt: (
+    readStatus: MessageReadStatus | undefined,
+    userId: string
+  ): Date | undefined => {
+    if (!readStatus) return undefined;
+    const userRead = readStatus.readBy.find((r) => r.userId === userId);
+    return userRead ? new Date(userRead.readAt) : undefined;
+  },
+
+  hasReaction: (
+    reactions: ReactionWithUser[] | undefined,
+    userId: string,
+    type: ReactionType
+  ): boolean => {
+    if (!reactions) return false;
+    return reactions.some((r) => r.user.id === userId && r.type === type);
+  },
+
+  getReactionCount: (
+    reactions: ReactionWithUser[] | undefined,
+    type: ReactionType
+  ): number => {
+    if (!reactions) return 0;
+    return reactions.filter((r) => r.type === type).length;
+  },
+
+  getUserReaction: (
+    reactions: ReactionWithUser[] | undefined,
+    userId: string,
+    type: ReactionType
+  ): ReactionWithUser | undefined => {
+    if (!reactions) return undefined;
+    return reactions.find((r) => r.user.id === userId && r.type === type);
+  },
+
+  isMentioned: (
+    mentions: MentionWithUser[] | undefined,
+    userId: string
+  ): boolean => {
+    if (!mentions) return false;
+    return mentions.some((m) => m.user.id === userId);
+  },
+
+  getMention: (
+    mentions: MentionWithUser[] | undefined,
+    userId: string
+  ): MentionWithUser | undefined => {
+    if (!mentions) return undefined;
+    return mentions.find((m) => m.user.id === userId);
+  },
+};

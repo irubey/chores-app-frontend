@@ -2,7 +2,7 @@
 import React from "react";
 import Link from "next/link";
 import { User } from "@shared/types";
-import { useAuth } from "../../hooks/useAuth";
+import { useAuth, useAuthActions } from "@/contexts/UserContext";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useNotifications } from "../../hooks/useNotifications";
 import { useRouter } from "next/navigation";
@@ -23,7 +23,7 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ user }) => {
   const router = useRouter();
-  const { logout } = useAuth();
+  const { logout } = useAuthActions();
   const { notifications } = useNotifications();
   const { theme, toggleTheme } = useTheme();
 

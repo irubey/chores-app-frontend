@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useMemo, useCallback } from "react";
+import React, { useEffect, useRef, useMemo } from "react";
 import { ThemeProvider } from "../contexts/ThemeContext";
 import { SocketProvider } from "../contexts/SocketContext";
 import Header from "../components/layout/Header";
@@ -10,15 +10,33 @@ import { useRouter, usePathname } from "next/navigation";
 import "../styles/globals.css";
 import { User, HouseholdWithMembers } from "@shared/types";
 import { logger } from "@/lib/api/logger";
-import { ApiError } from "@/lib/api/errors";
-import { UserProvider } from "@/contexts/UserContext";
-import { useAuth, UseAuthReturn } from "../hooks/useAuth";
-import { useHousehold } from "@/hooks/useHousehold";
-import { HouseholdsProvider } from "@/contexts/HouseholdsContext";
+import {
+  AuthProvider,
+  useAuth,
+  useAuthUser,
+  useAuthStatus,
+  useAuthActions,
+} from "@/contexts/UserContext";
 import { Provider } from "react-redux";
 import store from "../store/store";
 import { ErrorBoundary } from "../components/ErrorBoundary";
-import { requestManager } from "@/lib/api/requestManager";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "@/lib/react-query/queryClient";
+
+type AuthStatus =
+  | "idle"
+  | "loading"
+  | "authenticated"
+  | "unauthenticated"
+  | "error";
+
+const isLoadingStatus = (status: AuthStatus): boolean =>
+  status === "loading" || status === "idle";
+
+const isStableStatus = (status: AuthStatus): boolean =>
+  status === "authenticated" ||
+  status === "unauthenticated" ||
+  status === "error";
 
 // Define public routes as a const to prevent recreation
 const PUBLIC_ROUTES = [
@@ -42,21 +60,15 @@ interface WithUserProp {
   selectedHouseholds?: HouseholdWithMembers[];
 }
 
-// Use the imported type
-type AuthStatus = UseAuthReturn["status"];
-
 function AppContent({ children }: AppContentProps) {
-  const {
-    isAuthenticated,
-    isLoading: authLoading,
-    status: authStatus,
-    user,
-    error: authError,
-    initAuth,
-  } = useAuth();
+  const { isAuthenticated } = useAuth();
+  const user = useAuthUser();
+  const { status: authStatus, error } = useAuthStatus();
+  const { refreshAuthState } = useAuthActions();
 
   const router = useRouter();
   const pathname = usePathname();
+  const initialLoadRef = useRef(true);
 
   // Memoize isPublicRoute check
   const isPublicRoute = useMemo(
@@ -64,141 +76,85 @@ function AppContent({ children }: AppContentProps) {
     [pathname]
   );
 
-  const initialLoadRef = useRef(true);
-
   // Memoize auth state to prevent unnecessary re-renders
   const authState = useMemo(
     () => ({
-      isInitializing: authStatus === "loading",
+      isInitializing: isLoadingStatus(authStatus),
       isInitialized:
         authStatus === "authenticated" || (!isAuthenticated && isPublicRoute),
     }),
     [authStatus, isAuthenticated, isPublicRoute]
   );
 
-  // Memoize child props
-  const childProps = useMemo(
-    () => ({
-      user,
-    }),
-    [user]
-  );
-
-  // Handle cleanup on route changes
+  // Log auth state changes
   useEffect(() => {
-    logger.debug("Route changed", {
+    logger.debug("Auth state changed", {
+      status: authStatus,
+      isAuthenticated,
+      isPublicRoute,
+      pathname,
+      isInitializing: authState.isInitializing,
+      isInitialized: authState.isInitialized,
+    });
+  }, [authStatus, isAuthenticated, isPublicRoute, pathname, authState]);
+
+  // Log component mount/unmount
+  useEffect(() => {
+    logger.debug("AppContent mounted", {
       pathname,
       isPublicRoute,
-      authStatus,
-      isAuthenticated,
     });
 
-    // Cleanup pending requests on route change
     return () => {
-      requestManager.abortAll();
+      logger.debug("AppContent unmounting", {
+        pathname,
+        isPublicRoute,
+      });
     };
-  }, [pathname]);
+  }, [pathname, isPublicRoute]);
 
   // Handle routing effects
   useEffect(() => {
     // Skip effect during initial load of protected routes
     if (initialLoadRef.current && !isPublicRoute) {
-      logger.debug("Initial load of protected route", {
-        pathname,
-        isPublicRoute,
-        authStatus,
-        isAuthenticated,
-        isInitializing: authState.isInitializing,
-        isInitialized: authState.isInitialized,
-      });
       return;
     }
 
-    // Skip redirect if still loading
-    if (authLoading) {
-      logger.debug("Skipping redirect - waiting for auth", {
-        authStatus,
-        isAuthenticated,
-        pathname,
-      });
+    // Skip redirect if still loading or idle
+    if (isLoadingStatus(authStatus)) {
       return;
     }
 
     // Update initial load ref after initialization completes
     if (initialLoadRef.current && authState.isInitialized) {
-      logger.debug("Initialization completed", {
-        pathname,
-        authStatus,
-        isAuthenticated,
-      });
       initialLoadRef.current = false;
     }
 
     // Only redirect if:
     // 1. Unauthenticated and trying to access protected route
     // 2. Authenticated and trying to access root
-    // 3. Not in loading state
+    // 3. In a stable state (not loading/idle)
     const shouldRedirect =
       (!isAuthenticated && !isPublicRoute) ||
       (isAuthenticated && pathname === "/");
 
-    if (shouldRedirect && !authLoading) {
+    if (shouldRedirect && isStableStatus(authStatus)) {
       const redirectPath = !isAuthenticated
         ? "/login?from=redirect"
         : "/dashboard?from=redirect";
 
-      logger.info("Route redirect", {
+      logger.info("Navigation redirect", {
         from: pathname,
         to: redirectPath,
-        isAuthenticated,
-        isPublicRoute,
-        authStatus,
+        reason: !isAuthenticated ? "unauthenticated" : "authenticated",
       });
 
-      // Abort any pending requests before redirect
-      requestManager.abortAll();
       router.replace(redirectPath);
     }
   }, [isAuthenticated, pathname, isPublicRoute, router, authStatus, authState]);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      logger.debug("AppContent unmounting", {
-        pathname,
-        authStatus,
-        isAuthenticated,
-      });
-      requestManager.abortAll();
-    };
-  }, []);
-
-  // Memoize the wrapped children to prevent unnecessary provider mounts
-  const wrappedChildren = useMemo(() => {
-    return <HouseholdsProvider>{children}</HouseholdsProvider>;
-  }, [children]);
-
-  // Memoize the enhanced children separately
-  const enhancedChildren = useMemo(() => {
-    return React.Children.map(wrappedChildren, (child) =>
-      React.isValidElement(child)
-        ? React.cloneElement(
-            child as React.ReactElement<WithUserProp>,
-            childProps
-          )
-        : child
-    );
-  }, [wrappedChildren, childProps]);
-
   // Show loading state while initializing
   if (authState.isInitializing || !authState.isInitialized) {
-    logger.debug("Showing loading state", {
-      initialLoad: initialLoadRef.current,
-      authStatus,
-      isAuthenticated,
-      isPublicRoute,
-      pathname,
-    });
     return (
       <div className="min-h-screen flex items-center justify-center bg-background-light dark:bg-background-dark">
         <Spinner className="h-8 w-8" />
@@ -207,13 +163,16 @@ function AppContent({ children }: AppContentProps) {
   }
 
   // Render error state if there's an error and we're not redirecting
-  if (authError && isPublicRoute) {
+  if (error && isPublicRoute) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background-light dark:bg-background-dark">
         <div className="text-center">
           <h2 className="text-xl font-semibold mb-2">Something went wrong</h2>
-          <p className="text-text-secondary">{authError}</p>
-          <button onClick={() => initAuth()} className="mt-4 btn-primary">
+          <p className="text-text-secondary">{error.message}</p>
+          <button
+            onClick={() => refreshAuthState()}
+            className="mt-4 btn-primary"
+          >
             Try Again
           </button>
         </div>
@@ -226,7 +185,7 @@ function AppContent({ children }: AppContentProps) {
     <div className="min-h-screen flex flex-col bg-background-light dark:bg-background-dark">
       {(isPublicRoute || isAuthenticated) && <Header user={user} />}
       <main className="flex-grow container-custom py-8 space-y-6">
-        {!isPublicRoute && !isAuthenticated ? null : enhancedChildren}
+        {!isPublicRoute && !isAuthenticated ? null : children}
       </main>
       {isAuthenticated && <Footer />}
     </div>
@@ -264,11 +223,13 @@ export default function RootLayout({
       <body className="h-full antialiased font-sans">
         <ErrorBoundary>
           <Provider store={store}>
-            <UserProvider>
-              <ThemeProvider>
-                <AppContent>{children}</AppContent>
-              </ThemeProvider>
-            </UserProvider>
+            <QueryClientProvider client={queryClient}>
+              <AuthProvider>
+                <ThemeProvider>
+                  <AppContent>{children}</AppContent>
+                </ThemeProvider>
+              </AuthProvider>
+            </QueryClientProvider>
           </Provider>
         </ErrorBoundary>
       </body>

@@ -1,3 +1,4 @@
+import { ApiError } from "./errors";
 import { logger } from "./logger";
 
 interface RequestOptions {
@@ -8,13 +9,15 @@ interface RequestOptions {
     retries: number;
     backoff?: boolean;
   };
+  batchId?: number; // For tracking request batches
 }
 
 export class RequestManager {
   private static instance: RequestManager;
   private requestsInProgress: Map<string, Promise<any>> = new Map();
-  private abortController: AbortController | null = null;
+  private abortControllers: Map<string, AbortController> = new Map();
   private cleanupTimeouts: Map<string, NodeJS.Timeout> = new Map();
+  private activeBatches: Set<number> = new Set();
 
   private constructor() {
     // Private constructor to enforce singleton
@@ -49,12 +52,17 @@ export class RequestManager {
     request: () => Promise<T>,
     options: RequestOptions
   ): Promise<T> {
-    const { retry, timeout, signal } = options;
+    const { retry, timeout, signal, batchId } = options;
     const maxRetries = retry?.retries ?? 0;
     let attempt = 0;
 
     while (attempt <= maxRetries) {
       try {
+        // Check if batch is still active before making request
+        if (batchId && !this.activeBatches.has(batchId)) {
+          throw new Error("Request batch cancelled");
+        }
+
         const promise = request();
         return timeout
           ? await this.executeWithTimeout(promise, timeout, signal)
@@ -62,12 +70,14 @@ export class RequestManager {
       } catch (error) {
         attempt++;
 
-        // Don't retry if request was aborted or we're out of retries
+        // Don't retry if request was aborted, batch cancelled, or we're out of retries
         if (
-          error.name === "AbortError" ||
+          (error instanceof Error && error.name === "AbortError") ||
+          (error instanceof Error &&
+            error.message === "Request batch cancelled") ||
           attempt > maxRetries ||
-          error.response?.status === 401 || // Don't retry auth errors
-          error.response?.status === 403
+          (error instanceof ApiError && error.status === 401) || // Don't retry auth errors
+          (error instanceof ApiError && error.status === 403)
         ) {
           throw error;
         }
@@ -96,14 +106,25 @@ export class RequestManager {
     request: () => Promise<T>,
     options: RequestOptions = {}
   ): Promise<T> {
-    const { signal, requiresAuth, timeout = 10000 } = options;
+    const { signal, requiresAuth, timeout = 10000, batchId } = options;
 
-    // Use provided signal or create new one
-    if (!this.abortController || this.abortController.signal.aborted) {
-      this.abortController = new AbortController();
+    // Register batch if provided
+    if (batchId) {
+      this.activeBatches.add(batchId);
     }
 
-    const finalSignal = signal || this.abortController.signal;
+    // Create new abort controller for this request
+    const controller = new AbortController();
+    this.abortControllers.set(key, controller);
+
+    // Combine signals if both exist
+    const finalSignal = signal
+      ? new AbortController().signal
+      : controller.signal;
+
+    if (signal) {
+      signal.addEventListener("abort", () => controller.abort());
+    }
 
     // Clear any existing cleanup timeout for this key
     if (this.cleanupTimeouts.has(key)) {
@@ -124,13 +145,22 @@ export class RequestManager {
     logger.debug("Starting new request", {
       key,
       requiresAuth,
+      batchId,
       activeRequests: this.getActiveRequests(),
     });
 
-    const promise = this.executeWithRetry(() => request(), options)
+    const promise = this.executeWithRetry(() => request(), {
+      ...options,
+      signal: finalSignal,
+    })
       .catch((error) => {
-        if (error.name === "AbortError") {
+        if (error instanceof Error && error.name === "AbortError") {
           logger.debug("Request aborted", { key });
+        } else if (
+          error instanceof Error &&
+          error.message === "Request batch cancelled"
+        ) {
+          logger.debug("Request batch cancelled", { key, batchId });
         } else {
           logger.error("Request failed", { key, error });
         }
@@ -139,12 +169,19 @@ export class RequestManager {
       .finally(() => {
         // Only cleanup if this is still the active promise for this key
         if (this.requestsInProgress.get(key) === promise) {
-          // Set a cleanup timeout
+          // Set a cleanup timeout with longer duration for Strict Mode
           const cleanupTimeout = setTimeout(() => {
-            logger.debug("Cleaning up completed request", { key });
-            this.requestsInProgress.delete(key);
-            this.cleanupTimeouts.delete(key);
-          }, 1000); // 1 second cleanup delay
+            // Check if the request is still the active one before cleaning up
+            if (this.requestsInProgress.get(key) === promise) {
+              logger.debug("Cleaning up completed request", { key });
+              this.requestsInProgress.delete(key);
+              this.cleanupTimeouts.delete(key);
+              this.abortControllers.delete(key);
+            }
+            if (batchId) {
+              this.activeBatches.delete(batchId);
+            }
+          }, 10000); // Increased to 10 seconds for Strict Mode
 
           this.cleanupTimeouts.set(key, cleanupTimeout);
         }
@@ -156,6 +193,29 @@ export class RequestManager {
     return promise;
   }
 
+  abortRequest(key: string): void {
+    const controller = this.abortControllers.get(key);
+    if (controller) {
+      controller.abort();
+      this.abortControllers.delete(key);
+    }
+  }
+
+  abortBatch(batchId: number): void {
+    if (this.activeBatches.has(batchId)) {
+      // Actively abort requests associated with the batch
+      this.abortControllers.forEach((controller, key) => {
+        if (key.startsWith(`batch-${batchId}-`)) {
+          controller.abort();
+          this.abortControllers.delete(key);
+        }
+      });
+
+      this.activeBatches.delete(batchId);
+      logger.debug("Batch aborted", { batchId });
+    }
+  }
+
   abortAll(): void {
     logger.debug("Aborting all requests", {
       activeRequests: Array.from(this.requestsInProgress.keys()),
@@ -165,15 +225,22 @@ export class RequestManager {
     this.cleanupTimeouts.forEach((timeout) => clearTimeout(timeout));
     this.cleanupTimeouts.clear();
 
-    if (this.abortController) {
-      this.abortController.abort();
-      this.abortController = new AbortController();
-    }
+    // Abort all controllers
+    this.abortControllers.forEach((controller) => controller.abort());
+    this.abortControllers.clear();
+
+    // Clear all batches
+    this.activeBatches.clear();
+
     this.requestsInProgress.clear();
   }
 
   getActiveRequests(): string[] {
     return Array.from(this.requestsInProgress.keys());
+  }
+
+  getActiveBatches(): number[] {
+    return Array.from(this.activeBatches);
   }
 }
 

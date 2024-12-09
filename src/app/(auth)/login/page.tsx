@@ -1,7 +1,11 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useAuth } from "@/hooks/useAuth";
+import {
+  useAuthUser,
+  useAuthActions,
+  useAuthStatus,
+} from "@/contexts/UserContext";
 import Input from "@/components/common/Input";
 import Button from "@/components/common/Button";
 import Card from "@/components/common/Card";
@@ -12,21 +16,24 @@ import { ApiError, ApiErrorType } from "@/lib/api/errors/apiErrors";
 import { FaEnvelope, FaLock } from "react-icons/fa";
 
 const LoginPage: React.FC = () => {
-  const { login, isLoading, error, isAuthenticated } = useAuth();
+  const user = useAuthUser();
+  const { login } = useAuthActions();
+  const { status, error: authError } = useAuthStatus();
+  const isLoading = status === "loading";
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [formErrors, setFormErrors] = useState({ email: "", password: "" });
   const [formError, setFormError] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (user) {
       const redirectPath =
         sessionStorage.getItem("redirectAfterLogin") || "/dashboard";
       sessionStorage.removeItem("redirectAfterLogin");
       logger.info("Redirecting authenticated user", { redirectPath });
       router.push(redirectPath);
     }
-  }, [isAuthenticated, router]);
+  }, [user, router]);
 
   const validateForm = () => {
     const errors = { email: "", password: "" };
@@ -110,9 +117,9 @@ const LoginPage: React.FC = () => {
             </p>
           </div>
 
-          {error && (
+          {authError && (
             <div className="p-4 bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-800 text-red-700 dark:text-red-400 rounded-md text-sm animate-fade-in">
-              {error}
+              {authError.message}
             </div>
           )}
 

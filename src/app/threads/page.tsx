@@ -1,18 +1,18 @@
 "use client";
 
-import { useCallback, useRef, useState, useEffect } from "react";
+import React, { useState, useMemo, useCallback } from "react";
+import { useAuthUser, useAuthStatus } from "@/contexts/UserContext";
+import { useHouseholds } from "@/hooks/useHouseholds";
 import { useThreads } from "@/hooks/threads/useThreads";
-import { ThreadList } from "@/components/threads/ThreadList";
-import { ThreadListSkeleton } from "@/components/threads/skeletons/ThreadCardSkeleton";
-import { useHouseholds } from "@/contexts/HouseholdsContext";
-import { ChatBubbleLeftRightIcon, PlusIcon } from "@heroicons/react/24/outline";
 import { logger } from "@/lib/api/logger";
-import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { ThreadList } from "@/components/threads/ThreadList";
+import { ThreadCreator } from "@/components/threads/ThreadCreator";
+import { ThreadListSkeleton } from "@/components/threads/skeletons/ThreadCardSkeleton";
 import Card from "@/components/common/Card";
 import Button from "@/components/common/Button";
-import { ThreadCreator } from "@/components/threads/ThreadCreator";
-import { useMemo } from "react";
-import { useAuth } from "@/hooks/useAuth";
+import { ChatBubbleLeftRightIcon, PlusIcon } from "@heroicons/react/24/outline";
+
+const THREADS_PER_PAGE = 20;
 
 interface EmptyStateProps {
   icon: React.ReactNode;
@@ -23,11 +23,13 @@ interface EmptyStateProps {
 
 function EmptyState({ icon, title, description, action }: EmptyStateProps) {
   return (
-    <Card className="p-8 text-center">
+    <Card className="p-8 text-center animate-fade-in">
       <div className="flex flex-col items-center space-y-4">
-        <div className="text-text-secondary">{icon}</div>
-        <h2 className="text-h4">{title}</h2>
-        <p className="text-text-secondary">{description}</p>
+        <div className="text-primary dark:text-primary-light">{icon}</div>
+        <h2 className="text-h3 mb-2">{title}</h2>
+        <p className="text-text-secondary dark:text-text-secondary mb-0">
+          {description}
+        </p>
         {action && <div className="mt-6">{action}</div>}
       </div>
     </Card>
@@ -35,38 +37,23 @@ function EmptyState({ icon, title, description, action }: EmptyStateProps) {
 }
 
 export default function ThreadsPage() {
-  const { user, status: authStatus, isAuthenticated } = useAuth();
-  const { selectedHouseholds, isLoading: isLoadingHouseholds } =
+  const user = useAuthUser();
+  const { status } = useAuthStatus();
+  const { data: householdsData, isLoading: isLoadingHouseholds } =
     useHouseholds();
   const [isCreatorOpen, setIsCreatorOpen] = useState(false);
 
-  logger.debug("User and household data", {
-    user: {
-      id: user?.id,
-      email: user?.email,
-    },
-    selectedHouseholds: selectedHouseholds?.map((h) => ({
-      id: h.id,
-      name: h.name,
-      members: h.members?.map((m) => ({
-        userId: m.userId,
-        role: m.role,
-        isAccepted: m.isAccepted,
-        isSelected: m.isSelected,
-      })),
-    })),
-  });
-
+  // Filter accessible households
   const accessibleHouseholds = useMemo(() => {
-    if (!selectedHouseholds?.length || !user?.id) {
+    if (!householdsData?.data?.length || !user?.id) {
       logger.debug("No households to check or no user", {
-        hasHouseholds: !!selectedHouseholds?.length,
+        hasHouseholds: !!householdsData?.data?.length,
         userId: user?.id,
       });
       return [];
     }
 
-    return selectedHouseholds.filter((h) => {
+    return householdsData.data.filter((h) => {
       // If no members array, household is not properly loaded
       if (!h.members?.length) {
         logger.debug("Household missing members data", {
@@ -96,60 +83,53 @@ export default function ThreadsPage() {
 
       return isMember;
     });
-  }, [selectedHouseholds, user?.id]);
+  }, [householdsData?.data, user?.id]);
 
-  const filters = useMemo(
-    () => ({
-      householdIds: accessibleHouseholds.map((h) => h.id),
-    }),
-    [accessibleHouseholds]
-  );
-
+  // Query threads from accessible households
   const {
-    threads,
+    data: threadsData,
     isLoading: isLoadingThreads,
     error,
   } = useThreads({
-    initialPageSize: 20,
-    autoRefreshInterval: 30000,
-    filters,
-    enabled: isAuthenticated && !!user && accessibleHouseholds.length > 0,
+    householdIds: accessibleHouseholds.map((h) => h.id),
+    limit: THREADS_PER_PAGE,
+    enabled: !!user && accessibleHouseholds.length > 0,
   });
 
+  const threads = threadsData?.data || [];
+  const isLoading = status === "loading" || isLoadingHouseholds;
+
   const handleThreadCreated = useCallback(() => {
-    // Thread list will auto-refresh due to polling
-    logger.debug("Thread created, waiting for refresh");
+    setIsCreatorOpen(false);
+    logger.debug("Thread created, closing creator");
   }, []);
 
   logger.debug("Rendering threads page", {
     threadsCount: threads?.length,
     selectedHouseholds: {
-      total: selectedHouseholds?.length,
+      total: householdsData?.data?.length,
       accessible: accessibleHouseholds.length,
-      ids: selectedHouseholds?.map((h) => h.id),
-      accessibleIds: filters.householdIds,
+      ids: householdsData?.data?.map((h) => h.id),
+      accessibleIds: accessibleHouseholds.map((h) => h.id),
     },
     isLoadingThreads,
     isLoadingHouseholds,
-    authStatus,
-    isAuthenticated,
+    authStatus: status,
+    isAuthenticated: !!user,
     hasUser: !!user,
   });
 
-  const isLoading =
-    isLoadingHouseholds || isLoadingThreads || authStatus === "loading";
-
-  if (authStatus === "loading") {
+  if (isLoading) {
     return (
-      <div className="container-custom py-md">
+      <div className="container-custom py-md animate-fade-in">
         <ThreadListSkeleton />
       </div>
     );
   }
 
-  if (!isAuthenticated || !user) {
+  if (!user) {
     return (
-      <div className="container-custom py-md">
+      <div className="container-custom py-md animate-fade-in">
         <EmptyState
           icon={<ChatBubbleLeftRightIcon className="h-12 w-12" />}
           title="Please sign in"
@@ -159,97 +139,73 @@ export default function ThreadsPage() {
     );
   }
 
-  if (!selectedHouseholds?.length) {
-    return (
-      <div className="container-custom py-md">
-        <EmptyState
-          icon={<ChatBubbleLeftRightIcon className="h-12 w-12" />}
-          title="No households selected"
-          description="Select one or more households to view threads"
-        />
-      </div>
-    );
-  }
-
-  if (!accessibleHouseholds.length) {
-    return (
-      <div className="container-custom py-md">
-        <EmptyState
-          icon={<ChatBubbleLeftRightIcon className="h-12 w-12" />}
-          title="No access"
-          description="You don't have access to any of the selected households"
-        />
-      </div>
-    );
-  }
-
   if (error) {
     return (
-      <div className="container-custom py-md">
-        <Card className="p-6 text-center">
-          <h2 className="text-h4 text-red-500 mb-2">Failed to load threads</h2>
-          <p className="text-text-secondary mb-4">{error.message}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="btn-primary"
-          >
-            Try Again
-          </button>
-        </Card>
+      <div className="container-custom py-md animate-fade-in">
+        <EmptyState
+          icon={<ChatBubbleLeftRightIcon className="h-12 w-12" />}
+          title="Error loading threads"
+          description={error.message}
+          action={
+            <Button variant="primary" onClick={() => window.location.reload()}>
+              Retry
+            </Button>
+          }
+        />
       </div>
     );
   }
 
   return (
-    <ErrorBoundary>
-      <main className="container-custom py-md">
-        <div className="flex flex-col space-y-md">
-          <header className="flex justify-between items-center">
-            <div>
-              <h1>Threads</h1>
-              <p className="text-text-secondary">
-                View and manage threads across your households
-              </p>
-            </div>
-            {accessibleHouseholds.length > 0 && (
+    <main className="container-custom py-md animate-fade-in">
+      <div className="flex flex-col space-y-md">
+        <header className="flex justify-between items-center border-b border-neutral-200 dark:border-neutral-700 pb-md">
+          <div>
+            <h1 className="mb-2">Threads</h1>
+            <p className="text-text-secondary dark:text-text-secondary mb-0">
+              View and manage threads across your households
+            </p>
+          </div>
+          {accessibleHouseholds.length > 0 && (
+            <Button
+              variant="primary"
+              onClick={() => setIsCreatorOpen(true)}
+              icon={<PlusIcon className="h-5 w-5" />}
+            >
+              New Thread
+            </Button>
+          )}
+        </header>
+
+        {isLoadingThreads ? (
+          <ThreadListSkeleton />
+        ) : !threads?.length ? (
+          <EmptyState
+            icon={<ChatBubbleLeftRightIcon className="h-12 w-12" />}
+            title="No threads yet"
+            description="Start a conversation in one of your households"
+            action={
               <Button
                 variant="primary"
                 onClick={() => setIsCreatorOpen(true)}
-                icon={<PlusIcon className="h-5 w-5" />}
+                disabled={accessibleHouseholds.length === 0}
               >
-                New Thread
+                Create Thread
               </Button>
-            )}
-          </header>
-
-          {isLoadingThreads ? (
-            <ThreadListSkeleton />
-          ) : !threads?.length ? (
-            <EmptyState
-              icon={<ChatBubbleLeftRightIcon className="h-12 w-12" />}
-              title="No threads yet"
-              description="Start a conversation in one of your households"
-              action={
-                <Button
-                  variant="primary"
-                  onClick={() => setIsCreatorOpen(true)}
-                  disabled={accessibleHouseholds.length === 0}
-                >
-                  Create Thread
-                </Button>
-              }
-            />
-          ) : (
+            }
+          />
+        ) : (
+          <div className="animate-slide-up">
             <ThreadList threads={threads} />
-          )}
-        </div>
+          </div>
+        )}
+      </div>
 
-        <ThreadCreator
-          isOpen={isCreatorOpen}
-          onClose={() => setIsCreatorOpen(false)}
-          onSuccess={handleThreadCreated}
-        />
-      </main>
-    </ErrorBoundary>
+      <ThreadCreator
+        isOpen={isCreatorOpen}
+        onClose={() => setIsCreatorOpen(false)}
+        onSuccess={handleThreadCreated}
+      />
+    </main>
   );
 }

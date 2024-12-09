@@ -3,9 +3,73 @@ import {
   AxiosResponse,
   AxiosRequestConfig,
   AxiosInstance,
+  InternalAxiosRequestConfig,
 } from "axios";
-import { ApiError, NetworkError } from "./errors";
-import { logger } from "./logger";
+import { ApiError, ApiErrorType, NetworkError } from "./errors/apiErrors";
+
+// Track if we're currently refreshing to prevent multiple refresh attempts
+let isRefreshing = false;
+let refreshSubscribers: (() => void)[] = [];
+
+// Subscribe failed requests to be retried after token refresh
+function subscribeTokenRefresh(cb: () => void) {
+  refreshSubscribers.push(cb);
+}
+
+// Retry failed requests
+function onTokenRefreshed() {
+  refreshSubscribers.forEach((cb) => cb());
+  refreshSubscribers = [];
+}
+
+// Reject all requests if refresh fails
+function onRefreshError() {
+  refreshSubscribers = [];
+}
+
+/**
+ * Handles token refresh for 401 responses
+ * Returns a promise that resolves with the original request config for retry
+ */
+async function handleTokenRefresh(
+  axiosInstance: AxiosInstance,
+  originalRequest: InternalAxiosRequestConfig
+): Promise<AxiosRequestConfig> {
+  // Prevent infinite refresh loops
+  if (originalRequest?.url?.includes("/auth/refresh")) {
+    throw new ApiError(
+      "Authentication refresh failed",
+      ApiErrorType.UNAUTHORIZED,
+      401,
+      { code: "AUTH_REFRESH_FAILED" }
+    );
+  }
+
+  try {
+    if (!isRefreshing) {
+      isRefreshing = true;
+
+      await axiosInstance.post("/auth/refresh", null, {
+        withCredentials: true,
+      });
+
+      isRefreshing = false;
+      onTokenRefreshed();
+    }
+
+    // Return the original request config for retry
+    return originalRequest;
+  } catch (refreshError) {
+    isRefreshing = false;
+    onRefreshError();
+    throw new ApiError(
+      "Authentication refresh failed",
+      ApiErrorType.UNAUTHORIZED,
+      401,
+      { code: "AUTH_REFRESH_FAILED" }
+    );
+  }
+}
 
 /**
  * Handles network errors.
@@ -14,7 +78,6 @@ function handleNetworkError(
   error: AxiosError,
   originalRequest: AxiosRequestConfig
 ): Promise<never> {
-  logger.error(`Network Error: ${error.message}`);
   return Promise.reject(new NetworkError("Network error. Please try again."));
 }
 
@@ -25,31 +88,18 @@ function handleApiError(
   error: AxiosError,
   originalRequest: AxiosRequestConfig
 ): Promise<never> {
-  logger.debug("Interceptor handling API error", {
-    originalStatus: error.response?.status,
-    originalUrl: originalRequest.url,
-    originalMethod: originalRequest.method,
-  });
-
   const apiError = ApiError.fromHttpError(
     error.response?.status || 500,
     (error.response?.data as { message?: string })?.message,
     error.response?.data
   );
 
-  logger.debug("Interceptor created ApiError", {
-    transformedError: {
-      type: apiError.type,
-      status: apiError.status,
-      message: apiError.message,
-    },
-  });
-
   return Promise.reject(apiError);
 }
 
 /**
  * Sets up Axios response interceptors.
+ * Handles token refresh before apiUtils handles the final response/error.
  */
 export function setupInterceptors(axiosInstance: AxiosInstance) {
   // Add request interceptor to ensure credentials are sent
@@ -58,21 +108,41 @@ export function setupInterceptors(axiosInstance: AxiosInstance) {
       config.withCredentials = true;
       return config;
     },
-    (error) => {
-      return Promise.reject(error);
-    }
+    (error) => Promise.reject(error)
   );
 
+  // Add response interceptor for token refresh
   axiosInstance.interceptors.response.use(
     (response: AxiosResponse) => response,
     async (error: AxiosError) => {
-      const originalRequest = error.config as AxiosRequestConfig;
+      const originalRequest = error.config as InternalAxiosRequestConfig;
 
-      if (!error.response) {
-        return handleNetworkError(error, originalRequest);
+      // Only handle 401s for token refresh, let apiUtils handle other errors
+      if (error.response?.status === 401 && originalRequest) {
+        try {
+          // If we're already refreshing, queue this request
+          if (isRefreshing) {
+            return new Promise((resolve) => {
+              subscribeTokenRefresh(() => {
+                resolve(axiosInstance(originalRequest));
+              });
+            });
+          }
+
+          // Attempt token refresh and retry original request
+          const retryConfig = await handleTokenRefresh(
+            axiosInstance,
+            originalRequest
+          );
+          return axiosInstance(retryConfig);
+        } catch (refreshError) {
+          // Let apiUtils handle the error transformation and logging
+          throw refreshError;
+        }
       }
 
-      return handleApiError(error, originalRequest);
+      // Let apiUtils handle all other errors
+      throw error;
     }
   );
 }

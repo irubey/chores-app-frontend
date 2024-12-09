@@ -1,96 +1,144 @@
 // frontend/src/hooks/threads/useThread.ts
-import { useCallback, useEffect, useState } from "react";
-import { useAuth } from "../useAuth";
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  type UseQueryOptions,
+  type UseMutationOptions,
+  type UseMutationResult,
+} from "@tanstack/react-query";
+import { threadApi, threadKeys } from "@/lib/api/services/threadService";
 import { logger } from "@/lib/api/logger";
-import { ThreadService } from "@/lib/api/services/threadService";
-import { ThreadWithDetails, CreateThreadDTO } from "@shared/types";
-import { requestManager } from "@/lib/api/requestManager";
-import { ApiResponse } from "@shared/interfaces";
+import type {
+  ThreadWithDetails,
+  CreateThreadDTO,
+  UpdateThreadDTO,
+} from "@shared/types";
+import { CACHE_TIMES, STALE_TIMES } from "@/lib/api/utils/apiUtils";
 
+// Types
 interface UseThreadOptions {
-  householdId?: string;
-  threadId?: string;
-  onThreadCreated?: () => void;
-  onError?: (error: Error) => void;
+  householdId: string;
+  threadId: string;
+  enabled?: boolean;
 }
 
-interface OperationState {
-  isCreating: boolean;
-  isLoading: boolean;
-  error: Error | null;
-}
-
-export function useThread({
-  householdId,
-  threadId,
-  onThreadCreated,
-  onError,
-}: UseThreadOptions) {
-  const { user } = useAuth();
-  const [operationState, setOperationState] = useState<OperationState>({
-    isCreating: false,
-    isLoading: false,
-    error: null,
-  });
-
-  const createThread = useCallback(
-    async (threadData: Omit<CreateThreadDTO, "householdId">) => {
-      if (!user || !householdId?.trim()) {
-        logger.error("Cannot create thread - missing required data", {
-          hasUser: !!user,
-          householdId,
-        });
-        throw new Error("Missing required data to create thread");
-      }
-
-      // Create a unique request key that includes the data to deduplicate identical requests
-      const requestKey = `create-thread-${householdId}-${JSON.stringify(
-        threadData
-      )}`;
-
-      try {
-        setOperationState((prev) => ({ ...prev, isCreating: true }));
-        logger.debug("Creating thread", {
-          householdId,
-          title: threadData.title,
-          participantsCount: threadData.participants?.length || 0,
-        });
-
-        // Use dedupRequest to prevent duplicate API calls
-        const response = await requestManager.dedupRequest<
-          ApiResponse<ThreadWithDetails>
-        >(
-          requestKey,
-          () =>
-            ThreadService.prototype.threads.createThread(
-              householdId,
-              threadData
-            ),
-          { timeout: 10000 }
-        );
-
-        logger.info("Thread created successfully", {
-          threadId: response.data.id,
-          householdId,
-        });
-
-        onThreadCreated?.();
-        return response.data;
-      } catch (error) {
-        logger.error("Failed to create thread", { error });
-        onError?.(
-          error instanceof Error ? error : new Error("Failed to create thread")
-        );
-        throw error;
-      } finally {
-        setOperationState((prev) => ({ ...prev, isCreating: false }));
-      }
+// Single thread query hook
+export const useThread = (
+  { householdId, threadId, enabled = true }: UseThreadOptions,
+  options?: Omit<UseQueryOptions<ThreadWithDetails>, "queryKey" | "queryFn">
+) => {
+  return useQuery({
+    queryKey: threadKeys.detail(householdId, threadId),
+    queryFn: async () => {
+      const result = await threadApi.threads.get(householdId, threadId);
+      logger.debug("Thread data fetched", {
+        threadId,
+        householdId,
+        messageCount: result.messages?.length,
+      });
+      return result;
     },
-    [user, householdId, onThreadCreated, onError]
-  );
+    staleTime: STALE_TIMES.STANDARD,
+    gcTime: CACHE_TIMES.STANDARD,
+    enabled: enabled && !!threadId && !!householdId,
+    ...options,
+  });
+};
 
-  return {
-    createThread,
-    ...operationState,
-  };
-}
+// Create thread mutation
+export const useCreateThread = (
+  householdId: string,
+  options?: Omit<
+    UseMutationOptions<
+      ThreadWithDetails,
+      Error,
+      Omit<CreateThreadDTO, "householdId">
+    >,
+    "mutationFn"
+  >
+): UseMutationResult<
+  ThreadWithDetails,
+  Error,
+  Omit<CreateThreadDTO, "householdId">
+> => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: Omit<CreateThreadDTO, "householdId">) => {
+      const result = await threadApi.threads.create(householdId, data);
+      logger.info("Thread created", {
+        threadId: result.id,
+        householdId,
+        title: result.title,
+        participantsCount: result.participants?.length,
+      });
+      return result;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: threadKeys.lists() });
+    },
+    ...options,
+  });
+};
+
+// Update thread mutation
+export const useUpdateThread = (
+  householdId: string,
+  options?: Omit<
+    UseMutationOptions<
+      ThreadWithDetails,
+      Error,
+      { id: string; data: UpdateThreadDTO }
+    >,
+    "mutationFn"
+  >
+) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, data }) => {
+      const result = await threadApi.threads.update(householdId, id, data);
+      logger.info("Thread updated", {
+        threadId: id,
+        householdId,
+        updatedFields: Object.keys(data),
+        newTitle: data.title,
+      });
+      return result;
+    },
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({
+        queryKey: threadKeys.detail(householdId, id),
+      });
+      queryClient.invalidateQueries({ queryKey: threadKeys.lists() });
+    },
+    ...options,
+  });
+};
+
+// Delete thread mutation
+export const useDeleteThread = (
+  householdId: string,
+  options?: Omit<UseMutationOptions<void, Error, string>, "mutationFn">
+) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (threadId: string) => {
+      await threadApi.threads.delete(householdId, threadId);
+      logger.info("Thread deleted", {
+        threadId,
+        householdId,
+        timestamp: new Date().toISOString(),
+      });
+    },
+    onSuccess: (_, threadId) => {
+      queryClient.removeQueries({
+        queryKey: threadKeys.detail(householdId, threadId),
+      });
+      queryClient.invalidateQueries({ queryKey: threadKeys.lists() });
+    },
+    ...options,
+  });
+};

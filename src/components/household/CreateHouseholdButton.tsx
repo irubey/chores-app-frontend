@@ -1,169 +1,143 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
-import { useHousehold } from "@/hooks/useHousehold";
+import React, { useState } from "react";
+import { useCreateHousehold } from "@/hooks/useHouseholds";
+import { CreateHouseholdDTO } from "@shared/types/household";
 import { logger } from "@/lib/api/logger";
-import { ApiError } from "@/lib/api/errors";
-import { CreateHouseholdDTO } from "@shared/types";
-import Button from "@/components/common/Button";
-import Modal from "@/components/common/Modal";
-import Input from "@/components/common/Input";
-import { PlusIcon } from "@heroicons/react/24/solid";
 
 export default function CreateHouseholdButton() {
-  const { createHousehold } = useHousehold();
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isUpdating, setIsUpdating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [formErrors, setFormErrors] = useState<{
-    name?: string;
-  }>({});
-  const [newHouseholdData, setNewHouseholdData] = useState<CreateHouseholdDTO>({
-    name: "",
-    currency: "USD",
-    timezone: "UTC",
-    language: "en",
-  });
+  const [isOpen, setIsOpen] = useState(false);
+  const { mutate: createHousehold, isPending } = useCreateHousehold();
 
-  const inputRef = useRef<HTMLInputElement>(null);
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
 
-  useEffect(() => {
-    if (isModalOpen) {
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 250);
-    }
-  }, [isModalOpen]);
+    const data: CreateHouseholdDTO = {
+      name: formData.get("name") as string,
+      currency: formData.get("currency") as string,
+      timezone: formData.get("timezone") as string,
+      language: formData.get("language") as string,
+    };
 
-  const validateForm = (): boolean => {
-    const errors: typeof formErrors = {};
+    logger.debug("Creating household", { data });
 
-    if (!newHouseholdData.name) {
-      errors.name = "Name is required";
-    } else if (newHouseholdData.name.length < 3) {
-      errors.name = "Name must be at least 3 characters";
-    } else if (newHouseholdData.name.length > 100) {
-      errors.name = "Name must be less than 100 characters";
-    }
-
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
-  const handleCreateHousehold = async () => {
-    try {
-      if (!validateForm()) {
-        return;
-      }
-
-      setIsUpdating(true);
-      setError(null);
-
-      logger.debug("Creating household", {
-        name: newHouseholdData.name,
-      });
-
-      await createHousehold(newHouseholdData);
-      setIsModalOpen(false);
-      setNewHouseholdData({
-        name: "",
-        currency: "USD",
-        timezone: "UTC",
-        language: "en",
-      });
-      setFormErrors({});
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError("Failed to create household");
-      }
-      logger.error("Failed to create household", { error: err });
-    } finally {
-      setIsUpdating(false);
-    }
+    createHousehold(data, {
+      onSuccess: () => {
+        setIsOpen(false);
+        e.currentTarget.reset();
+      },
+    });
   };
 
   return (
     <>
-      <Button
-        variant="primary"
-        onClick={() => setIsModalOpen(true)}
-        className="flex items-center gap-2"
-      >
-        <PlusIcon className="h-5 w-5" />
+      <button onClick={() => setIsOpen(true)} className="btn-primary">
         Create Household
-      </Button>
+      </button>
 
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setFormErrors({});
-          setError(null);
-        }}
-        title="Create New Household"
-        footer={
-          <div className="flex justify-end gap-4">
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setIsModalOpen(false);
-                setFormErrors({});
-                setError(null);
-              }}
-              disabled={isUpdating}
-              type="button"
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              type="submit"
-              form="create-household-form"
-              isLoading={isUpdating}
-              disabled={isUpdating || !newHouseholdData.name}
-            >
-              Create
-            </Button>
+      {isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-semibold mb-4">Create New Household</h2>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label
+                  htmlFor="name"
+                  className="block text-sm font-medium mb-1"
+                >
+                  Name
+                </label>
+                <input
+                  type="text"
+                  id="name"
+                  name="name"
+                  required
+                  className="input-field w-full"
+                  placeholder="Enter household name"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="currency"
+                  className="block text-sm font-medium mb-1"
+                >
+                  Currency
+                </label>
+                <select
+                  id="currency"
+                  name="currency"
+                  required
+                  className="input-field w-full"
+                >
+                  <option value="USD">USD</option>
+                  <option value="EUR">EUR</option>
+                  <option value="GBP">GBP</option>
+                </select>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="timezone"
+                  className="block text-sm font-medium mb-1"
+                >
+                  Timezone
+                </label>
+                <select
+                  id="timezone"
+                  name="timezone"
+                  required
+                  className="input-field w-full"
+                >
+                  <option value="UTC">UTC</option>
+                  <option value="America/New_York">Eastern Time</option>
+                  <option value="America/Chicago">Central Time</option>
+                  <option value="America/Denver">Mountain Time</option>
+                  <option value="America/Los_Angeles">Pacific Time</option>
+                </select>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="language"
+                  className="block text-sm font-medium mb-1"
+                >
+                  Language
+                </label>
+                <select
+                  id="language"
+                  name="language"
+                  required
+                  className="input-field w-full"
+                >
+                  <option value="en">English</option>
+                  <option value="es">Spanish</option>
+                  <option value="fr">French</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setIsOpen(false)}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPending}
+                  className="btn-primary"
+                >
+                  {isPending ? "Creating..." : "Create"}
+                </button>
+              </div>
+            </form>
           </div>
-        }
-      >
-        <form
-          id="create-household-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!isUpdating && newHouseholdData.name) {
-              handleCreateHousehold();
-            }
-          }}
-          className="space-y-4"
-        >
-          <Input
-            ref={inputRef}
-            label="Household Name"
-            value={newHouseholdData.name}
-            onChange={(e) => {
-              setNewHouseholdData({
-                ...newHouseholdData,
-                name: e.target.value,
-              });
-              if (formErrors.name) {
-                setFormErrors({ ...formErrors, name: undefined });
-              }
-            }}
-            placeholder="Enter household name"
-            required
-            minLength={3}
-            maxLength={100}
-            error={formErrors.name}
-            helperText={
-              formErrors.name || "Name must be between 3 and 100 characters"
-            }
-          />
-          {error && <p className="text-red-500 text-sm">{error}</p>}
-        </form>
-      </Modal>
+        </div>
+      )}
     </>
   );
 }
