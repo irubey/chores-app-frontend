@@ -46,8 +46,8 @@ export const householdApi = {
     get: async (
       id: string,
       config?: ApiRequestOptions
-    ): Promise<HouseholdWithMembers> => {
-      const result = await handleApiRequest<HouseholdWithMembers>(
+    ): Promise<ApiResponse<HouseholdWithMembers>> => {
+      return handleApiRequest<HouseholdWithMembers>(
         () =>
           axiosInstance.get(`/households/${id}`, buildRequestConfig(config)),
         {
@@ -55,11 +55,12 @@ export const householdApi = {
           metadata: { householdId: id },
         }
       );
-      return result.data;
     },
 
-    create: async (data: CreateHouseholdDTO): Promise<HouseholdWithMembers> => {
-      const result = await handleApiRequest<HouseholdWithMembers>(
+    create: async (
+      data: CreateHouseholdDTO
+    ): Promise<ApiResponse<HouseholdWithMembers>> => {
+      return handleApiRequest<HouseholdWithMembers>(
         () => axiosInstance.post("/households", data),
         {
           operation: "Create Household",
@@ -71,15 +72,14 @@ export const householdApi = {
           },
         }
       );
-      return result.data;
     },
 
     update: async (
       id: string,
       data: UpdateHouseholdDTO,
       config?: ApiRequestOptions
-    ): Promise<HouseholdWithMembers> => {
-      const result = await handleApiRequest<HouseholdWithMembers>(
+    ): Promise<ApiResponse<HouseholdWithMembers>> => {
+      return handleApiRequest<HouseholdWithMembers>(
         () =>
           axiosInstance.patch(
             `/households/${id}`,
@@ -94,16 +94,42 @@ export const householdApi = {
           },
         }
       );
-      return result.data;
     },
 
-    delete: async (id: string, config?: ApiRequestOptions): Promise<void> => {
-      await handleApiRequest<void>(
+    delete: async (
+      id: string,
+      config?: ApiRequestOptions
+    ): Promise<ApiResponse<void>> => {
+      return handleApiRequest<void>(
         () =>
           axiosInstance.delete(`/households/${id}`, buildRequestConfig(config)),
         {
           operation: "Delete Household",
           metadata: { householdId: id },
+        }
+      );
+    },
+
+    updateHouseholdSelection: async (
+      householdId: string,
+      memberId: string,
+      isSelected: boolean,
+      config?: ApiRequestOptions
+    ): Promise<ApiResponse<HouseholdMemberWithUser>> => {
+      return handleApiRequest<HouseholdMemberWithUser>(
+        () =>
+          axiosInstance.patch(
+            `/households/${householdId}/members/${memberId}/selection`,
+            { isSelected },
+            buildRequestConfig(config)
+          ),
+        {
+          operation: "Update Household Selection",
+          metadata: {
+            householdId,
+            memberId,
+            isSelected,
+          },
         }
       );
     },
@@ -113,8 +139,8 @@ export const householdApi = {
     list: async (
       householdId: string,
       config?: ApiRequestOptions
-    ): Promise<ApiResponse<HouseholdMember[]>> => {
-      return handleApiRequest<HouseholdMember[]>(
+    ): Promise<ApiResponse<HouseholdMemberWithUser[]>> => {
+      return handleApiRequest<HouseholdMemberWithUser[]>(
         () =>
           axiosInstance.get(
             `/households/${householdId}/members`,
@@ -135,24 +161,66 @@ export const householdApi = {
       memberId: string,
       data: Partial<HouseholdMember>,
       config?: ApiRequestOptions
-    ): Promise<HouseholdMember> => {
-      const result = await handleApiRequest<HouseholdMember>(
-        () =>
-          axiosInstance.patch(
-            `/households/${householdId}/members/${memberId}`,
-            data,
-            buildRequestConfig(config)
-          ),
-        {
-          operation: "Update Household Member",
-          metadata: {
-            householdId,
-            memberId,
-            updatedFields: Object.keys(data),
-          },
-        }
-      );
-      return result.data;
+    ): Promise<ApiResponse<HouseholdMemberWithUser>> => {
+      // If leftAt is provided, use DELETE endpoint to remove the member
+      if ("leftAt" in data) {
+        return handleApiRequest<HouseholdMemberWithUser>(
+          () =>
+            axiosInstance.delete(
+              `/households/${householdId}/members/${memberId}`,
+              buildRequestConfig(config)
+            ),
+          {
+            operation: "Remove Household Member",
+            metadata: {
+              householdId,
+              memberId,
+            },
+          }
+        );
+      }
+
+      // For role updates
+      if ("role" in data) {
+        return handleApiRequest<HouseholdMemberWithUser>(
+          () =>
+            axiosInstance.patch(
+              `/households/${householdId}/members/${memberId}/role`,
+              { role: data.role },
+              buildRequestConfig(config)
+            ),
+          {
+            operation: "Update Member Role",
+            metadata: {
+              householdId,
+              memberId,
+              role: data.role,
+            },
+          }
+        );
+      }
+
+      // For status updates (accepting/rejecting invitations)
+      if ("isAccepted" in data || "isRejected" in data) {
+        return handleApiRequest<HouseholdMemberWithUser>(
+          () =>
+            axiosInstance.patch(
+              `/households/${householdId}/members/${memberId}/status`,
+              data,
+              buildRequestConfig(config)
+            ),
+          {
+            operation: "Update Member Status",
+            metadata: {
+              householdId,
+              memberId,
+              updatedFields: Object.keys(data),
+            },
+          }
+        );
+      }
+
+      throw new Error("Invalid member update operation");
     },
   },
 
@@ -161,8 +229,8 @@ export const householdApi = {
       householdId: string,
       email: string,
       config?: ApiRequestOptions
-    ): Promise<HouseholdMemberWithUser> => {
-      const result = await handleApiRequest<HouseholdMemberWithUser>(
+    ): Promise<ApiResponse<HouseholdMemberWithUser>> => {
+      return handleApiRequest<HouseholdMemberWithUser>(
         () =>
           axiosInstance.post(
             `/households/${householdId}/invitations`,
@@ -178,7 +246,6 @@ export const householdApi = {
           },
         }
       );
-      return result.data;
     },
   },
 } as const;

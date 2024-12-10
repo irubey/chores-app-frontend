@@ -15,7 +15,7 @@ export default function HouseholdCardPresentation({
 }: HouseholdCardPresentationProps) {
   return (
     <Link
-      href={`/households/${household.id}`}
+      href={`/household/${household.id}`}
       onClick={onSelect}
       className="block p-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200"
     >

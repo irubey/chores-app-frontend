@@ -20,9 +20,19 @@ export const useThreads = (
     "queryKey" | "queryFn"
   >
 ) => {
+  // Only create queries for valid household IDs when enabled
+  const validHouseholdIds = params.enabled
+    ? params.householdIds.filter(Boolean)
+    : [];
+
   const queries = useQueries({
-    queries: params.householdIds.map((householdId) => ({
-      queryKey: threadKeys.list(householdId, params),
+    queries: validHouseholdIds.map((householdId) => ({
+      queryKey: threadKeys.list(householdId, {
+        limit: params.limit,
+        cursor: params.cursor,
+        sortBy: params.sortBy,
+        direction: params.direction,
+      }),
       queryFn: async () => {
         const result = await threadApi.threads.list(householdId, {
           params: {
@@ -37,7 +47,11 @@ export const useThreads = (
           householdId,
           count: result.data.length,
           hasPagination: !!result.pagination,
-          params,
+          params: {
+            householdIds: validHouseholdIds,
+            limit: params.limit,
+            enabled: params.enabled,
+          },
         });
 
         return result;
@@ -75,5 +89,6 @@ export const useThreads = (
     data: sortedData,
     isLoading,
     error,
+    queries, // Expose individual queries for debugging
   };
 };

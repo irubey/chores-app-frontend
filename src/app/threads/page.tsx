@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import { useAuthUser, useAuthStatus } from "@/contexts/UserContext";
-import { useHouseholds } from "@/hooks/useHouseholds";
 import { useThreads } from "@/hooks/threads/useThreads";
+import { useSelectedHouseholds } from "@/hooks/households/useSelectedHouseholds";
 import { logger } from "@/lib/api/logger";
 import { ThreadList } from "@/components/threads/ThreadList";
 import { ThreadCreator } from "@/components/threads/ThreadCreator";
@@ -11,6 +11,9 @@ import { ThreadListSkeleton } from "@/components/threads/skeletons/ThreadCardSke
 import Card from "@/components/common/Card";
 import Button from "@/components/common/Button";
 import { ChatBubbleLeftRightIcon, PlusIcon } from "@heroicons/react/24/outline";
+import type { UseQueryResult } from "@tanstack/react-query";
+import type { ApiResponse } from "@shared/interfaces/apiResponse";
+import type { ThreadWithDetails } from "@shared/types";
 
 const THREADS_PER_PAGE = 20;
 
@@ -39,65 +42,28 @@ function EmptyState({ icon, title, description, action }: EmptyStateProps) {
 export default function ThreadsPage() {
   const user = useAuthUser();
   const { status } = useAuthStatus();
-  const { data: householdsData, isLoading: isLoadingHouseholds } =
-    useHouseholds();
+  const { selectedHouseholds, isLoading: isLoadingHouseholds } =
+    useSelectedHouseholds();
   const [isCreatorOpen, setIsCreatorOpen] = useState(false);
-
-  // Filter accessible households
-  const accessibleHouseholds = useMemo(() => {
-    if (!householdsData?.data?.length || !user?.id) {
-      logger.debug("No households to check or no user", {
-        hasHouseholds: !!householdsData?.data?.length,
-        userId: user?.id,
-      });
-      return [];
-    }
-
-    return householdsData.data.filter((h) => {
-      // If no members array, household is not properly loaded
-      if (!h.members?.length) {
-        logger.debug("Household missing members data", {
-          householdId: h.id,
-          householdName: h.name,
-        });
-        return false;
-      }
-
-      const isMember = h.members.some(
-        (m) => m.userId === user.id && m.isAccepted && !m.leftAt && m.isSelected
-      );
-
-      logger.debug("Checking household accessibility", {
-        householdId: h.id,
-        householdName: h.name,
-        userId: user.id,
-        isMember,
-        members: h.members.map((m) => ({
-          userId: m.userId,
-          role: m.role,
-          isAccepted: m.isAccepted,
-          isSelected: m.isSelected,
-          leftAt: m.leftAt,
-        })),
-      });
-
-      return isMember;
-    });
-  }, [householdsData?.data, user?.id]);
 
   // Query threads from accessible households
   const {
     data: threadsData,
     isLoading: isLoadingThreads,
     error,
+    queries,
   } = useThreads({
-    householdIds: accessibleHouseholds.map((h) => h.id),
+    householdIds: selectedHouseholds.accessibleIds,
     limit: THREADS_PER_PAGE,
-    enabled: !!user && accessibleHouseholds.length > 0,
+    enabled: status === "authenticated" && selectedHouseholds.accessible > 0,
   });
 
   const threads = threadsData?.data || [];
-  const isLoading = status === "loading" || isLoadingHouseholds;
+  // Only show initial loading when auth or households are loading
+  const isInitialLoading = status === "loading" || isLoadingHouseholds;
+  // Only show thread loading when we have no threads yet and queries are in flight
+  const isThreadsLoading =
+    isLoadingThreads && !threads.length && queries?.some((q) => q.isFetching);
 
   const handleThreadCreated = useCallback(() => {
     setIsCreatorOpen(false);
@@ -106,20 +72,26 @@ export default function ThreadsPage() {
 
   logger.debug("Rendering threads page", {
     threadsCount: threads?.length,
-    selectedHouseholds: {
-      total: householdsData?.data?.length,
-      accessible: accessibleHouseholds.length,
-      ids: householdsData?.data?.map((h) => h.id),
-      accessibleIds: accessibleHouseholds.map((h) => h.id),
-    },
+    selectedHouseholds,
     isLoadingThreads,
+    isThreadsLoading,
     isLoadingHouseholds,
+    isInitialLoading,
     authStatus: status,
-    isAuthenticated: !!user,
+    isAuthenticated: status === "authenticated",
     hasUser: !!user,
+    queriesStatus: queries?.map(
+      (q: UseQueryResult<ApiResponse<ThreadWithDetails[]>, Error>) => ({
+        isFetching: q.isFetching,
+        isLoading: q.isLoading,
+        dataUpdatedAt: q.dataUpdatedAt,
+        status: q.status,
+      })
+    ),
   });
 
-  if (isLoading) {
+  // Only show loading skeleton on initial load
+  if (isInitialLoading || isThreadsLoading) {
     return (
       <div className="container-custom py-md animate-fade-in">
         <ThreadListSkeleton />
@@ -127,7 +99,7 @@ export default function ThreadsPage() {
     );
   }
 
-  if (!user) {
+  if (status !== "authenticated") {
     return (
       <div className="container-custom py-md animate-fade-in">
         <EmptyState
@@ -166,7 +138,7 @@ export default function ThreadsPage() {
               View and manage threads across your households
             </p>
           </div>
-          {accessibleHouseholds.length > 0 && (
+          {selectedHouseholds.accessible > 0 && (
             <Button
               variant="primary"
               onClick={() => setIsCreatorOpen(true)}
@@ -177,9 +149,7 @@ export default function ThreadsPage() {
           )}
         </header>
 
-        {isLoadingThreads ? (
-          <ThreadListSkeleton />
-        ) : !threads?.length ? (
+        {!threads?.length ? (
           <EmptyState
             icon={<ChatBubbleLeftRightIcon className="h-12 w-12" />}
             title="No threads yet"
@@ -188,7 +158,7 @@ export default function ThreadsPage() {
               <Button
                 variant="primary"
                 onClick={() => setIsCreatorOpen(true)}
-                disabled={accessibleHouseholds.length === 0}
+                disabled={selectedHouseholds.accessible === 0}
               >
                 Create Thread
               </Button>

@@ -25,7 +25,7 @@ export default function HouseholdCardContainer({
       householdId: household.id,
       name: household.name,
     });
-    router.push(`/households/${household.id}`);
+    router.push(`/household/${household.id}`);
   };
 
   return (

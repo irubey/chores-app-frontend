@@ -5,6 +5,31 @@ import { logger } from "../logger";
 import { PaginationMeta, PaginationOptions } from "@shared/interfaces";
 import { ApiResponse } from "@shared/interfaces/apiResponse";
 
+// Add interface for logger methods
+interface APILogData {
+  config?: {
+    url?: string;
+    method?: string;
+  };
+  status?: number;
+  data?: unknown;
+}
+
+interface APIErrorData {
+  message: string;
+  status?: number;
+  type?: string;
+  data?: unknown;
+}
+
+// Extend logger type to include these methods
+declare module "../logger" {
+  interface Logger {
+    logAPIResponse(data: APILogData): void;
+    logAPIError(data: APIErrorData): void;
+  }
+}
+
 export interface ApiRequestOptions {
   signal?: AbortSignal;
   params?: PaginationOptions & Record<string, any>;

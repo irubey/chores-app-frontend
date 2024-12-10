@@ -6,6 +6,7 @@ import React, {
   useEffect,
   useState,
   useMemo,
+  useRef,
 } from "react";
 import { User } from "@shared/types";
 import { authApi } from "@/lib/api/services/authService";
@@ -65,22 +66,122 @@ const getErrorMessage = (error: unknown): AuthState["error"] => {
   };
 };
 
+// Static initialization flag
+let isGloballyInitialized = false;
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>(initialState);
-
-  // Log state changes
-  useEffect(() => {
-    logger.debug("Auth state changed", {
-      status: state.status,
-      isAuthenticated: state.isAuthenticated,
-      hasUser: !!state.user,
-      hasError: !!state.error,
-    });
-  }, [state.status, state.isAuthenticated, state.user, state.error]);
+  const initializationRef = useRef<{
+    isInitializing: boolean;
+    abortController: AbortController | null;
+    promise: Promise<void> | null;
+  }>({
+    isInitializing: false,
+    abortController: null,
+    promise: null,
+  });
 
   const updateState = useCallback((updates: Partial<AuthState>) => {
-    setState((prev) => ({ ...prev, ...updates }));
+    setState((prev) => {
+      if (
+        Object.entries(updates).every(
+          ([key, value]) => prev[key as keyof AuthState] === value
+        )
+      ) {
+        return prev;
+      }
+      const newState = { ...prev, ...updates };
+      logger.debug("Auth state changed", {
+        status: newState.status,
+        isAuthenticated: newState.isAuthenticated,
+        hasUser: !!newState.user,
+        hasError: !!newState.error,
+      });
+      return newState;
+    });
   }, []);
+
+  const refreshAuthState = useCallback(async () => {
+    // If already initializing, return existing promise
+    if (
+      initializationRef.current.isInitializing &&
+      initializationRef.current.promise
+    ) {
+      return initializationRef.current.promise;
+    }
+
+    const initPromise = (async () => {
+      try {
+        initializationRef.current.isInitializing = true;
+        initializationRef.current.abortController = new AbortController();
+
+        updateState({ status: "loading", error: null });
+        logger.debug("API Request: Initialize Auth", {
+          timestamp: new Date().toISOString(),
+        });
+
+        const response = await authApi.auth.initializeAuth();
+
+        if (response?.data) {
+          updateState({
+            user: response.data,
+            status: "authenticated",
+            isAuthenticated: true,
+            error: null,
+          });
+        } else {
+          updateState({
+            user: null,
+            status: "unauthenticated",
+            isAuthenticated: false,
+            error: null,
+          });
+          logger.info("No active session", {
+            timestamp: new Date().toISOString(),
+          });
+        }
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          updateState({
+            user: null,
+            status: "unauthenticated",
+            isAuthenticated: false,
+            error: null,
+          });
+          return;
+        }
+        const errorState = getErrorMessage(error);
+        updateState({
+          status: "error",
+          error: errorState,
+          isAuthenticated: false,
+          user: null,
+        });
+      } finally {
+        initializationRef.current.isInitializing = false;
+        initializationRef.current.promise = null;
+      }
+    })();
+
+    initializationRef.current.promise = initPromise;
+    return initPromise;
+  }, [updateState]);
+
+  // Initialize auth state
+  useEffect(() => {
+    if (!isGloballyInitialized) {
+      isGloballyInitialized = true;
+      logger.debug("Auth provider mounted");
+      refreshAuthState();
+    }
+
+    return () => {
+      if (initializationRef.current.abortController) {
+        initializationRef.current.abortController.abort();
+      }
+      logger.debug("Auth provider unmounting");
+    };
+  }, [refreshAuthState]);
 
   const setLoading = useCallback(() => {
     updateState({ status: "loading", error: null });
@@ -127,39 +228,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       error: null,
     });
   }, [updateState]);
-
-  const refreshAuthState = useCallback(async () => {
-    try {
-      setState((currentState) => {
-        if (currentState.status === "loading") return currentState;
-
-        setLoading();
-        return currentState;
-      });
-
-      const response = await authApi.auth.initializeAuth();
-
-      if (response?.data) {
-        setAuthenticated(response.data);
-        logger.info("Auth refreshed", {
-          userId: response.data.id,
-          timestamp: new Date().toISOString(),
-        });
-      } else {
-        setUnauthenticated();
-        logger.info("No active session", {
-          timestamp: new Date().toISOString(),
-        });
-      }
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 401) {
-        setUnauthenticated();
-        return;
-      }
-      setError(error);
-      throw error;
-    }
-  }, [setLoading, setAuthenticated, setUnauthenticated, setError]);
 
   const login = useCallback(
     async (email: string, password: string) => {
@@ -251,21 +319,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw error;
     }
   }, [setLoading, setUnauthenticated, setError]);
-
-  // Initialize auth state on mount
-  useEffect(() => {
-    logger.debug("Auth provider mounted");
-    refreshAuthState().catch((error) => {
-      logger.error("Auth initialization failed", {
-        code: error.code,
-        message: error.message,
-      });
-    });
-
-    return () => {
-      logger.debug("Auth provider unmounting");
-    };
-  }, [refreshAuthState]);
 
   // Memoize the context value to prevent unnecessary re-renders
   const value = useMemo(

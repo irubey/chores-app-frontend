@@ -31,6 +31,9 @@ const SocketContext = createContext<SocketContextType>({
   disconnect: () => {},
 });
 
+// Flag to enable/disable socket connections
+const ENABLE_SOCKETS = false;
+
 export const SocketProvider: React.FC<SocketProviderProps> = ({
   children,
   isAuthenticated,
@@ -39,6 +42,12 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
+    // Skip socket connection if disabled
+    if (!ENABLE_SOCKETS) {
+      logger.debug("Socket connections are disabled");
+      return;
+    }
+
     const handleConnect = () => {
       setIsConnected(true);
       logger.info("Socket connected successfully", {
@@ -102,6 +111,8 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({
   }, [isAuthenticated, user, isConnected]);
 
   const connect = () => {
+    if (!ENABLE_SOCKETS) return;
+
     if (!isConnected && isAuthenticated && user) {
       logger.debug("Manual socket connection attempt", {
         userId: user.id,
@@ -118,6 +129,8 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({
   };
 
   const disconnect = () => {
+    if (!ENABLE_SOCKETS) return;
+
     if (isConnected) {
       logger.debug("Manual socket disconnection", {
         userId: user?.id,

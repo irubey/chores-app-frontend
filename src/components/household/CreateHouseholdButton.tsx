@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { useCreateHousehold } from "@/hooks/useHouseholds";
+import { useCreateHousehold } from "@/hooks/households/useHouseholds";
 import { CreateHouseholdDTO } from "@shared/types/household";
 import { logger } from "@/lib/api/logger";
 

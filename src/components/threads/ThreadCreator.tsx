@@ -1,8 +1,9 @@
 import { useState, useCallback, useEffect } from "react";
-import { useHouseholds } from "@/contexts/HouseholdsContext";
-import { useAuth } from "@/hooks/useAuth";
-import { useThread } from "@/hooks/threads/useThread";
-import { useThreads } from "@/hooks/threads/useThreads";
+import { useHouseholds } from "@/hooks/households/useHouseholds";
+import { useAuthUser } from "@/contexts/UserContext";
+import { useCreateThread } from "@/hooks/threads/useThread";
+import { useQueryClient } from "@tanstack/react-query";
+import { threadKeys } from "@/lib/api/services/threadService";
 import { logger } from "@/lib/api/logger";
 import Modal from "@/components/common/Modal";
 import Button from "@/components/common/Button";
@@ -20,9 +21,9 @@ export function ThreadCreator({
   onClose,
   onSuccess,
 }: ThreadCreatorProps) {
-  const { user } = useAuth();
-  const { selectedHouseholds } = useHouseholds();
-  const { refresh: refreshThreads } = useThreads();
+  const user = useAuthUser();
+  const queryClient = useQueryClient();
+  const { data: householdsData } = useHouseholds();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -34,13 +35,12 @@ export function ThreadCreator({
 
   const hasSelectedHousehold = !!selectedHouseholdId?.trim();
 
-  // Initialize useThread with the selected household and refresh callback
-  const { createThread } = useThread({
-    householdId: selectedHouseholdId,
-    onThreadCreated: useCallback(() => {
-      refreshThreads();
+  // Initialize createThread mutation
+  const { mutateAsync: createThread } = useCreateThread(selectedHouseholdId, {
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: threadKeys.lists() });
       onSuccess?.();
-    }, [refreshThreads, onSuccess]),
+    },
   });
 
   const resetForm = useCallback(() => {
@@ -157,7 +157,7 @@ export function ThreadCreator({
             required
           >
             <option value="">Select a household</option>
-            {selectedHouseholds?.map((household) => (
+            {householdsData?.data?.map((household) => (
               <option key={household.id} value={household.id}>
                 {household.name}
               </option>

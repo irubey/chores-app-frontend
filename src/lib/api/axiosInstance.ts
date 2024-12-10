@@ -1,7 +1,8 @@
 import axios from "axios";
 import { setupInterceptors } from "./interceptors";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api";
+const API_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000/api";
 const DEFAULT_TIMEOUT = 10000; // 10 seconds
 const REFRESH_TIMEOUT = 5000; // 5 seconds for refresh requests
 

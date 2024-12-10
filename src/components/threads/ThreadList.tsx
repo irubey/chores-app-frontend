@@ -1,7 +1,6 @@
 import { useCallback, useRef, useState, useEffect, useMemo } from "react";
 import { ThreadWithDetails } from "@shared/types";
 import { ThreadCard } from "./ThreadCard";
-import { logger } from "@/lib/api/logger";
 
 interface ThreadListProps {
   threads: ThreadWithDetails[];
@@ -12,16 +11,24 @@ const MIN_CARD_WIDTH = 400;
 export function ThreadList({ threads }: ThreadListProps) {
   const [columns, setColumns] = useState(1);
   const containerRef = useRef<HTMLDivElement>(null);
+  const resizeObserverRef = useRef<ResizeObserver>();
+  const prevWidthRef = useRef<number>(0);
 
   // Memoize column calculation function
   const calculateColumns = useCallback((width: number) => {
     return Math.max(1, Math.floor(width / MIN_CARD_WIDTH));
   }, []);
 
-  // Memoize the update columns function
+  // Memoize the update columns function with debounce
   const updateColumns = useCallback(() => {
     if (!containerRef.current) return;
+
     const width = containerRef.current.offsetWidth;
+
+    // Only update if width has changed significantly (prevent sub-pixel changes)
+    if (Math.abs(width - prevWidthRef.current) < 1) return;
+
+    prevWidthRef.current = width;
     const newColumns = calculateColumns(width);
     setColumns((prev) => (prev !== newColumns ? newColumns : prev));
   }, [calculateColumns]);
@@ -29,66 +36,74 @@ export function ThreadList({ threads }: ThreadListProps) {
   // Effect for initial calculation and resize handling
   useEffect(() => {
     updateColumns();
-    const resizeObserver = new ResizeObserver(updateColumns);
+
+    // Create ResizeObserver only once
+    if (!resizeObserverRef.current) {
+      resizeObserverRef.current = new ResizeObserver((entries) => {
+        requestAnimationFrame(updateColumns);
+      });
+    }
 
     if (containerRef.current) {
-      resizeObserver.observe(containerRef.current);
+      resizeObserverRef.current.observe(containerRef.current);
     }
 
     return () => {
-      resizeObserver.disconnect();
+      if (resizeObserverRef.current) {
+        resizeObserverRef.current.disconnect();
+      }
     };
   }, [updateColumns]);
 
   // Memoize thread distribution logic
   const columnThreads = useMemo(() => {
-    logger.debug("Calculating thread distribution", {
-      threadCount: threads.length,
-      columns,
-    });
+    // Sort threads by updatedAt before distribution
+    const sortedThreads = [...threads].sort(
+      (a, b) =>
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    );
 
     const result: ThreadWithDetails[][] = Array.from(
       { length: columns },
       () => []
     );
 
-    threads.forEach((thread, i) => {
+    sortedThreads.forEach((thread, i) => {
       result[i % columns].push(thread);
     });
 
     return result;
   }, [threads, columns]);
 
+  // Memoize the grid template columns style
+  const gridStyle = useMemo(
+    () => ({
+      minWidth: MIN_CARD_WIDTH,
+      gridTemplateColumns: `repeat(${columns}, minmax(${MIN_CARD_WIDTH}px, 1fr))`,
+    }),
+    [columns]
+  );
+
   return (
     <div
       ref={containerRef}
-      className="grid-auto-fit gap-md animate-fade-in"
-      style={{
-        minWidth: MIN_CARD_WIDTH,
-      }}
+      className="grid auto-rows-auto gap-md"
+      style={gridStyle}
     >
       {columnThreads.map((columnContent, columnIndex) => (
         <div
-          key={columnIndex}
-          className="space-y-md"
+          key={`column-${columnIndex}`}
+          className="space-y-md animate-fade-in"
           style={{
-            // Stagger animation delay based on column index
             animationDelay: `${columnIndex * 0.1}s`,
           }}
         >
-          {columnContent.map((thread, threadIndex) => (
-            <div
+          {columnContent.map((thread, index) => (
+            <ThreadCard
               key={thread.id}
-              className="animate-slide-up"
-              style={{
-                // Stagger animation delay based on thread index
-                animationDelay: `${
-                  (columnIndex * columnContent.length + threadIndex) * 0.05
-                }s`,
-              }}
-            >
-              <ThreadCard thread={thread} />
-            </div>
+              thread={thread}
+              animationDelay={index * 0.05}
+            />
           ))}
         </div>
       ))}

@@ -31,12 +31,23 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({
   const [theme, setTheme] = useState<Theme>(defaultTheme);
 
   useEffect(() => {
-    // Only check DOM if no default theme was provided
-    if (!defaultTheme) {
-      const currentTheme = document.documentElement.classList.contains("dark")
-        ? "dark"
-        : "light";
+    // Check localStorage first
+    const savedTheme = localStorage.getItem("theme") as Theme | null;
+    if (savedTheme) {
+      setTheme(savedTheme);
+      document.documentElement.classList.toggle("dark", savedTheme === "dark");
+    } else if (!defaultTheme) {
+      // If no saved theme and no default theme, check system preference
+      const prefersDark = window.matchMedia(
+        "(prefers-color-scheme: dark)"
+      ).matches;
+      const currentTheme = prefersDark ? "dark" : "light";
       setTheme(currentTheme);
+      document.documentElement.classList.toggle(
+        "dark",
+        currentTheme === "dark"
+      );
+      localStorage.setItem("theme", currentTheme);
     }
   }, [defaultTheme]);
 

@@ -3,7 +3,7 @@
 import React from "react";
 import { useAuthUser } from "@/contexts/UserContext";
 import { logger } from "@/lib/api/logger";
-import { useHouseholds } from "@/hooks/useHouseholds";
+import { useHouseholds } from "@/hooks/households/useHouseholds";
 import HouseholdsGrid from "@/components/household/HouseholdsGrid";
 import CreateHouseholdButton from "@/components/household/CreateHouseholdButton";
 
