@@ -36,7 +36,7 @@ async function handleTokenRefresh(
   originalRequest: InternalAxiosRequestConfig
 ): Promise<AxiosRequestConfig> {
   // Prevent infinite refresh loops
-  if (originalRequest?.url?.includes("/auth/refresh")) {
+  if (originalRequest?.url?.includes("/auth/refresh-token")) {
     throw new ApiError(
       "Authentication refresh failed",
       ApiErrorType.UNAUTHORIZED,
@@ -49,7 +49,23 @@ async function handleTokenRefresh(
     if (!isRefreshing) {
       isRefreshing = true;
 
-      await axiosInstance.post("/auth/refresh", null, {
+      // Check for refresh token in cookies
+      const cookies = document.cookie.split(";").reduce((acc, cookie) => {
+        const [key, value] = cookie.trim().split("=");
+        acc[key] = value;
+        return acc;
+      }, {} as Record<string, string>);
+
+      if (!cookies.refreshToken) {
+        throw new ApiError(
+          "No refresh token available",
+          ApiErrorType.UNAUTHORIZED,
+          401,
+          { code: "NO_REFRESH_TOKEN" }
+        );
+      }
+
+      await axiosInstance.post("/auth/refresh-token", null, {
         withCredentials: true,
       });
 

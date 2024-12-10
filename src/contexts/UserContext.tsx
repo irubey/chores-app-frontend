@@ -116,11 +116,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         initializationRef.current.abortController = new AbortController();
 
         updateState({ status: "loading", error: null });
-        logger.debug("API Request: Initialize Auth", {
-          timestamp: new Date().toISOString(),
-        });
+        logger.debug("API Request: Initialize Auth");
 
-        const response = await authApi.auth.initializeAuth();
+        const response = await authApi.auth.initializeAuth({
+          signal: initializationRef.current.abortController.signal,
+        });
 
         if (response?.data) {
           updateState({
@@ -129,6 +129,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             isAuthenticated: true,
             error: null,
           });
+          logger.info("Auth initialized - user authenticated", {
+            userId: response.data.id,
+          });
         } else {
           updateState({
             user: null,
@@ -136,20 +139,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             isAuthenticated: false,
             error: null,
           });
-          logger.info("No active session", {
-            timestamp: new Date().toISOString(),
-          });
+          logger.info("Auth initialized - no active session");
         }
       } catch (error) {
-        if (error instanceof ApiError && error.status === 401) {
+        // Handle aborted requests
+        if (error instanceof Error && error.name === "AbortError") {
+          logger.debug("Auth initialization aborted");
+          return;
+        }
+
+        // Handle unauthorized or no session
+        if (
+          error instanceof ApiError &&
+          (error.status === 401 || error.status === 403)
+        ) {
           updateState({
             user: null,
             status: "unauthenticated",
             isAuthenticated: false,
             error: null,
           });
+          logger.info("Auth initialized - unauthorized");
           return;
         }
+
+        // Handle other errors
         const errorState = getErrorMessage(error);
         updateState({
           status: "error",
@@ -157,9 +171,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           isAuthenticated: false,
           user: null,
         });
+        logger.error("Auth initialization failed", errorState);
       } finally {
         initializationRef.current.isInitializing = false;
         initializationRef.current.promise = null;
+        initializationRef.current.abortController = null;
       }
     })();
 

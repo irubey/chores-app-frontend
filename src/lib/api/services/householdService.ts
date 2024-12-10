@@ -162,24 +162,6 @@ export const householdApi = {
       data: Partial<HouseholdMember>,
       config?: ApiRequestOptions
     ): Promise<ApiResponse<HouseholdMemberWithUser>> => {
-      // If leftAt is provided, use DELETE endpoint to remove the member
-      if ("leftAt" in data) {
-        return handleApiRequest<HouseholdMemberWithUser>(
-          () =>
-            axiosInstance.delete(
-              `/households/${householdId}/members/${memberId}`,
-              buildRequestConfig(config)
-            ),
-          {
-            operation: "Remove Household Member",
-            metadata: {
-              householdId,
-              memberId,
-            },
-          }
-        );
-      }
-
       // For role updates
       if ("role" in data) {
         return handleApiRequest<HouseholdMemberWithUser>(
@@ -215,6 +197,25 @@ export const householdApi = {
               householdId,
               memberId,
               updatedFields: Object.keys(data),
+            },
+          }
+        );
+      }
+
+      // For leaving household (leftAt)
+      if ("leftAt" in data) {
+        return handleApiRequest<HouseholdMemberWithUser>(
+          () =>
+            axiosInstance.post(
+              `/households/${householdId}/members/${memberId}/leave`,
+              {},
+              buildRequestConfig(config)
+            ),
+          {
+            operation: "Leave Household",
+            metadata: {
+              householdId,
+              memberId,
             },
           }
         );

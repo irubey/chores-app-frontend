@@ -257,11 +257,12 @@ export const useUpdateHouseholdMember = (
     },
     onSuccess: (_, { householdId }) => {
       queryClient.invalidateQueries({
-        queryKey: householdKeys.membersList(householdId),
-      });
-      queryClient.invalidateQueries({
         queryKey: householdKeys.detail(householdId),
       });
+      queryClient.invalidateQueries({
+        queryKey: householdKeys.membersList(householdId),
+      });
+      queryClient.invalidateQueries({ queryKey: householdKeys.lists() });
     },
     ...options,
   });
