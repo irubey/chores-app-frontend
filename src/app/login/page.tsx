@@ -8,8 +8,8 @@ export default function LoginPage() {
       {/* Add your OAuth login buttons or form here */}
       <p className="mt-4 text-gray-500">Login with your account</p>
       <button className="mt-4 bg-blue-500 text-white px-4 py-2 rounded">Login with Google</button>
-      <Link className="mt-4 text-blue-500 hover:underline" href="/">
-        Go back to Home
+      <Link href="/">
+        <a className="mt-4 text-blue-500 hover:underline">Go back to Home</a>
       </Link>
     </main>
   );

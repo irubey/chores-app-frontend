@@ -8,17 +8,17 @@ export default function Navbar() {
       <ul className="flex space-x-4">
         <li>
           <Link href="/">
-            Home
+            <a>Home</a>
           </Link>
         </li>
         <li>
           <Link href="/dashboard">
-            Dashboard
+            <a>Dashboard</a>
           </Link>
         </li>
         <li>
           <Link href="/login">
-            Login
+            <a>Login</a>
           </Link>
         </li>
       </ul>

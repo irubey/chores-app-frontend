@@ -1,14 +1,24 @@
-import React from 'react';
+import React from "react";
+import AppContent from "../components/layout/AppContent";
+import RootProviders from "../components/providers/RootProviders";
 import "../styles/globals.css";
-import Navbar from '../components/Navbar'
 
+export const metadata = {
+  title: "Chores App",
+  description: "Manage your household chores",
+};
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en">
       <body>
-        <Navbar />
-        {children}
+        <RootProviders>
+          <AppContent>{children}</AppContent>
+        </RootProviders>
       </body>
     </html>
   );

@@ -1,0 +1,72 @@
+.
+├── components
+├── features
+├── helpers
+│   ├── assertions
+│   │   ├── apiAssertions.ts
+│   │   ├── componentAssertions.ts
+│   │   └── stateAssertions.ts
+│   ├── factories
+│   │   ├── householdFactory.ts
+│   │   ├── messages
+│   │   │   ├── attachmentFactory.ts
+│   │   │   ├── mentionFactory.ts
+│   │   │   ├── messageFactory.ts
+│   │   │   ├── pollFactory.ts
+│   │   │   └── reactionFactory.ts
+│   │   ├── threadFactory.ts
+│   │   └── userFactory.ts
+│   ├── matchers
+│   │   └── customMatchers.ts
+│   ├── mocks
+│   │   ├── apiMocks.ts
+│   │   ├── hookMocks.ts
+│   │   ├── routerMocks.ts
+│   │   └── serviceMocks.ts
+│   ├── scenarios
+│   │   ├── messages
+│   │   │   ├── attachmentScenarios.ts
+│   │   │   ├── mentionScenarios.ts
+│   │   │   ├── messageScenarios.ts
+│   │   │   ├── pollScenarios.ts
+│   │   │   └── reactionScenarios.ts
+│   │   └── threadScenarios.ts
+│   ├── setup
+│   │   ├── mockData.ts
+│   │   ├── renderHelpers.tsx
+│   │   └── testStore.ts
+│   └── utils
+│       ├── dateUtils.ts
+│       ├── idGenerator.ts
+│       ├── testLogger.ts
+│       └── testUtils.ts
+├── hooks
+├── services
+│   ├── authService.test.ts
+│   ├── calendarService.test.ts
+│   ├── choreService.test.ts
+│   ├── financeService.test.ts
+│   ├── householdService.test.ts
+│   ├── messages
+│   │   ├── messageAttachment.test.ts
+│   │   ├── messageMentions.test.ts
+│   │   ├── messagePolls.test.ts
+│   │   ├── messageReaction.test.ts
+│   │   ├── messageReadStatus.test.ts
+│   │   └── messageService.test.ts
+│   ├── notificationService.test.ts
+│   ├── threadService.test.ts
+│   ├── tokenService.test.ts
+│   └── userService.test.ts
+├── store
+│   └── slices
+│       ├── messages
+│       │   ├── attachments.test.ts
+│       │   ├── base.test.ts
+│       │   ├── mentions.test.ts
+│       │   ├── polls.test.ts
+│       │   └── reactions.test.ts
+│       └── threadSlice.test.ts
+└── structure.txt
+
+19 directories, 51 files
