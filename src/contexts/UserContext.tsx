@@ -9,10 +9,17 @@ import React, {
   useRef,
 } from "react";
 import { User } from "@shared/types";
-import { authApi } from "@/lib/api/services/authService";
+import { authApi, authKeys } from "@/lib/api/services/authService";
 import { userApi } from "@/lib/api/services/userService";
 import { logger } from "@/lib/api/logger";
 import { ApiError } from "@/lib/api/errors";
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  UseQueryOptions,
+} from "@tanstack/react-query";
+import { hasAuthSession } from "@/utils/cookieUtils";
 
 type AuthStatus =
   | "idle"
@@ -81,16 +88,9 @@ const getErrorMessage = (error: unknown): AuthState["error"] => {
 let isGloballyInitialized = false;
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
   const [state, setState] = useState<AuthState>(initialState);
-  const initializationRef = useRef<{
-    isInitializing: boolean;
-    abortController: AbortController | null;
-    promise: Promise<void> | null;
-  }>({
-    isInitializing: false,
-    abortController: null,
-    promise: null,
-  });
+  const initializationRef = useRef(false);
 
   const updateState = useCallback((updates: Partial<AuthState>) => {
     setState((prev) => {
@@ -112,288 +112,340 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const refreshAuthState = useCallback(async () => {
-    if (
-      initializationRef.current.isInitializing &&
-      initializationRef.current.promise
-    ) {
-      return initializationRef.current.promise;
-    }
+  // Auth initialization query
+  const queryOptions: UseQueryOptions<User | null, ApiError> = {
+    queryKey: authKeys.session(),
+    queryFn: async () => {
+      logger.debug("API Request: Initialize Auth", {
+        timestamp: new Date().toISOString(),
+      });
 
-    const initPromise = (async () => {
       try {
-        initializationRef.current.isInitializing = true;
-        initializationRef.current.abortController = new AbortController();
+        const response = await authApi.auth.initializeAuth();
+        const data = response?.data ?? null;
 
-        updateState({ status: "loading", error: null });
-        logger.debug("API Request: Initialize Auth");
-
-        const response = await authApi.auth.initializeAuth({
-          signal: initializationRef.current.abortController.signal,
-        });
-
-        if (response?.data) {
-          updateState({
-            user: response.data,
-            status: "authenticated",
-            error: null,
-          });
-          logger.info("Auth initialized - user authenticated", {
-            userId: response.data.id,
-            activeHouseholdId: response.data.activeHouseholdId,
+        if (data) {
+          logger.debug("Auth initialization succeeded", {
+            hasUser: true,
+            userId: data.id,
           });
         } else {
-          updateState({
-            user: null,
-            status: "unauthenticated",
-            error: null,
-          });
-          logger.info("Auth initialized - no active session");
+          logger.debug("Auth initialization - no session");
         }
+
+        return data;
       } catch (error) {
-        if (error instanceof Error && error.name === "AbortError") {
-          logger.debug("Auth initialization aborted");
-          return;
-        }
+        logger.error("Auth initialization failed", {
+          error: error instanceof Error ? error.message : error,
+        });
+        throw error;
+      }
+    },
+    retry: 0,
+    staleTime: Infinity,
+    gcTime: Infinity,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    enabled: !initializationRef.current,
+  };
 
-        if (
-          error instanceof ApiError &&
-          (error.status === 401 || error.status === 403)
-        ) {
-          updateState({
-            user: null,
-            status: "unauthenticated",
-            error: null,
-          });
-          logger.info("Auth initialized - unauthorized");
-          return;
-        }
+  const { data: authData, error: initError } = useQuery<User | null, ApiError>(
+    queryOptions
+  );
 
+  // Handle auth state updates
+  useEffect(() => {
+    if (!initializationRef.current && (authData !== undefined || initError)) {
+      initializationRef.current = true;
+
+      if (authData) {
+        updateState({
+          user: authData,
+          status: "authenticated",
+          error: null,
+        });
+        logger.info("Auth initialized - user authenticated", {
+          userId: authData.id,
+          activeHouseholdId: authData.activeHouseholdId,
+        });
+      } else {
+        updateState({
+          user: null,
+          status: "unauthenticated",
+          error: null,
+        });
+        logger.info("Auth initialized - no active session");
+      }
+    }
+  }, [authData, initError, updateState]);
+
+  // Login mutation
+  const loginMutation = useMutation<
+    User,
+    ApiError,
+    { email: string; password: string }
+  >({
+    mutationFn: async ({ email, password }) => {
+      updateState({ status: "loading", error: null });
+      const response = await authApi.auth.login({ email, password });
+      return response.data;
+    },
+    onSuccess: (user) => {
+      updateState({
+        user,
+        status: "authenticated",
+        error: null,
+      });
+      queryClient.setQueryData(["auth", "session"], user);
+      logger.info("User authenticated", {
+        userId: user.id,
+        method: "login",
+        timestamp: new Date().toISOString(),
+      });
+    },
+    onError: (error: ApiError) => {
+      let errorMessage = "An unexpected error occurred";
+      let errorCode = "UNKNOWN_ERROR";
+
+      if (error.status === 401) {
+        errorMessage = "Invalid email or password";
+        errorCode = "INVALID_CREDENTIALS";
+      } else if (error.status === 400) {
+        errorMessage = "Please check your input";
+        errorCode = "VALIDATION_ERROR";
+      } else if (error.status === 429) {
+        errorMessage = "Too many attempts. Please try again later";
+        errorCode = "RATE_LIMIT";
+      }
+
+      updateState({
+        status: "error",
+        error: {
+          message: errorMessage,
+          code: errorCode,
+          details: error.data,
+        },
+        user: null,
+      });
+
+      logger.error("Login failed", {
+        status: error.status,
+        type: error.type,
+        message: errorMessage,
+        details: error.data,
+      });
+    },
+  });
+
+  // Register mutation
+  const registerMutation = useMutation({
+    mutationFn: async ({
+      email,
+      password,
+      name,
+    }: {
+      email: string;
+      password: string;
+      name: string;
+    }) => {
+      updateState({ status: "loading", error: null });
+      const response = await authApi.auth.register({ email, password, name });
+      if (!response?.data) {
+        throw new Error("Registration failed - no user data received");
+      }
+      return response.data;
+    },
+    onSuccess: (user) => {
+      updateState({
+        user,
+        status: "authenticated",
+        error: null,
+      });
+      queryClient.setQueryData(["auth", "session"], user);
+      logger.info("User registered", {
+        userId: user.id,
+        method: "register",
+        timestamp: new Date().toISOString(),
+      });
+    },
+    onError: (error) => {
+      if (error instanceof ApiError) {
+        switch (error.status) {
+          case 409:
+            updateState({
+              status: "error",
+              error: {
+                message: "An account with this email already exists",
+                code: "EMAIL_EXISTS",
+              },
+              user: null,
+            });
+            break;
+          case 400:
+            updateState({
+              status: "error",
+              error: {
+                message: "Invalid registration data provided",
+                code: "INVALID_DATA",
+                details: error.data,
+              },
+              user: null,
+            });
+            break;
+          default:
+            const errorState = getErrorMessage(error);
+            updateState({
+              status: "error",
+              error: errorState,
+              user: null,
+            });
+        }
+      } else {
         const errorState = getErrorMessage(error);
         updateState({
           status: "error",
           error: errorState,
           user: null,
         });
-        logger.error("Auth initialization failed", errorState);
-      } finally {
-        initializationRef.current.isInitializing = false;
-        initializationRef.current.promise = null;
-        initializationRef.current.abortController = null;
       }
-    })();
+    },
+  });
 
-    initializationRef.current.promise = initPromise;
-    return initPromise;
-  }, [updateState]);
-
-  useEffect(() => {
-    if (!isGloballyInitialized) {
-      isGloballyInitialized = true;
-      logger.debug("Auth provider mounted");
-      refreshAuthState();
-    }
-
-    return () => {
-      if (initializationRef.current.abortController) {
-        initializationRef.current.abortController.abort();
+  // Logout mutation
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      updateState({ status: "loading", error: null });
+      const userId = state.user?.id;
+      if (userId) {
+        logger.info("User logged out", {
+          userId,
+          timestamp: new Date().toISOString(),
+        });
       }
-      logger.debug("Auth provider unmounting");
-    };
-  }, [refreshAuthState]);
-
-  const setLoading = useCallback(() => {
-    updateState({ status: "loading", error: null });
-  }, [updateState]);
-
-  const setError = useCallback(
-    (error: unknown) => {
-      const errorState = getErrorMessage(error);
-      logger.error("Auth error", {
-        code: errorState.code,
-        message: errorState.message,
+      return authApi.auth.logout();
+    },
+    onSuccess: () => {
+      updateState({
+        user: null,
+        status: "unauthenticated",
+        error: null,
       });
+      queryClient.setQueryData(["auth", "session"], null);
+    },
+    onError: (error) => {
+      const errorState = getErrorMessage(error);
       updateState({
         status: "error",
         error: errorState,
         user: null,
       });
     },
-    [updateState]
-  );
+  });
 
-  const clearError = useCallback(() => {
-    updateState({ error: null });
-  }, [updateState]);
-
-  const setAuthenticated = useCallback(
-    (user: User) => {
+  // Profile update mutation
+  const updateProfileMutation = useMutation({
+    mutationFn: async (data: { name?: string; profileImageURL?: string }) => {
+      updateState({ status: "loading", error: null });
+      const response = await userApi.users.updateProfile(data);
+      return response.data;
+    },
+    onSuccess: (user) => {
       updateState({
         user,
         status: "authenticated",
         error: null,
       });
-    },
-    [updateState]
-  );
-
-  const setUnauthenticated = useCallback(() => {
-    updateState({
-      user: null,
-      status: "unauthenticated",
-      error: null,
-    });
-  }, [updateState]);
-
-  const login = useCallback(
-    async (email: string, password: string) => {
-      try {
-        setLoading();
-        const response = await authApi.auth.login({ email, password });
-        setAuthenticated(response.data);
-        logger.info("User authenticated", {
-          userId: response.data.id,
-          method: "login",
-          timestamp: new Date().toISOString(),
-        });
-      } catch (error) {
-        if (error instanceof ApiError && error.status === 401) {
-          setError({
-            message: "Invalid email or password",
-            code: "INVALID_CREDENTIALS",
-          });
-        } else {
-          setError(error);
-        }
-        throw error;
-      }
-    },
-    [setLoading, setAuthenticated, setError]
-  );
-
-  const register = useCallback(
-    async (email: string, password: string, name: string) => {
-      try {
-        setLoading();
-        const response = await authApi.auth.register({ email, password, name });
-        if (!response?.data) {
-          throw new Error("Registration failed - no user data received");
-        }
-
-        setAuthenticated(response.data);
-        logger.info("User registered", {
-          userId: response.data.id,
-          method: "register",
-          timestamp: new Date().toISOString(),
-        });
-      } catch (error) {
-        if (error instanceof ApiError) {
-          switch (error.status) {
-            case 409:
-              setError({
-                message: "An account with this email already exists",
-                code: "EMAIL_EXISTS",
-              });
-              break;
-            case 400:
-              setError({
-                message: "Invalid registration data provided",
-                code: "INVALID_DATA",
-                details: error.data,
-              });
-              break;
-            default:
-              setError(error);
-          }
-        } else {
-          setError(error);
-        }
-        throw error;
-      }
-    },
-    [setLoading, setAuthenticated, setError]
-  );
-
-  const logout = useCallback(async () => {
-    try {
-      setLoading();
-      setState((currentState) => {
-        const userId = currentState.user?.id;
-        if (userId) {
-          logger.info("User logged out", {
-            userId,
-            timestamp: new Date().toISOString(),
-          });
-        }
-        return currentState;
+      queryClient.setQueryData(["auth", "session"], user);
+      logger.info("User profile updated", {
+        userId: user.id,
+        timestamp: new Date().toISOString(),
       });
-
-      await authApi.auth.logout();
-      setUnauthenticated();
-    } catch (error) {
-      setError(error);
-      throw error;
-    }
-  }, [setLoading, setUnauthenticated, setError]);
-
-  const setActiveHousehold = useCallback(
-    async (householdId: string | null) => {
-      try {
-        setLoading();
-        const response = await userApi.users.setActiveHousehold(householdId);
-        setAuthenticated(response.data);
-        logger.info("Active household updated", {
-          userId: response.data.id,
-          householdId,
-          timestamp: new Date().toISOString(),
-        });
-      } catch (error) {
-        setError(error);
-        throw error;
-      }
     },
-    [setLoading, setAuthenticated, setError]
-  );
-
-  const updateProfile = useCallback(
-    async (data: { name?: string; profileImageURL?: string }) => {
-      try {
-        setLoading();
-        const response = await userApi.users.updateProfile(data);
-        setAuthenticated(response.data);
-        logger.info("User profile updated", {
-          userId: response.data.id,
-          updatedFields: Object.keys(data),
-          timestamp: new Date().toISOString(),
-        });
-      } catch (error) {
-        setError(error);
-        throw error;
-      }
+    onError: (error) => {
+      const errorState = getErrorMessage(error);
+      updateState({
+        status: "error",
+        error: errorState,
+        user: null,
+      });
     },
-    [setLoading, setAuthenticated, setError]
-  );
+  });
+
+  // Active household mutation
+  const setActiveHouseholdMutation = useMutation({
+    mutationFn: async (householdId: string | null) => {
+      updateState({ status: "loading", error: null });
+      const response = await userApi.users.setActiveHousehold(householdId);
+      return response.data;
+    },
+    onSuccess: (user) => {
+      updateState({
+        user,
+        status: "authenticated",
+        error: null,
+      });
+      queryClient.setQueryData(["auth", "session"], user);
+      logger.info("Active household updated", {
+        userId: user.id,
+        householdId: user.activeHouseholdId,
+        timestamp: new Date().toISOString(),
+      });
+    },
+    onError: (error) => {
+      const errorState = getErrorMessage(error);
+      updateState({
+        status: "error",
+        error: errorState,
+        user: null,
+      });
+    },
+  });
+
+  const clearError = useCallback(() => {
+    updateState({ error: null });
+  }, [updateState]);
 
   const value = useMemo(
     () => ({
       ...state,
-      login,
-      register,
-      logout,
-      refreshAuthState,
+      login: async (email: string, password: string) => {
+        try {
+          await loginMutation.mutateAsync({ email, password });
+        } catch (error) {
+          // Let the error propagate to the component
+          throw error;
+        }
+      },
+      register: async (email: string, password: string, name: string) => {
+        await registerMutation.mutateAsync({ email, password, name });
+      },
+      logout: async () => {
+        await logoutMutation.mutateAsync();
+      },
+      refreshAuthState: () => {
+        return queryClient.invalidateQueries({ queryKey: ["auth", "session"] });
+      },
       clearError,
-      setActiveHousehold,
-      updateProfile,
+      setActiveHousehold: async (householdId: string | null) => {
+        await setActiveHouseholdMutation.mutateAsync(householdId);
+      },
+      updateProfile: async (data: {
+        name?: string;
+        profileImageURL?: string;
+      }) => {
+        await updateProfileMutation.mutateAsync(data);
+      },
     }),
     [
       state,
-      login,
-      register,
-      logout,
-      refreshAuthState,
+      loginMutation.mutateAsync,
+      registerMutation.mutateAsync,
+      logoutMutation.mutateAsync,
+      queryClient,
       clearError,
-      setActiveHousehold,
-      updateProfile,
+      setActiveHouseholdMutation.mutateAsync,
+      updateProfileMutation.mutateAsync,
     ]
   );
 

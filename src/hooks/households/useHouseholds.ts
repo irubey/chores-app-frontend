@@ -5,24 +5,24 @@ import {
   useQueryClient,
   type UseQueryOptions,
   type UseMutationOptions,
-  type UseMutationResult,
 } from "@tanstack/react-query";
 import {
   householdApi,
   householdKeys,
 } from "@/lib/api/services/householdService";
+import { userApi, userKeys } from "@/lib/api/services/userService";
 import { logger } from "@/lib/api/logger";
 import type {
   HouseholdWithMembers,
+  HouseholdMember,
+  User,
   CreateHouseholdDTO,
   UpdateHouseholdDTO,
-  HouseholdMember,
-  AddMemberDTO,
 } from "@shared/types";
-import type { ApiRequestOptions } from "@/lib/api/utils/apiUtils";
-import { CACHE_TIMES, STALE_TIMES } from "@/lib/api/utils/apiUtils";
 import { ApiResponse } from "@shared/interfaces/apiResponse";
 import { useAuthUser, useIsAuthenticated } from "@/contexts/UserContext";
+import { HouseholdRole } from "@shared/enums";
+import { CACHE_TIMES, STALE_TIMES } from "@/lib/api/utils/apiUtils";
 
 // Types
 interface UpdateHouseholdVars {
@@ -30,17 +30,39 @@ interface UpdateHouseholdVars {
   data: UpdateHouseholdDTO;
 }
 
-interface RemoveMemberVars {
-  householdId: string;
-  memberId: string;
-}
-
-interface AddMemberVars {
-  householdId: string;
-  data: AddMemberDTO;
-}
-
 // List hooks
+export const useHouseholds = (
+  options?: Omit<
+    UseQueryOptions<ApiResponse<HouseholdWithMembers[]>>,
+    "queryKey" | "queryFn"
+  >
+) => {
+  const isAuthenticated = useIsAuthenticated();
+
+  return useQuery({
+    queryKey: householdKeys.lists(),
+    queryFn: async () => {
+      try {
+        const result = await householdApi.households.getUserHouseholds();
+        logger.debug("Households fetched", {
+          count: result.data.length,
+        });
+        return result;
+      } catch (error) {
+        logger.error("Failed to fetch households", { error });
+        throw error;
+      }
+    },
+    staleTime: STALE_TIMES.STANDARD,
+    gcTime: CACHE_TIMES.STANDARD,
+    enabled: isAuthenticated,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    ...options,
+  });
+};
+
 export const useUserHouseholds = (
   options?: Omit<
     UseQueryOptions<ApiResponse<HouseholdWithMembers[]>>,
@@ -66,35 +88,9 @@ export const useUserHouseholds = (
     staleTime: STALE_TIMES.STANDARD,
     gcTime: CACHE_TIMES.STANDARD,
     enabled: isAuthenticated,
-    ...options,
-  });
-};
-
-export const usePendingInvitations = (
-  options?: Omit<
-    UseQueryOptions<ApiResponse<HouseholdWithMembers[]>>,
-    "queryKey" | "queryFn"
-  >
-) => {
-  const isAuthenticated = useIsAuthenticated();
-
-  return useQuery({
-    queryKey: householdKeys.invitations(),
-    queryFn: async () => {
-      try {
-        const result = await householdApi.households.getPendingInvitations();
-        logger.debug("Pending invitations fetched", {
-          count: result.data.length,
-        });
-        return result;
-      } catch (error) {
-        logger.error("Failed to fetch pending invitations", { error });
-        throw error;
-      }
-    },
-    staleTime: STALE_TIMES.STANDARD,
-    gcTime: CACHE_TIMES.STANDARD,
-    enabled: isAuthenticated,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     ...options,
   });
 };
@@ -143,11 +139,7 @@ export const useCreateHousehold = (
     >,
     "mutationFn"
   >
-): UseMutationResult<
-  ApiResponse<HouseholdWithMembers>,
-  Error,
-  CreateHouseholdDTO
-> => {
+) => {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -164,10 +156,12 @@ export const useCreateHousehold = (
         throw error;
       }
     },
-    onSuccess: () => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries({
         queryKey: householdKeys.userHouseholds(),
       });
+      // Set as active household after creation
+      userApi.users.setActiveHousehold(response.data.id);
     },
     ...options,
   });
@@ -182,11 +176,7 @@ export const useUpdateHousehold = (
     >,
     "mutationFn"
   >
-): UseMutationResult<
-  ApiResponse<HouseholdWithMembers>,
-  Error,
-  UpdateHouseholdVars
-> => {
+) => {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -223,8 +213,9 @@ export const useDeleteHousehold = (
     UseMutationOptions<ApiResponse<void>, Error, string>,
     "mutationFn"
   >
-): UseMutationResult<ApiResponse<void>, Error, string> => {
+) => {
   const queryClient = useQueryClient();
+  const user = useAuthUser();
 
   return useMutation({
     mutationFn: async (householdId: string) => {
@@ -242,7 +233,11 @@ export const useDeleteHousehold = (
         throw error;
       }
     },
-    onSuccess: (_, householdId) => {
+    onSuccess: async (_, householdId) => {
+      // If deleted household was active, clear active household
+      if (user?.activeHouseholdId === householdId) {
+        await userApi.users.setActiveHousehold(null);
+      }
       queryClient.removeQueries({
         queryKey: householdKeys.detail(householdId),
       });
@@ -254,109 +249,39 @@ export const useDeleteHousehold = (
   });
 };
 
-// Members hooks
-export const useHouseholdMembers = (
+// Member mutations
+export const useUpdateHouseholdMember = (
   householdId: string,
   options?: Omit<
-    UseQueryOptions<ApiResponse<HouseholdMember[]>>,
-    "queryKey" | "queryFn"
+    UseMutationOptions<
+      ApiResponse<void>,
+      Error,
+      { memberId: string; data: { role?: HouseholdRole; leftAt?: Date } }
+    >,
+    "mutationFn"
   >
 ) => {
-  const isAuthenticated = useIsAuthenticated();
-
-  return useQuery({
-    queryKey: householdKeys.members(householdId),
-    queryFn: async () => {
-      try {
-        const result = await householdApi.households.getMembers(householdId);
-        logger.debug("Household members fetched", {
-          householdId,
-          totalMembers: result.data.length,
-          invitedCount: result.data.filter((m) => m.isInvited).length,
-          acceptedCount: result.data.filter((m) => m.isAccepted).length,
-        });
-        return result;
-      } catch (error) {
-        logger.error("Failed to fetch household members", {
-          error,
-          householdId,
-        });
-        throw error;
-      }
-    },
-    staleTime: STALE_TIMES.STANDARD,
-    gcTime: CACHE_TIMES.STANDARD,
-    enabled: isAuthenticated && !!householdId,
-    ...options,
-  });
-};
-
-export const useAddMember = (
-  options?: Omit<
-    UseMutationOptions<ApiResponse<HouseholdMember>, Error, AddMemberVars>,
-    "mutationFn"
-  >
-): UseMutationResult<ApiResponse<HouseholdMember>, Error, AddMemberVars> => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ householdId, data }: AddMemberVars) => {
-      try {
-        const result = await householdApi.households.addMember(
-          householdId,
-          data
-        );
-        logger.info("Member added", {
-          householdId,
-          email: data.email,
-        });
-        return result;
-      } catch (error) {
-        logger.error("Error adding member", { error });
-        throw error;
-      }
-    },
-    onSuccess: (_, { householdId }) => {
-      queryClient.invalidateQueries({
-        queryKey: householdKeys.members(householdId),
-      });
-      queryClient.invalidateQueries({
-        queryKey: householdKeys.detail(householdId),
-      });
-    },
-    ...options,
-  });
-};
-
-export const useRemoveMember = (
-  options?: Omit<
-    UseMutationOptions<ApiResponse<void>, Error, RemoveMemberVars>,
-    "mutationFn"
-  >
-): UseMutationResult<ApiResponse<void>, Error, RemoveMemberVars> => {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({ householdId, memberId }: RemoveMemberVars) => {
+    mutationFn: async ({ memberId, data }) => {
       try {
         const result = await householdApi.households.removeMember(
           householdId,
           memberId
         );
-        logger.info("Member removed", {
+        logger.info("Member updated", {
           householdId,
           memberId,
+          updatedFields: Object.keys(data),
         });
         return result;
       } catch (error) {
-        logger.error("Error removing member", { error });
+        logger.error("Failed to update member", { error });
         throw error;
       }
     },
-    onSuccess: (_, { householdId }) => {
-      queryClient.invalidateQueries({
-        queryKey: householdKeys.members(householdId),
-      });
+    onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: householdKeys.detail(householdId),
       });
@@ -365,34 +290,68 @@ export const useRemoveMember = (
   });
 };
 
-export const useSendInvitation = (
+export const useSendHouseholdInvitation = (
+  householdId: string,
   options?: Omit<
-    UseMutationOptions<ApiResponse<void>, Error, AddMemberVars>,
+    UseMutationOptions<ApiResponse<void>, Error, { email: string }>,
     "mutationFn"
   >
-): UseMutationResult<ApiResponse<void>, Error, AddMemberVars> => {
+) => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ householdId, data }: AddMemberVars) => {
+    mutationFn: async ({ email }) => {
       try {
         const result = await householdApi.households.sendInvitation(
           householdId,
-          data.email
+          email
         );
         logger.info("Invitation sent", {
           householdId,
-          email: data.email,
+          email,
         });
         return result;
       } catch (error) {
-        logger.error("Error sending invitation", { error });
+        logger.error("Failed to send invitation", { error });
         throw error;
       }
     },
-    onSuccess: (_, { householdId }) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: householdKeys.members(householdId),
+        queryKey: householdKeys.detail(householdId),
+      });
+    },
+    ...options,
+  });
+};
+
+export const useSetActiveHousehold = (
+  options?: Omit<
+    UseMutationOptions<ApiResponse<User>, Error, string | null>,
+    "mutationFn"
+  >
+) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (householdId) => {
+      try {
+        const result = await userApi.users.setActiveHousehold(householdId);
+        logger.info("Active household updated", {
+          householdId,
+        });
+        return result;
+      } catch (error) {
+        logger.error("Failed to update active household", { error });
+        throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: userKeys.profile(),
+      });
+      queryClient.invalidateQueries({
+        queryKey: householdKeys.userHouseholds(),
       });
     },
     ...options,

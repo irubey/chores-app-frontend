@@ -27,6 +27,12 @@ declare module "../logger" {
   interface Logger {
     logAPIResponse(data: APILogData): void;
     logAPIError(data: APIErrorData): void;
+    logAPISuccess(
+      data: APILogData & {
+        operation?: string;
+        metadata?: Record<string, unknown>;
+      }
+    ): void;
   }
 }
 

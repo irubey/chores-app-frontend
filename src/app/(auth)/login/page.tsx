@@ -13,7 +13,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { logger } from "@/lib/api/logger";
 import { ApiError, ApiErrorType } from "@/lib/api/errors/apiErrors";
-import { FaEnvelope, FaLock } from "react-icons/fa";
+import { FaEnvelope, FaLock, FaExclamationCircle } from "react-icons/fa";
 
 const LoginPage: React.FC = () => {
   const user = useAuthUser();
@@ -71,9 +71,8 @@ const LoginPage: React.FC = () => {
     if (!validateForm()) return;
 
     try {
-      // Destructure email and password from formData
       const { email, password } = formData;
-      await login(email, password); // Pass them separately
+      await login(email, password);
     } catch (err) {
       logger.error("Login failed", {
         error:
@@ -82,24 +81,30 @@ const LoginPage: React.FC = () => {
                 type: err.type,
                 status: err.status,
                 message: err.message,
+                details: err.data,
               }
             : "Unknown error",
       });
 
-      // Handle specific error cases
       if (err instanceof ApiError) {
-        switch (err.type) {
-          case ApiErrorType.UNAUTHORIZED:
-            setFormError("Invalid email or password");
+        switch (err.status) {
+          case 401:
+            setFormError("Invalid email or password. Please try again.");
             break;
-          case ApiErrorType.VALIDATION:
-            setFormError("Please check your input");
+          case 400:
+            setFormError("Please check your input and try again.");
+            break;
+          case 429:
+            setFormError("Too many login attempts. Please try again later.");
+            break;
+          case 500:
+            setFormError("Server error. Please try again later.");
             break;
           default:
             setFormError("An error occurred. Please try again.");
         }
       } else {
-        setFormError("An unexpected error occurred");
+        setFormError("An unexpected error occurred. Please try again.");
       }
     }
   };
@@ -117,15 +122,19 @@ const LoginPage: React.FC = () => {
             </p>
           </div>
 
-          {authError && (
-            <div className="p-4 bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-800 text-red-700 dark:text-red-400 rounded-md text-sm animate-fade-in">
-              {authError.message}
-            </div>
-          )}
-
-          {formError && (
-            <div className="p-4 bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-800 text-red-700 dark:text-red-400 rounded-md text-sm animate-fade-in">
-              {formError}
+          {(authError || formError) && (
+            <div className="p-4 bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-800 text-red-700 dark:text-red-400 rounded-md text-sm animate-fade-in flex items-center gap-2">
+              <div className="shrink-0">
+                <FaExclamationCircle className="h-5 w-5" />
+              </div>
+              <div>
+                {formError || authError?.message}
+                {authError?.code === "RATE_LIMIT" && (
+                  <p className="mt-1 text-xs">
+                    Please wait a few minutes before trying again.
+                  </p>
+                )}
+              </div>
             </div>
           )}
 

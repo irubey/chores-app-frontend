@@ -1,38 +1,23 @@
 "use client";
 
 import React from "react";
+import { useRouter } from "next/navigation";
 import { useAuthUser } from "@/contexts/UserContext";
 import { logger } from "@/lib/api/logger";
-import {
-  useUserHouseholds,
-  useHousehold,
-} from "@/hooks/households/useHouseholds";
+import { useUserHouseholds } from "@/hooks/households/useHouseholds";
 import HouseholdsGrid from "@/components/household/HouseholdsGrid";
 import CreateHouseholdButton from "@/components/household/CreateHouseholdButton";
 import Spinner from "@/components/common/Spinner";
 
 export default function DashboardPage() {
   const user = useAuthUser();
+  const router = useRouter();
   const activeHouseholdId = user?.activeHouseholdId;
 
-  const {
-    data: householdsResponse,
-    isLoading: isLoadingHouseholds,
-    error: householdsError,
-  } = useUserHouseholds();
-
-  const {
-    data: activeHouseholdResponse,
-    isLoading: isLoadingActive,
-    error: activeError,
-  } = useHousehold(activeHouseholdId || "", {
-    enabled: !!activeHouseholdId,
-  });
+  const { data: householdsResponse, isLoading, error } = useUserHouseholds();
 
   const households = householdsResponse?.data;
-  const activeHousehold = activeHouseholdResponse?.data;
-  const isLoading = isLoadingHouseholds || isLoadingActive;
-  const error = householdsError || activeError;
+  const activeHousehold = households?.find((h) => h.id === activeHouseholdId);
 
   logger.debug("Dashboard render state", {
     hasUser: !!user,
@@ -66,6 +51,12 @@ export default function DashboardPage() {
     );
   }
 
+  const handleViewActiveHousehold = () => {
+    if (activeHouseholdId) {
+      router.push(`/household/${activeHouseholdId}`);
+    }
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       {activeHousehold && (
@@ -81,7 +72,7 @@ export default function DashboardPage() {
               </p>
             </div>
             <button
-              onClick={() => {}} // TODO: Add navigation to household detail
+              onClick={handleViewActiveHousehold}
               className="rounded bg-primary px-4 py-2 text-white hover:bg-primary-dark"
             >
               View Details

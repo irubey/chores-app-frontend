@@ -133,6 +133,11 @@ export function setupInterceptors(axiosInstance: AxiosInstance) {
     async (error: AxiosError) => {
       const originalRequest = error.config as InternalAxiosRequestConfig;
 
+      // Skip token refresh for auth endpoints
+      if (originalRequest?.url?.startsWith("/auth/")) {
+        throw error;
+      }
+
       // Only handle 401s for token refresh, let apiUtils handle other errors
       if (error.response?.status === 401 && originalRequest) {
         try {

@@ -5,7 +5,9 @@ import {
 } from "../utils/apiUtils";
 import { axiosInstance } from "../axiosInstance";
 import { ApiResponse } from "@shared/interfaces";
-import { User, RegisterUserDTO, LoginCredentials } from "@shared/types";
+import { LoginCredentials, User, RegisterUserDTO } from "@shared/types";
+import { logger } from "../logger";
+import { ApiError } from "../errors";
 
 export const authKeys = {
   all: ["auth"] as const,
@@ -44,7 +46,10 @@ export const authApi = {
           }),
         {
           operation: "Login User",
-          metadata: { email: credentials.email },
+          metadata: {
+            email: credentials.email,
+            timestamp: new Date().toISOString(),
+          },
         }
       );
     },
@@ -72,7 +77,7 @@ export const authApi = {
       return handleApiRequest<void>(
         () =>
           axiosInstance.post(
-            "/auth/refresh-token",
+            "/auth/refresh",
             {},
             {
               ...buildRequestConfig(config),
@@ -100,7 +105,7 @@ export const authApi = {
           }
         );
       } catch (error) {
-        if (error.status === 401) {
+        if (error instanceof ApiError && error.status === 401) {
           return null;
         }
         throw error;
