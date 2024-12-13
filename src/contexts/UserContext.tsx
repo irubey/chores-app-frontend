@@ -11,7 +11,7 @@ import React, {
 import { User } from "@shared/types";
 import { authApi, authKeys } from "@/lib/api/services/authService";
 import { logger } from "@/lib/api/logger";
-import { ApiError } from "@/lib/api/errors";
+import { ApiError, ApiErrorType } from "@/lib/api/errors/apiErrors";
 import { ApiResponse } from "@shared/interfaces/apiResponse";
 import {
   useQuery,
@@ -20,6 +20,7 @@ import {
   UseQueryOptions,
 } from "@tanstack/react-query";
 import { hasAuthSession } from "@/utils/cookieUtils";
+import { userKeys } from "@/lib/api/services/userService";
 
 type AuthStatus =
   | "idle"
@@ -45,7 +46,11 @@ interface AuthActions {
   clearError: () => void;
 }
 
-type AuthContextValue = AuthState & AuthActions;
+type AuthContextValue = AuthState &
+  AuthActions & {
+    user: User | null;
+    isLoading: boolean;
+  };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
@@ -80,7 +85,16 @@ const getErrorMessage = (error: unknown): AuthState["error"] => {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   const [state, setState] = useState<AuthState>(initialState);
-  const initializationRef = useRef(false);
+  const initRef = useRef(false);
+  const [shouldInitialize, setShouldInitialize] = useState(false);
+
+  // Initialize on mount only
+  useEffect(() => {
+    if (!initRef.current) {
+      initRef.current = true;
+      setShouldInitialize(true);
+    }
+  }, []);
 
   const updateState = useCallback((updates: Partial<AuthState>) => {
     setState((prev) => {
@@ -101,11 +115,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Auth initialization query
-  const queryOptions: UseQueryOptions<User | null, ApiError> = {
+  const {
+    data: authData,
+    error: initError,
+    isLoading,
+  } = useQuery<User | null, ApiError>({
     queryKey: authKeys.session(),
     queryFn: async () => {
       logger.debug("API Request: Initialize Auth", {
         timestamp: new Date().toISOString(),
+        isInitialized: initRef.current,
       });
 
       try {
@@ -117,15 +136,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             hasUser: true,
             userId: data.id,
           });
+          // Pre-populate user profile cache
+          queryClient.setQueryData(userKeys.profile(), response);
         } else {
           logger.debug("Auth initialization - no session");
         }
 
+        setShouldInitialize(false);
         return data;
       } catch (error) {
         logger.error("Auth initialization failed", {
           error: error instanceof Error ? error.message : error,
         });
+
+        // Handle refresh token failure
+        if (
+          error instanceof ApiError &&
+          error.type === ApiErrorType.UNAUTHORIZED
+        ) {
+          logger.debug("Auth refresh failed, clearing state", {
+            errorType: error.type,
+            status: error.status,
+            data: error.data,
+          });
+
+          updateState({
+            status: "unauthenticated",
+            error: {
+              message: "Session expired",
+              code: error.data?.code,
+              details: error.data,
+            },
+          });
+
+          queryClient.setQueryData(authKeys.session(), null);
+          queryClient.setQueryData(userKeys.profile(), null);
+          queryClient.clear();
+        }
+
+        setShouldInitialize(false);
         throw error;
       }
     },
@@ -135,18 +184,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    enabled: !initializationRef.current,
-  };
-
-  const { data: authData, error: initError } = useQuery<User | null, ApiError>(
-    queryOptions
-  );
+    enabled: shouldInitialize,
+  });
 
   // Handle auth state updates
   useEffect(() => {
-    if (!initializationRef.current && (authData !== undefined || initError)) {
-      initializationRef.current = true;
-
+    if (!shouldInitialize && (authData !== undefined || initError)) {
       if (authData) {
         updateState({
           status: "authenticated",
@@ -163,27 +206,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logger.info("Auth initialized - no active session");
       }
     }
-  }, [authData, initError, updateState]);
+  }, [authData, initError, shouldInitialize, updateState]);
 
   // Login mutation
   const loginMutation = useMutation<
-    User,
+    ApiResponse<User>,
     ApiError,
     { email: string; password: string }
   >({
     mutationFn: async ({ email, password }) => {
       updateState({ status: "loading", error: null });
       const response = await authApi.auth.login({ email, password });
-      return response.data;
+      return response;
     },
-    onSuccess: (user) => {
+    onSuccess: (response) => {
       updateState({
         status: "authenticated",
         error: null,
       });
-      queryClient.setQueryData(["auth", "session"], user);
+      queryClient.setQueryData(authKeys.session(), response.data);
       logger.info("User authenticated", {
-        userId: user.id,
+        userId: response.data.id,
         method: "login",
         timestamp: new Date().toISOString(),
       });
@@ -222,31 +265,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
 
   // Register mutation
-  const registerMutation = useMutation({
-    mutationFn: async ({
-      email,
-      password,
-      name,
-    }: {
-      email: string;
-      password: string;
-      name: string;
-    }) => {
+  const registerMutation = useMutation<
+    ApiResponse<User>,
+    ApiError,
+    { email: string; password: string; name: string }
+  >({
+    mutationFn: async ({ email, password, name }) => {
       updateState({ status: "loading", error: null });
       const response = await authApi.auth.register({ email, password, name });
-      if (!response?.data) {
-        throw new Error("Registration failed - no user data received");
-      }
-      return response.data;
+      return response;
     },
-    onSuccess: (user) => {
+    onSuccess: (response) => {
       updateState({
         status: "authenticated",
         error: null,
       });
-      queryClient.setQueryData(["auth", "session"], user);
+      queryClient.setQueryData(authKeys.session(), response.data);
       logger.info("User registered", {
-        userId: user.id,
+        userId: response.data.id,
         method: "register",
         timestamp: new Date().toISOString(),
       });
@@ -328,27 +364,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo(
     () => ({
       ...state,
+      user: authData,
+      isLoading,
       login: async (email: string, password: string) => {
         try {
-          await loginMutation.mutateAsync({ email, password });
+          const response = await loginMutation.mutateAsync({ email, password });
+          // Update both auth and user profile cache
+          queryClient.setQueryData(authKeys.session(), response.data);
+          queryClient.setQueryData(userKeys.profile(), response);
         } catch (error) {
-          // Let the error propagate to the component
           throw error;
         }
       },
       register: async (email: string, password: string, name: string) => {
-        await registerMutation.mutateAsync({ email, password, name });
+        const response = await registerMutation.mutateAsync({
+          email,
+          password,
+          name,
+        });
+        // Update both auth and user profile cache
+        queryClient.setQueryData(authKeys.session(), response.data);
+        queryClient.setQueryData(userKeys.profile(), response);
       },
       logout: async () => {
         await logoutMutation.mutateAsync();
+        // Clear both auth and user profile cache
+        queryClient.setQueryData(authKeys.session(), null);
+        queryClient.setQueryData(userKeys.profile(), null);
       },
-      refreshAuthState: () => {
-        return queryClient.invalidateQueries({ queryKey: ["auth", "session"] });
+      refreshAuthState: async () => {
+        setShouldInitialize(true);
+        return queryClient.invalidateQueries({ queryKey: authKeys.session() });
       },
       clearError,
     }),
     [
       state,
+      authData,
+      isLoading,
       loginMutation.mutateAsync,
       registerMutation.mutateAsync,
       logoutMutation.mutateAsync,

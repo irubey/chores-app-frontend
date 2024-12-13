@@ -8,7 +8,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { logger } from "@/lib/api/logger";
 import Link from "next/link";
-import { useAuthUser } from "@/contexts/UserContext";
+import { useUser } from "@/hooks/users/useUser";
 
 interface ThreadCardProps {
   thread: ThreadWithDetails;
@@ -16,7 +16,8 @@ interface ThreadCardProps {
 }
 
 export function ThreadCard({ thread, animationDelay = 0 }: ThreadCardProps) {
-  const user = useAuthUser();
+  const { data: userData } = useUser();
+  const user = userData?.data;
 
   const lastMessage = useMemo(
     () => thread.messages[thread.messages.length - 1],

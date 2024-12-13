@@ -1,4 +1,4 @@
-import React from "react";
+import React, { memo } from "react";
 import { HouseholdWithMembers } from "@shared/types/household";
 import { logger } from "@/lib/api/logger";
 import HouseholdCardContainer from "./HouseholdCardContainer";
@@ -9,7 +9,7 @@ interface HouseholdSelectorProps {
   className?: string;
 }
 
-export default function HouseholdSelector({
+function HouseholdSelector({
   households,
   isLoading,
   className = "",
@@ -38,3 +38,23 @@ export default function HouseholdSelector({
     </div>
   );
 }
+
+// Memoize the component to prevent unnecessary renders
+export default memo(HouseholdSelector, (prevProps, nextProps) => {
+  // Only re-render if the households array changes or loading state changes
+  const prevCount = prevProps.households?.length ?? 0;
+  const nextCount = nextProps.households?.length ?? 0;
+
+  if (prevCount !== nextCount || prevProps.isLoading !== nextProps.isLoading) {
+    return false; // Re-render
+  }
+
+  // If counts match, check if the household IDs are the same
+  if (prevProps.households && nextProps.households) {
+    return prevProps.households.every(
+      (h, i) => h.id === nextProps.households![i].id
+    );
+  }
+
+  return true; // Don't re-render
+});

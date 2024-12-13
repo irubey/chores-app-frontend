@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { useHouseholds } from "@/hooks/households/useHouseholds";
-import { useAuthUser } from "@/contexts/UserContext";
+import { useUser } from "@/hooks/users/useUser";
 import { useCreateThread } from "@/hooks/threads/useThread";
 import { useQueryClient } from "@tanstack/react-query";
 import { threadKeys } from "@/lib/api/services/threadService";
@@ -21,7 +21,8 @@ export function ThreadCreator({
   onClose,
   onSuccess,
 }: ThreadCreatorProps) {
-  const user = useAuthUser();
+  const { data: userData } = useUser();
+  const user = userData?.data;
   const queryClient = useQueryClient();
   const { data: householdsData } = useHouseholds();
   const [isLoading, setIsLoading] = useState(false);

@@ -3,8 +3,14 @@ import { userApi, userKeys } from "@/lib/api/services/userService";
 import { UpdateUserDTO, User } from "@shared/types";
 import { ApiResponse } from "@shared/interfaces/apiResponse";
 import { logger } from "@/lib/api/logger";
+import { useAuth } from "@/contexts/UserContext";
+import { authKeys } from "@/lib/api/services/authService";
+import { ApiError } from "@/lib/api/errors";
 
 export function useUser() {
+  const { status, user: authUser } = useAuth();
+  const queryClient = useQueryClient();
+
   return useQuery({
     queryKey: userKeys.profile(),
     queryFn: async () => {
@@ -19,14 +25,21 @@ export function useUser() {
         throw error;
       }
     },
+    // Only fetch if authenticated and no initial data
+    enabled: status === "authenticated" && !authUser,
+    // Use auth data as initial data
+    initialData: authUser
+      ? ({ data: authUser } as ApiResponse<User>)
+      : undefined,
+    staleTime: 30000, // 30 seconds
   });
 }
 
 export function useUpdateProfile() {
   const queryClient = useQueryClient();
 
-  return useMutation({
-    mutationFn: async (data: UpdateUserDTO) => {
+  return useMutation<ApiResponse<User>, ApiError, UpdateUserDTO>({
+    mutationFn: async (data) => {
       try {
         const result = await userApi.users.updateProfile(data);
         logger.info("User profile updated", {
@@ -40,7 +53,9 @@ export function useUpdateProfile() {
       }
     },
     onSuccess: (response) => {
+      // Update both caches
       queryClient.setQueryData(userKeys.profile(), response);
+      queryClient.setQueryData(authKeys.session(), response.data);
     },
   });
 }
@@ -52,8 +67,8 @@ export function useSetActiveHousehold() {
     previousUser: ApiResponse<User> | undefined;
   }
 
-  return useMutation({
-    mutationFn: async (householdId: string | null) => {
+  return useMutation<ApiResponse<User>, ApiError, string | null>({
+    mutationFn: async (householdId) => {
       try {
         const result = await userApi.users.setActiveHousehold(householdId);
         logger.info("Active household updated", {
@@ -74,28 +89,32 @@ export function useSetActiveHousehold() {
         userKeys.profile()
       );
 
-      // Optimistically update the user
+      // Optimistically update both caches
       if (previousUser) {
-        queryClient.setQueryData<ApiResponse<User>>(userKeys.profile(), {
+        const updatedUser = {
           ...previousUser,
           data: {
             ...previousUser.data,
             activeHouseholdId: householdId,
           },
-        });
+        };
+        queryClient.setQueryData(userKeys.profile(), updatedUser);
+        queryClient.setQueryData(authKeys.session(), updatedUser.data);
       }
 
       return { previousUser };
     },
     onError: (_, __, context: MutationContext | undefined) => {
-      // Rollback on error
+      // Rollback both caches
       if (context?.previousUser) {
         queryClient.setQueryData(userKeys.profile(), context.previousUser);
+        queryClient.setQueryData(authKeys.session(), context.previousUser.data);
       }
     },
-    onSettled: () => {
-      // Invalidate and refetch
-      queryClient.invalidateQueries({ queryKey: userKeys.profile() });
+    onSuccess: (response) => {
+      // Update both caches
+      queryClient.setQueryData(userKeys.profile(), response);
+      queryClient.setQueryData(authKeys.session(), response.data);
     },
   });
 }

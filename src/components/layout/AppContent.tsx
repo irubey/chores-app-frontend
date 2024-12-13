@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { logger } from "@/lib/api/logger";
 import { useAuthStatus, useIsAuthenticated } from "@/contexts/UserContext";
@@ -37,6 +37,9 @@ export default function AppContent({ children }: AppContentProps) {
   const { status } = useAuthStatus();
   const router = useRouter();
   const pathname = usePathname();
+  const isRedirecting = useRef(false);
+  const lastPathname = useRef(pathname);
+  const isMounted = useRef(false);
 
   // Memoize isPublicRoute check
   const isPublicRoute = useMemo(
@@ -54,36 +57,91 @@ export default function AppContent({ children }: AppContentProps) {
     [status]
   );
 
+  // Memoize content to prevent unnecessary re-renders
+  const content = useMemo(
+    () => (
+      <div className="flex min-h-screen flex-col">
+        <Header user={userData?.data} />
+        {isAuthenticated && (
+          <HouseholdSelector
+            households={householdsData?.data}
+            isLoading={isLoadingHouseholds}
+          />
+        )}
+        <main className="container mx-auto flex-1 px-4 py-8">{children}</main>
+        <Footer />
+      </div>
+    ),
+    [
+      userData?.data,
+      isAuthenticated,
+      householdsData?.data,
+      isLoadingHouseholds,
+      children,
+    ]
+  );
+
+  // Memoize redirect handlers
+  const handleRedirect = useCallback(
+    (path: string, type: "login" | "dashboard") => {
+      if (isRedirecting.current || pathname === path) return;
+      isRedirecting.current = true;
+      logger.debug(`Redirecting to ${type}`, {
+        from: pathname,
+        to: path,
+        status,
+        isAuthenticated,
+      });
+      router.push(path);
+      setTimeout(() => {
+        isRedirecting.current = false;
+      }, 100);
+    },
+    [router, pathname, status, isAuthenticated]
+  );
+
+  // Handle initial mount
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+
   // Handle auth redirects
   useEffect(() => {
-    if (authState.isReady) {
-      if (!isPublicRoute && !isAuthenticated) {
-        logger.debug("Redirecting to login", {
-          pathname,
-          status,
-          isAuthenticated,
-        });
-        router.push("/login");
-      } else if (isPublicRoute && isAuthenticated) {
-        logger.debug("Redirecting to dashboard", {
-          pathname,
-          status,
-          isAuthenticated,
-        });
-        router.push("/dashboard");
-      }
+    if (
+      !isMounted.current ||
+      !authState.isReady ||
+      pathname === lastPathname.current
+    ) {
+      return;
+    }
+
+    lastPathname.current = pathname;
+
+    const shouldRedirectToLogin = !isPublicRoute && !isAuthenticated;
+    const shouldRedirectToDashboard = isPublicRoute && isAuthenticated;
+
+    if (shouldRedirectToLogin) {
+      handleRedirect("/login", "login");
+    } else if (shouldRedirectToDashboard) {
+      handleRedirect("/dashboard", "dashboard");
     }
   }, [
     authState.isReady,
     isPublicRoute,
     isAuthenticated,
-    router,
     pathname,
-    status,
+    handleRedirect,
   ]);
 
   // Show loading spinner during auth check
-  if (authState.isLoading || (!authState.isReady && !isPublicRoute)) {
+  if (
+    !isMounted.current ||
+    authState.isLoading ||
+    (!authState.isReady && !isPublicRoute)
+  ) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Spinner size="large" />
@@ -99,7 +157,7 @@ export default function AppContent({ children }: AppContentProps) {
           Authentication Error
         </p>
         <button
-          onClick={() => router.push("/login")}
+          onClick={() => handleRedirect("/login", "login")}
           className="rounded bg-primary px-4 py-2 text-white hover:bg-primary-dark"
         >
           Return to Login
@@ -108,21 +166,7 @@ export default function AppContent({ children }: AppContentProps) {
     );
   }
 
-  const content = (
-    <div className="flex min-h-screen flex-col">
-      <Header user={userData?.data} />
-      {isAuthenticated && (
-        <HouseholdSelector
-          households={householdsData?.data}
-          isLoading={isLoadingHouseholds}
-        />
-      )}
-      <main className="container mx-auto flex-1 px-4 py-8">{children}</main>
-      <Footer />
-    </div>
-  );
-
-  // Only wrap with SocketProvider when authenticated
+  // Return wrapped content based on auth state
   return isAuthenticated ? (
     <SocketProvider isAuthenticated={isAuthenticated} user={userData?.data}>
       {content}

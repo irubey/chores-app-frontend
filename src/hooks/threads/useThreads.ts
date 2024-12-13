@@ -1,94 +1,260 @@
-import { useQueries, type UseQueryOptions } from "@tanstack/react-query";
+import { useEffect } from "react";
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  type UseQueryOptions,
+} from "@tanstack/react-query";
 import { threadApi, threadKeys } from "@/lib/api/services/threadService";
+import {
+  ThreadWithDetails,
+  CreateThreadDTO,
+  HouseholdMember,
+  User,
+  Household,
+  MessageWithDetails,
+} from "@shared/types";
 import { logger } from "@/lib/api/logger";
-import type { ThreadWithDetails } from "@shared/types";
-import type { PaginationOptions } from "@shared/interfaces";
 import { CACHE_TIMES, STALE_TIMES } from "@/lib/api/utils/apiUtils";
-import { ApiResponse } from "@shared/interfaces/apiResponse";
+import { useSocket } from "@/contexts/SocketContext";
+import { socketClient } from "@/lib/socketClient";
+import { ApiRequestOptions } from "@/lib/api/utils/apiUtils";
+import { useUser } from "@/hooks/users/useUser";
 
 // Types
-interface ThreadsQueryParams extends PaginationOptions {
-  householdIds: string[];
-  enabled?: boolean;
+interface ThreadsOptions {
+  readonly householdId: string;
+  readonly requestOptions?: ApiRequestOptions;
+  readonly enabled?: boolean;
 }
 
-// List hook for multiple threads
+interface MutationContext {
+  readonly previousThreads: readonly ThreadWithDetails[] | undefined;
+}
+
+interface OptimisticUser extends Pick<User, "id" | "name" | "email"> {
+  readonly profileImageURL: null;
+  readonly activeHouseholdId: null;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+}
+
+interface OptimisticHousehold
+  extends Pick<
+    Household,
+    "id" | "name" | "currency" | "timezone" | "language"
+  > {
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+  readonly createdBy: string;
+}
+
+/**
+ * Hook for managing thread list with real-time updates and filtering
+ */
 export const useThreads = (
-  params: ThreadsQueryParams,
+  { householdId, requestOptions, enabled = true }: ThreadsOptions,
   options?: Omit<
-    UseQueryOptions<ApiResponse<ThreadWithDetails[]>>,
+    UseQueryOptions<readonly ThreadWithDetails[]>,
     "queryKey" | "queryFn"
   >
 ) => {
-  // Only create queries for valid household IDs when enabled
-  const validHouseholdIds = params.enabled
-    ? params.householdIds.filter(Boolean)
-    : [];
+  const queryClient = useQueryClient();
+  const { isConnected } = useSocket();
+  const { data: userData } = useUser();
+  const currentUser = userData?.data;
 
-  const queries = useQueries({
-    queries: validHouseholdIds.map((householdId) => ({
-      queryKey: threadKeys.list(householdId, {
-        limit: params.limit,
-        cursor: params.cursor,
-        sortBy: params.sortBy,
-        direction: params.direction,
-      }),
-      queryFn: async () => {
-        const result = await threadApi.threads.list(householdId, {
-          params: {
-            limit: params.limit,
-            cursor: params.cursor,
-            sortBy: params.sortBy,
-            direction: params.direction,
-          },
-        });
+  useEffect(() => {
+    if (!isConnected || !enabled) return;
 
-        logger.debug("Threads data fetched", {
+    const handleThreadCreate = (newThread: ThreadWithDetails) => {
+      if (newThread.householdId !== householdId) return;
+
+      queryClient.setQueryData<readonly ThreadWithDetails[]>(
+        threadKeys.list(householdId),
+        (old) => (old ? [newThread, ...old] : [newThread])
+      );
+      logger.debug("Thread created via socket", {
+        threadId: newThread.id,
+        householdId,
+      });
+    };
+
+    const handleThreadUpdate = (updatedThread: ThreadWithDetails) => {
+      if (updatedThread.householdId !== householdId) return;
+
+      queryClient.setQueryData<readonly ThreadWithDetails[]>(
+        threadKeys.list(householdId),
+        (old) =>
+          old
+            ? old.map((thread) =>
+                thread.id === updatedThread.id ? updatedThread : thread
+              )
+            : [updatedThread]
+      );
+      logger.debug("Thread updated via socket", {
+        threadId: updatedThread.id,
+        householdId,
+      });
+    };
+
+    const handleThreadDelete = (threadId: string) => {
+      queryClient.setQueryData<readonly ThreadWithDetails[]>(
+        threadKeys.list(householdId),
+        (old) => (old ? old.filter((thread) => thread.id !== threadId) : [])
+      );
+      logger.debug("Thread deleted via socket", {
+        threadId,
+        householdId,
+      });
+    };
+
+    // Subscribe to socket events
+    socketClient.on("thread:create", handleThreadCreate);
+    socketClient.on("thread:update", handleThreadUpdate);
+    socketClient.on("thread:delete", handleThreadDelete);
+
+    logger.debug("Subscribed to thread list socket events", {
+      householdId,
+      events: ["thread:create", "thread:update", "thread:delete"],
+    });
+
+    return () => {
+      // Cleanup socket subscriptions
+      socketClient.off("thread:create", handleThreadCreate);
+      socketClient.off("thread:update", handleThreadUpdate);
+      socketClient.off("thread:delete", handleThreadDelete);
+
+      logger.debug("Unsubscribed from thread list socket events", {
+        householdId,
+      });
+    };
+  }, [isConnected, householdId, enabled, queryClient]);
+
+  const query = useQuery({
+    queryKey: threadKeys.list(householdId),
+    queryFn: async () => {
+      try {
+        const result = await threadApi.threads.list(
+          householdId,
+          requestOptions
+        );
+        logger.debug("Thread list fetched", {
           householdId,
           count: result.data.length,
-          hasPagination: !!result.pagination,
-          params: {
-            householdIds: validHouseholdIds,
-            limit: params.limit,
-            enabled: params.enabled,
-          },
+          params: requestOptions?.params,
         });
-
-        return result;
-      },
-      staleTime: STALE_TIMES.STANDARD,
-      gcTime: CACHE_TIMES.STANDARD,
-      enabled: params.enabled !== false && !!householdId,
-      ...options,
-    })),
+        return result.data;
+      } catch (error) {
+        logger.error("Failed to fetch thread list", {
+          householdId,
+          params: requestOptions?.params,
+          error,
+        });
+        throw error;
+      }
+    },
+    staleTime: STALE_TIMES.STANDARD,
+    gcTime: CACHE_TIMES.STANDARD,
+    enabled: enabled && Boolean(householdId),
+    ...options,
   });
 
-  const isLoading = queries.some((q) => q.isLoading);
-  const error = queries.find((q) => q.error)?.error;
-  const data = queries.reduce<ApiResponse<ThreadWithDetails[]>>(
-    (acc, query) => {
-      if (!query.data) return acc;
-      return {
-        data: [...acc.data, ...query.data.data],
-        pagination: query.data.pagination,
-      };
+  const createThread = useMutation<
+    ThreadWithDetails,
+    Error,
+    CreateThreadDTO,
+    MutationContext
+  >({
+    mutationFn: async (data) => {
+      try {
+        const result = await threadApi.threads.create(householdId, data);
+        logger.info("Thread created", {
+          threadId: result.id,
+          householdId,
+          title: data.title,
+        });
+        return result;
+      } catch (error) {
+        logger.error("Failed to create thread", {
+          householdId,
+          error,
+        });
+        throw error;
+      }
     },
-    { data: [], pagination: { hasMore: false } }
-  );
+    onMutate: async (data) => {
+      await queryClient.cancelQueries({
+        queryKey: threadKeys.list(householdId),
+      });
 
-  // Sort combined threads by updatedAt
-  const sortedData = {
-    ...data,
-    data: [...data.data].sort(
-      (a, b) =>
-        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-    ),
-  };
+      const previousThreads = queryClient.getQueryData<
+        readonly ThreadWithDetails[]
+      >(threadKeys.list(householdId));
+
+      if (!currentUser) {
+        return { previousThreads };
+      }
+
+      const now = new Date();
+      const optimisticUser: OptimisticUser = {
+        id: currentUser.id,
+        name: currentUser.name,
+        email: currentUser.email,
+        profileImageURL: null,
+        activeHouseholdId: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      const optimisticHousehold: OptimisticHousehold = {
+        id: householdId,
+        name: "Loading...",
+        currency: "USD",
+        timezone: "UTC",
+        language: "en",
+        createdAt: now,
+        updatedAt: now,
+        createdBy: currentUser.id,
+      };
+
+      const optimisticThread: ThreadWithDetails = {
+        id: `temp-${now.getTime()}`,
+        title: data.title || "",
+        householdId,
+        authorId: currentUser.id,
+        createdAt: now,
+        updatedAt: now,
+        author: optimisticUser as User,
+        household: optimisticHousehold as Household,
+        participants: [],
+        messages: [],
+      };
+
+      queryClient.setQueryData<readonly ThreadWithDetails[]>(
+        threadKeys.list(householdId),
+        (old) => (old ? [optimisticThread, ...old] : [optimisticThread])
+      );
+
+      return { previousThreads };
+    },
+    onError: (_, __, context) => {
+      if (context?.previousThreads) {
+        queryClient.setQueryData(
+          threadKeys.list(householdId),
+          context.previousThreads
+        );
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({
+        queryKey: threadKeys.list(householdId),
+      });
+    },
+  });
 
   return {
-    data: sortedData,
-    isLoading,
-    error,
-    queries, // Expose individual queries for debugging
+    ...query,
+    createThread,
   };
 };

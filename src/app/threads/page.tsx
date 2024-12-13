@@ -1,9 +1,8 @@
 "use client";
 
 import React, { useState, useCallback } from "react";
-import { useAuthUser, useAuthStatus } from "@/contexts/UserContext";
+import { useUser } from "@/hooks/users/useUser";
 import { useThreads } from "@/hooks/threads/useThreads";
-import { useSelectedHouseholds } from "@/hooks/households/useSelectedHouseholds";
 import { logger } from "@/lib/api/logger";
 import { ThreadList } from "@/components/threads/ThreadList";
 import { ThreadCreator } from "@/components/threads/ThreadCreator";
@@ -11,8 +10,6 @@ import { ThreadListSkeleton } from "@/components/threads/skeletons/ThreadCardSke
 import Card from "@/components/common/Card";
 import Button from "@/components/common/Button";
 import { ChatBubbleLeftRightIcon, PlusIcon } from "@heroicons/react/24/outline";
-import type { UseQueryResult } from "@tanstack/react-query";
-import type { ApiResponse } from "@shared/interfaces/apiResponse";
 import type { ThreadWithDetails } from "@shared/types";
 
 const THREADS_PER_PAGE = 20;
@@ -40,30 +37,26 @@ function EmptyState({ icon, title, description, action }: EmptyStateProps) {
 }
 
 export default function ThreadsPage() {
-  const user = useAuthUser();
-  const { status } = useAuthStatus();
-  const { selectedHouseholds, isLoading: isLoadingHouseholds } =
-    useSelectedHouseholds();
+  const { data: userData, isLoading: isLoadingUser } = useUser();
+  const user = userData?.data;
+  const activeHouseholdId = user?.activeHouseholdId;
   const [isCreatorOpen, setIsCreatorOpen] = useState(false);
 
-  // Query threads from accessible households
   const {
-    data: threadsData,
+    data: threads = [] as ThreadWithDetails[],
     isLoading: isLoadingThreads,
     error,
-    queries,
   } = useThreads({
-    householdIds: selectedHouseholds.accessibleIds,
-    limit: THREADS_PER_PAGE,
-    enabled: status === "authenticated" && selectedHouseholds.accessible > 0,
+    householdId: activeHouseholdId ?? "",
+    requestOptions: {
+      params: {
+        limit: THREADS_PER_PAGE,
+      },
+    },
+    enabled: Boolean(activeHouseholdId),
   });
 
-  const threads = threadsData?.data || [];
-  // Only show initial loading when auth or households are loading
-  const isInitialLoading = status === "loading" || isLoadingHouseholds;
-  // Only show thread loading when we have no threads yet and queries are in flight
-  const isThreadsLoading =
-    isLoadingThreads && !threads.length && queries?.some((q) => q.isFetching);
+  const isLoading = isLoadingUser || (isLoadingThreads && threads.length === 0);
 
   const handleThreadCreated = useCallback(() => {
     setIsCreatorOpen(false);
@@ -71,27 +64,14 @@ export default function ThreadsPage() {
   }, []);
 
   logger.debug("Rendering threads page", {
-    threadsCount: threads?.length,
-    selectedHouseholds,
+    threadsCount: threads.length,
+    activeHouseholdId,
     isLoadingThreads,
-    isThreadsLoading,
-    isLoadingHouseholds,
-    isInitialLoading,
-    authStatus: status,
-    isAuthenticated: status === "authenticated",
+    isLoadingUser,
     hasUser: !!user,
-    queriesStatus: queries?.map(
-      (q: UseQueryResult<ApiResponse<ThreadWithDetails[]>, Error>) => ({
-        isFetching: q.isFetching,
-        isLoading: q.isLoading,
-        dataUpdatedAt: q.dataUpdatedAt,
-        status: q.status,
-      })
-    ),
   });
 
-  // Only show loading skeleton on initial load
-  if (isInitialLoading || isThreadsLoading) {
+  if (isLoading) {
     return (
       <div className="container-custom py-md animate-fade-in">
         <ThreadListSkeleton />
@@ -99,7 +79,7 @@ export default function ThreadsPage() {
     );
   }
 
-  if (status !== "authenticated") {
+  if (!user) {
     return (
       <div className="container-custom py-md animate-fade-in">
         <EmptyState
@@ -111,13 +91,25 @@ export default function ThreadsPage() {
     );
   }
 
+  if (!activeHouseholdId) {
+    return (
+      <div className="container-custom py-md animate-fade-in">
+        <EmptyState
+          icon={<ChatBubbleLeftRightIcon className="h-12 w-12" />}
+          title="No active household"
+          description="Please select a household to view threads"
+        />
+      </div>
+    );
+  }
+
   if (error) {
     return (
       <div className="container-custom py-md animate-fade-in">
         <EmptyState
           icon={<ChatBubbleLeftRightIcon className="h-12 w-12" />}
           title="Error loading threads"
-          description={error.message}
+          description={error instanceof Error ? error.message : "Unknown error"}
           action={
             <Button variant="primary" onClick={() => window.location.reload()}>
               Retry
@@ -135,38 +127,32 @@ export default function ThreadsPage() {
           <div>
             <h1 className="mb-2">Threads</h1>
             <p className="text-text-secondary dark:text-text-secondary mb-0">
-              View and manage threads across your households
+              View and manage threads in your household
             </p>
           </div>
-          {selectedHouseholds.accessible > 0 && (
-            <Button
-              variant="primary"
-              onClick={() => setIsCreatorOpen(true)}
-              icon={<PlusIcon className="h-5 w-5" />}
-            >
-              New Thread
-            </Button>
-          )}
+          <Button
+            variant="primary"
+            onClick={() => setIsCreatorOpen(true)}
+            icon={<PlusIcon className="h-5 w-5" />}
+          >
+            New Thread
+          </Button>
         </header>
 
-        {!threads?.length ? (
+        {threads.length === 0 ? (
           <EmptyState
             icon={<ChatBubbleLeftRightIcon className="h-12 w-12" />}
             title="No threads yet"
-            description="Start a conversation in one of your households"
+            description="Start a conversation in your household"
             action={
-              <Button
-                variant="primary"
-                onClick={() => setIsCreatorOpen(true)}
-                disabled={selectedHouseholds.accessible === 0}
-              >
+              <Button variant="primary" onClick={() => setIsCreatorOpen(true)}>
                 Create Thread
               </Button>
             }
           />
         ) : (
           <div className="animate-slide-up">
-            <ThreadList threads={threads} />
+            <ThreadList threads={threads as ThreadWithDetails[]} />
           </div>
         )}
       </div>
