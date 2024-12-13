@@ -10,9 +10,9 @@ import React, {
 } from "react";
 import { User } from "@shared/types";
 import { authApi, authKeys } from "@/lib/api/services/authService";
-import { userApi } from "@/lib/api/services/userService";
 import { logger } from "@/lib/api/logger";
 import { ApiError } from "@/lib/api/errors";
+import { ApiResponse } from "@shared/interfaces/apiResponse";
 import {
   useQuery,
   useMutation,
@@ -29,7 +29,6 @@ type AuthStatus =
   | "error";
 
 interface AuthState {
-  user: User | null;
   status: AuthStatus;
   error: {
     message: string;
@@ -44,11 +43,6 @@ interface AuthActions {
   logout: () => Promise<void>;
   refreshAuthState: () => Promise<void>;
   clearError: () => void;
-  setActiveHousehold: (householdId: string | null) => Promise<void>;
-  updateProfile: (data: {
-    name?: string;
-    profileImageURL?: string;
-  }) => Promise<void>;
 }
 
 type AuthContextValue = AuthState & AuthActions;
@@ -56,7 +50,6 @@ type AuthContextValue = AuthState & AuthActions;
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 const initialState: AuthState = {
-  user: null,
   status: "idle",
   error: null,
 };
@@ -84,9 +77,6 @@ const getErrorMessage = (error: unknown): AuthState["error"] => {
   };
 };
 
-// Static initialization flag
-let isGloballyInitialized = false;
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   const [state, setState] = useState<AuthState>(initialState);
@@ -104,9 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const newState = { ...prev, ...updates };
       logger.debug("Auth state changed", {
         status: newState.status,
-        hasUser: !!newState.user,
         hasError: !!newState.error,
-        activeHouseholdId: newState.user?.activeHouseholdId,
       });
       return newState;
     });
@@ -161,17 +149,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (authData) {
         updateState({
-          user: authData,
           status: "authenticated",
           error: null,
         });
         logger.info("Auth initialized - user authenticated", {
           userId: authData.id,
-          activeHouseholdId: authData.activeHouseholdId,
         });
       } else {
         updateState({
-          user: null,
           status: "unauthenticated",
           error: null,
         });
@@ -193,7 +178,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     onSuccess: (user) => {
       updateState({
-        user,
         status: "authenticated",
         error: null,
       });
@@ -226,7 +210,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           code: errorCode,
           details: error.data,
         },
-        user: null,
       });
 
       logger.error("Login failed", {
@@ -258,7 +241,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     onSuccess: (user) => {
       updateState({
-        user,
         status: "authenticated",
         error: null,
       });
@@ -279,7 +261,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 message: "An account with this email already exists",
                 code: "EMAIL_EXISTS",
               },
-              user: null,
             });
             break;
           case 400:
@@ -290,7 +271,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 code: "INVALID_DATA",
                 details: error.data,
               },
-              user: null,
             });
             break;
           default:
@@ -298,7 +278,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             updateState({
               status: "error",
               error: errorState,
-              user: null,
             });
         }
       } else {
@@ -306,7 +285,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         updateState({
           status: "error",
           error: errorState,
-          user: null,
         });
       }
     },
@@ -316,7 +294,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logoutMutation = useMutation({
     mutationFn: async () => {
       updateState({ status: "loading", error: null });
-      const userId = state.user?.id;
+      const userId = authData?.id;
       if (userId) {
         logger.info("User logged out", {
           userId,
@@ -327,77 +305,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     onSuccess: () => {
       updateState({
-        user: null,
         status: "unauthenticated",
         error: null,
       });
       queryClient.setQueryData(["auth", "session"], null);
+      // Clear all queries on logout
+      queryClient.clear();
     },
     onError: (error) => {
       const errorState = getErrorMessage(error);
       updateState({
         status: "error",
         error: errorState,
-        user: null,
-      });
-    },
-  });
-
-  // Profile update mutation
-  const updateProfileMutation = useMutation({
-    mutationFn: async (data: { name?: string; profileImageURL?: string }) => {
-      updateState({ status: "loading", error: null });
-      const response = await userApi.users.updateProfile(data);
-      return response.data;
-    },
-    onSuccess: (user) => {
-      updateState({
-        user,
-        status: "authenticated",
-        error: null,
-      });
-      queryClient.setQueryData(["auth", "session"], user);
-      logger.info("User profile updated", {
-        userId: user.id,
-        timestamp: new Date().toISOString(),
-      });
-    },
-    onError: (error) => {
-      const errorState = getErrorMessage(error);
-      updateState({
-        status: "error",
-        error: errorState,
-        user: null,
-      });
-    },
-  });
-
-  // Active household mutation
-  const setActiveHouseholdMutation = useMutation({
-    mutationFn: async (householdId: string | null) => {
-      updateState({ status: "loading", error: null });
-      const response = await userApi.users.setActiveHousehold(householdId);
-      return response.data;
-    },
-    onSuccess: (user) => {
-      updateState({
-        user,
-        status: "authenticated",
-        error: null,
-      });
-      queryClient.setQueryData(["auth", "session"], user);
-      logger.info("Active household updated", {
-        userId: user.id,
-        householdId: user.activeHouseholdId,
-        timestamp: new Date().toISOString(),
-      });
-    },
-    onError: (error) => {
-      const errorState = getErrorMessage(error);
-      updateState({
-        status: "error",
-        error: errorState,
-        user: null,
       });
     },
   });
@@ -427,15 +346,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return queryClient.invalidateQueries({ queryKey: ["auth", "session"] });
       },
       clearError,
-      setActiveHousehold: async (householdId: string | null) => {
-        await setActiveHouseholdMutation.mutateAsync(householdId);
-      },
-      updateProfile: async (data: {
-        name?: string;
-        profileImageURL?: string;
-      }) => {
-        await updateProfileMutation.mutateAsync(data);
-      },
     }),
     [
       state,
@@ -444,8 +354,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       logoutMutation.mutateAsync,
       queryClient,
       clearError,
-      setActiveHouseholdMutation.mutateAsync,
-      updateProfileMutation.mutateAsync,
     ]
   );
 
@@ -471,26 +379,13 @@ export function useIsLoading() {
   return useMemo(() => status === "loading", [status]);
 }
 
-export function useAuthUser() {
-  const { user } = useAuth();
-  return useMemo(() => user, [user]);
-}
-
 export function useAuthStatus() {
   const { status, error } = useAuth();
   return useMemo(() => ({ status, error }), [status, error]);
 }
 
 export function useAuthActions() {
-  const {
-    login,
-    register,
-    logout,
-    refreshAuthState,
-    clearError,
-    setActiveHousehold,
-    updateProfile,
-  } = useAuth();
+  const { login, register, logout, refreshAuthState, clearError } = useAuth();
   return useMemo(
     () => ({
       login,
@@ -498,22 +393,7 @@ export function useAuthActions() {
       logout,
       refreshAuthState,
       clearError,
-      setActiveHousehold,
-      updateProfile,
     }),
-    [
-      login,
-      register,
-      logout,
-      refreshAuthState,
-      clearError,
-      setActiveHousehold,
-      updateProfile,
-    ]
+    [login, register, logout, refreshAuthState, clearError]
   );
-}
-
-export function useActiveHousehold() {
-  const { user } = useAuth();
-  return useMemo(() => user?.activeHouseholdId, [user?.activeHouseholdId]);
 }

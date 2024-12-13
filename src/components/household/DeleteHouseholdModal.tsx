@@ -6,7 +6,6 @@ interface DeleteHouseholdModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => Promise<void>;
-  isDeleting: boolean;
 }
 
 export default function DeleteHouseholdModal({
@@ -14,7 +13,6 @@ export default function DeleteHouseholdModal({
   isOpen,
   onClose,
   onConfirm,
-  isDeleting,
 }: DeleteHouseholdModalProps) {
   if (!isOpen) return null;
 
@@ -40,21 +38,15 @@ export default function DeleteHouseholdModal({
         </p>
 
         <div className="flex justify-end space-x-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className="btn-secondary"
-            disabled={isDeleting}
-          >
+          <button type="button" onClick={onClose} className="btn-secondary">
             Cancel
           </button>
           <button
             type="button"
             onClick={handleConfirm}
             className="btn bg-red-600 hover:bg-red-700 text-white"
-            disabled={isDeleting}
           >
-            {isDeleting ? "Deleting..." : "Delete Household"}
+            Delete Household
           </button>
         </div>
       </div>

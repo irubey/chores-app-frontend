@@ -8,7 +8,6 @@ interface UpdateMemberRoleModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: (role: HouseholdRole) => Promise<void>;
-  isUpdating: boolean;
 }
 
 export default function UpdateMemberRoleModal({
@@ -16,7 +15,6 @@ export default function UpdateMemberRoleModal({
   isOpen,
   onClose,
   onConfirm,
-  isUpdating,
 }: UpdateMemberRoleModalProps) {
   if (!isOpen) return null;
 
@@ -50,21 +48,15 @@ export default function UpdateMemberRoleModal({
         </p>
 
         <div className="flex justify-end space-x-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className="btn-secondary"
-            disabled={isUpdating}
-          >
+          <button type="button" onClick={onClose} className="btn-secondary">
             Cancel
           </button>
           <button
             type="button"
             onClick={() => handleConfirm(newRole)}
             className="btn-primary"
-            disabled={isUpdating}
           >
-            {isUpdating ? "Updating..." : "Update Role"}
+            Update Role
           </button>
         </div>
       </div>

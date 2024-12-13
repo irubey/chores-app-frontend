@@ -17,29 +17,24 @@ export default function HouseholdCardPresentation({
   isPending,
 }: HouseholdCardPresentationProps) {
   return (
-    <div
-      className={`cursor-pointer rounded-lg bg-white p-6 shadow-md transition-all hover:shadow-lg ${
-        isActive ? "ring-2 ring-primary" : ""
-      }`}
+    <button
       onClick={onSelect}
+      disabled={isPending}
+      className={`
+        inline-flex items-center px-4 py-1.5 rounded-full text-sm font-medium
+        transition-all duration-200 
+        ${
+          isActive
+            ? "bg-primary text-white hover:bg-primary-dark"
+            : "border-2 border-primary text-primary hover:bg-primary hover:text-white"
+        }
+        ${isPending ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
+      `}
     >
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900">
-            {household.name}
-          </h3>
-          <p className="text-sm text-gray-500">{memberCount} members</p>
-        </div>
-        {isPending ? (
-          <div className="h-5 w-5 animate-spin rounded-full border-b-2 border-primary" />
-        ) : (
-          <div
-            className={`h-3 w-3 rounded-full ${
-              isActive ? "bg-primary" : "bg-gray-300"
-            }`}
-          />
-        )}
-      </div>
-    </div>
+      <span className="truncate max-w-[150px]">{household.name}</span>
+      {isPending && (
+        <div className="ml-2 h-3 w-3 animate-spin rounded-full border-b-2 border-white" />
+      )}
+    </button>
   );
 }

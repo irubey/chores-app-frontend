@@ -1,22 +1,19 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import {
-  useAuthUser,
-  useAuthActions,
-  useAuthStatus,
-} from "@/contexts/UserContext";
+import { useAuthActions, useAuthStatus } from "@/contexts/UserContext";
+import { useUser } from "@/hooks/users/useUser";
 import Input from "@/components/common/Input";
 import Button from "@/components/common/Button";
 import Card from "@/components/common/Card";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { logger } from "@/lib/api/logger";
-import { ApiError, ApiErrorType } from "@/lib/api/errors/apiErrors";
+import { ApiError } from "@/lib/api/errors/apiErrors";
 import { FaEnvelope, FaLock, FaExclamationCircle } from "react-icons/fa";
 
 const LoginPage: React.FC = () => {
-  const user = useAuthUser();
+  const { data: userData } = useUser();
   const { login } = useAuthActions();
   const { status, error: authError } = useAuthStatus();
   const isLoading = status === "loading";
@@ -26,14 +23,14 @@ const LoginPage: React.FC = () => {
   const router = useRouter();
 
   useEffect(() => {
-    if (user) {
+    if (userData?.data) {
       const redirectPath =
         sessionStorage.getItem("redirectAfterLogin") || "/dashboard";
       sessionStorage.removeItem("redirectAfterLogin");
       logger.info("Redirecting authenticated user", { redirectPath });
       router.push(redirectPath);
     }
-  }, [user, router]);
+  }, [userData?.data, router]);
 
   const validateForm = () => {
     const errors = { email: "", password: "" };

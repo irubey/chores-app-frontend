@@ -1,9 +1,11 @@
 import React from "react";
-import { useRouter } from "next/navigation";
 import { HouseholdWithMembers } from "@shared/types/household";
 import { logger } from "@/lib/api/logger";
-import { useSetActiveHousehold } from "@/hooks/households/useHouseholds";
-import { useAuthUser } from "@/contexts/UserContext";
+import { useSetActiveHousehold } from "@/hooks/users/useUser";
+import { useQueryClient } from "@tanstack/react-query";
+import { userKeys } from "@/lib/api/services/userService";
+import { ApiResponse } from "@shared/interfaces/apiResponse";
+import { User } from "@shared/types";
 import HouseholdCardPresentation from "./HouseholdCardPresentation";
 
 interface HouseholdCardContainerProps {
@@ -13,10 +15,12 @@ interface HouseholdCardContainerProps {
 export default function HouseholdCardContainer({
   household,
 }: HouseholdCardContainerProps) {
-  const router = useRouter();
-  const user = useAuthUser();
+  const queryClient = useQueryClient();
+  const userData = queryClient.getQueryData<ApiResponse<User>>(
+    userKeys.profile()
+  );
   const memberCount = household.members?.length ?? 0;
-  const isActive = user?.activeHouseholdId === household.id;
+  const isActive = userData?.data?.activeHouseholdId === household.id;
 
   const { mutate: setActiveHousehold, isPending } = useSetActiveHousehold();
 
@@ -33,14 +37,7 @@ export default function HouseholdCardContainer({
       name: household.name,
     });
 
-    setActiveHousehold(household.id, {
-      onSuccess: () => {
-        logger.debug("Active household set, navigating to detail", {
-          householdId: household.id,
-        });
-        router.push(`/household/${household.id}`);
-      },
-    });
+    setActiveHousehold(household.id);
   };
 
   return (

@@ -14,6 +14,7 @@ import {
   UpdateHouseholdDTO,
   AddMemberDTO,
 } from "@shared/types";
+import { HouseholdRole } from "@shared/enums";
 
 export const householdKeys = {
   all: ["households"] as const,
@@ -180,6 +181,34 @@ export const householdApi = {
         {
           operation: "Remove Household Member",
           metadata: { householdId, memberId },
+        }
+      );
+    },
+
+    updateMember: async (
+      householdId: string,
+      memberId: string,
+      data: {
+        role?: HouseholdRole;
+        leftAt?: Date;
+        nickname?: string;
+        isSelected?: boolean;
+      },
+      config?: ApiRequestOptions
+    ): Promise<ApiResponse<void>> => {
+      return handleApiRequest<void>(
+        () =>
+          axiosInstance.patch(
+            `/households/${householdId}/members/${memberId}`,
+            data,
+            {
+              ...buildRequestConfig(config),
+              withCredentials: true,
+            }
+          ),
+        {
+          operation: "Update Household Member",
+          metadata: { householdId, memberId, updatedFields: Object.keys(data) },
         }
       );
     },

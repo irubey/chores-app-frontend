@@ -8,9 +8,8 @@ import {
   useDeleteHousehold,
   useUpdateHouseholdMember,
   useSendHouseholdInvitation,
-  useUpdateHouseholdMemberSelection,
 } from "@/hooks/households/useHouseholds";
-import { useAuthUser } from "@/contexts/UserContext";
+import { useUser } from "@/hooks/users/useUser";
 import { HouseholdRole } from "@shared/enums";
 import {
   HouseholdMemberWithUser,
@@ -38,7 +37,8 @@ import {
 export default function HouseholdPage() {
   const { id: householdId } = useParams<{ id: string }>();
   const router = useRouter();
-  const user = useAuthUser();
+  const { data: userData } = useUser();
+  const user = userData?.data;
 
   // State for modals
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -49,12 +49,16 @@ export default function HouseholdPage() {
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
 
   // Queries and mutations
-  const { data: household, error, isLoading } = useHousehold(householdId);
+  const {
+    data: householdResponse,
+    error,
+    isLoading,
+  } = useHousehold(householdId);
+  const household = householdResponse?.data;
   const updateHouseholdMutation = useUpdateHousehold();
   const deleteHouseholdMutation = useDeleteHousehold();
-  const updateMemberMutation = useUpdateHouseholdMember();
-  const inviteMemberMutation = useSendHouseholdInvitation();
-  const updateSelectionMutation = useUpdateHouseholdMemberSelection();
+  const updateMemberMutation = useUpdateHouseholdMember(householdId);
+  const inviteMemberMutation = useSendHouseholdInvitation(householdId);
 
   // Loading state
   if (isLoading) {
@@ -97,7 +101,6 @@ export default function HouseholdPage() {
   // Check user permissions and selection status
   const userMember = household.members?.find((m) => m.userId === user?.id);
   const isAdmin = userMember?.role === HouseholdRole.ADMIN;
-  const isSelected = userMember?.isSelected ?? false;
   const adminCount = household.members?.filter(
     (m) => m.role === HouseholdRole.ADMIN && !m.leftAt
   ).length;
@@ -113,42 +116,69 @@ export default function HouseholdPage() {
   const handleConfirmRoleUpdate = async (role: HouseholdRole) => {
     if (!selectedMember) return;
 
-    await updateMemberMutation.mutateAsync({
-      householdId,
-      memberId: selectedMember.id,
-      data: { role },
-    });
+    try {
+      await updateMemberMutation.mutateAsync({
+        memberId: selectedMember.id,
+        data: { role },
+      });
+      setSelectedMember(null);
+    } catch (error) {
+      logger.error("Failed to update member role", { error });
+      toast.error("Failed to update member role");
+    }
   };
 
-  const handleRemoveMember = (memberId: string) => {
-    updateMemberMutation.mutate({
-      householdId,
-      memberId,
-      data: { leftAt: new Date() },
-    });
+  const handleUpdateNickname = async (
+    member: HouseholdMemberWithUser,
+    nickname: string
+  ) => {
+    try {
+      await updateMemberMutation.mutateAsync({
+        memberId: member.id,
+        data: { nickname },
+      });
+    } catch (error) {
+      logger.error("Failed to update member nickname", { error });
+      toast.error("Failed to update member nickname");
+    }
+  };
+
+  const handleRemoveMember = async (memberId: string) => {
+    try {
+      await updateMemberMutation.mutateAsync({
+        memberId,
+        data: { leftAt: new Date() },
+      });
+    } catch (error) {
+      logger.error("Failed to remove member", { error });
+      toast.error("Failed to remove member");
+    }
   };
 
   const handleInviteMember = async (data: AddMemberDTO) => {
     try {
       await inviteMemberMutation.mutateAsync({
-        householdId,
         email: data.email,
       });
       setIsInviteModalOpen(false);
+      toast.success("Invitation sent successfully");
     } catch (error) {
       logger.error("Failed to invite member", { error });
+      toast.error("Failed to invite member");
     }
   };
 
   const handleUpdateHousehold = async (data: UpdateHouseholdDTO) => {
     try {
       await updateHouseholdMutation.mutateAsync({
-        id: householdId,
+        householdId,
         data,
       });
       setIsEditModalOpen(false);
+      toast.success("Household updated successfully");
     } catch (error) {
       logger.error("Failed to update household", { error });
+      toast.error("Failed to update household");
     }
   };
 
@@ -156,21 +186,10 @@ export default function HouseholdPage() {
     try {
       await deleteHouseholdMutation.mutateAsync(householdId);
       router.push("/dashboard");
+      toast.success("Household deleted successfully");
     } catch (error) {
       logger.error("Failed to delete household", { error });
-    }
-  };
-
-  const handleSelectionToggle = async () => {
-    if (!household || !userMember) return;
-
-    try {
-      await updateSelectionMutation.mutateAsync({
-        householdId: household.id,
-        isSelected: !userMember.isSelected,
-      });
-    } catch (error) {
-      logger.error("Failed to toggle household selection", { error });
+      toast.error("Failed to delete household");
     }
   };
 
@@ -182,6 +201,7 @@ export default function HouseholdPage() {
         // If last member, delete the household
         await deleteHouseholdMutation.mutateAsync(householdId);
         router.push("/dashboard");
+        toast.success("Household deleted successfully");
         return;
       }
 
@@ -195,12 +215,12 @@ export default function HouseholdPage() {
 
       // Leave the household
       await updateMemberMutation.mutateAsync({
-        householdId,
         memberId: userMember.id,
         data: { leftAt: new Date() },
       });
 
       router.push("/dashboard");
+      toast.success("Left household successfully");
     } catch (error) {
       logger.error("Failed to leave household", { error });
       toast.error("Failed to leave household");
@@ -232,15 +252,6 @@ export default function HouseholdPage() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={handleSelectionToggle}
-              className={`btn ${
-                isSelected ? "btn-primary" : "btn-outline-primary"
-              }`}
-              disabled={updateSelectionMutation.isPending}
-            >
-              {isSelected ? "Selected" : "Select"}
-            </button>
             {isAdmin ? (
               <>
                 <button
@@ -248,25 +259,15 @@ export default function HouseholdPage() {
                   className="btn-icon"
                   title="Edit Household"
                 >
-                  <PencilSquareIcon className="w-5 h-5 text-text-secondary hover:text-primary" />
+                  <PencilSquareIcon className="w-5 h-5" />
                 </button>
-                {isLastAdmin ? (
-                  <button
-                    onClick={() => setIsDeleteModalOpen(true)}
-                    className="btn-icon"
-                    title="Delete Household"
-                  >
-                    <TrashIcon className="w-5 h-5 text-red-500 hover:text-red-600" />
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => setIsLeaveModalOpen(true)}
-                    className="btn-icon"
-                    title="Leave Household"
-                  >
-                    <ArrowRightOnRectangleIcon className="w-5 h-5 text-text-secondary hover:text-primary" />
-                  </button>
-                )}
+                <button
+                  onClick={() => setIsDeleteModalOpen(true)}
+                  className="btn-icon"
+                  title="Delete Household"
+                >
+                  <TrashIcon className="w-5 h-5" />
+                </button>
               </>
             ) : (
               <button
@@ -274,65 +275,39 @@ export default function HouseholdPage() {
                 className="btn-icon"
                 title="Leave Household"
               >
-                <ArrowRightOnRectangleIcon className="w-5 h-5 text-text-secondary hover:text-primary" />
+                <ArrowRightOnRectangleIcon className="w-5 h-5" />
               </button>
             )}
           </div>
         </div>
       </div>
 
-      {/* Loading State */}
-      {isLoading && (
-        <div className="flex justify-center items-center min-h-[60vh]">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-        </div>
-      )}
-
-      {/* Error State */}
-      {error && (
-        <div className="card text-center py-8">
-          <h2 className="text-h3 text-red-600 dark:text-red-500">Error</h2>
-          <p className="text-text-secondary">{error.message}</p>
-        </div>
-      )}
-
-      {/* Not Found State */}
-      {!household && !isLoading && (
-        <div className="card text-center py-8">
-          <h2 className="text-h3">Household not found</h2>
-          <p className="text-text-secondary">
-            The household you're looking for doesn't exist or you don't have
-            access.
-          </p>
-        </div>
-      )}
-
-      {/* Main Content */}
-      {household && (
-        <div className="space-y-8">
-          {/* Members Section */}
-          <section className="card">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-h3 mb-0">Members</h2>
-              {isAdmin && (
-                <button
-                  onClick={() => setIsInviteModalOpen(true)}
-                  className="btn-primary"
-                >
-                  Invite Member
-                </button>
-              )}
-            </div>
+      {/* Members Section */}
+      <div className="card my-8">
+        <div className="flex flex-col gap-6">
+          <div className="flex justify-between items-center">
+            <h2 className="text-h3">Members</h2>
+            {isAdmin && (
+              <button
+                onClick={() => setIsInviteModalOpen(true)}
+                className="btn btn-primary"
+              >
+                Invite Member
+              </button>
+            )}
+          </div>
+          <div className="overflow-x-auto">
             <MembersList
-              members={household.members}
-              currentUserId={user?.id}
+              members={household.members ?? []}
+              currentUserId={user?.id ?? ""}
               onUpdateRole={handleUpdateRole}
               onRemoveMember={handleRemoveMember}
+              onUpdateNickname={handleUpdateNickname}
               isAdmin={isAdmin}
             />
-          </section>
+          </div>
         </div>
-      )}
+      </div>
 
       {/* Modals */}
       <EditHouseholdModal
@@ -342,11 +317,10 @@ export default function HouseholdPage() {
         onUpdate={handleUpdateHousehold}
       />
       <DeleteHouseholdModal
-        householdName={household?.name || ""}
+        householdName={household.name}
         isOpen={isDeleteModalOpen}
         onClose={() => setIsDeleteModalOpen(false)}
         onConfirm={handleDeleteHousehold}
-        isDeleting={deleteHouseholdMutation.isPending}
       />
       <InviteMemberModal
         isOpen={isInviteModalOpen}
@@ -359,17 +333,13 @@ export default function HouseholdPage() {
           isOpen={!!selectedMember}
           onClose={() => setSelectedMember(null)}
           onConfirm={handleConfirmRoleUpdate}
-          isUpdating={updateMemberMutation.isPending}
         />
       )}
       <LeaveHouseholdModal
-        householdName={household?.name || ""}
+        householdName={household.name}
         isOpen={isLeaveModalOpen}
         onClose={() => setIsLeaveModalOpen(false)}
         onConfirm={handleLeaveHousehold}
-        isLeaving={updateMemberMutation.isPending}
-        isLastAdmin={isLastAdmin}
-        isLastMember={isLastMember}
       />
     </div>
   );

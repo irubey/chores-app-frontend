@@ -1,10 +1,11 @@
 "use client";
 import React from "react";
 import Link from "next/link";
-import { useAuthUser } from "@/contexts/UserContext";
+import { useUser } from "@/hooks/users/useUser";
 
 const Footer: React.FC = () => {
-  const user = useAuthUser();
+  const { data: userData } = useUser();
+  const user = userData?.data;
 
   return (
     <footer

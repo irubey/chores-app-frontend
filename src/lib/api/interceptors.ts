@@ -56,7 +56,7 @@ async function handleTokenRefresh(
         return acc;
       }, {} as Record<string, string>);
 
-      if (!cookies.refreshToken) {
+      if (!cookies.auth_session) {
         throw new ApiError(
           "No refresh token available",
           ApiErrorType.UNAUTHORIZED,
