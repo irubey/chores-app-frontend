@@ -134,9 +134,7 @@ export default function ThreadsPage() {
             variant="primary"
             onClick={() => setIsCreatorOpen(true)}
             icon={<PlusIcon className="h-5 w-5" />}
-          >
-            New Thread
-          </Button>
+          ></Button>
         </header>
 
         {threads.length === 0 ? (

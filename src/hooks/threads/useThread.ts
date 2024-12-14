@@ -247,14 +247,20 @@ export const useCreateThread = (
   return useMutation({
     mutationFn: async (data: {
       title?: string;
+      content: string;
       participants: string[];
-      initialMessage: { content: string };
     }) => {
       try {
-        const result = await threadApi.threads.create(householdId, data);
+        const result = await threadApi.threads.create(householdId, {
+          title: data.title,
+          participants: data.participants,
+          initialMessage: {
+            content: data.content,
+          },
+        });
         logger.info("Thread created", {
-          householdId,
           threadId: result.id,
+          householdId,
         });
         return result;
       } catch (error) {
@@ -266,7 +272,7 @@ export const useCreateThread = (
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: threadKeys.list(householdId) });
+      queryClient.invalidateQueries({ queryKey: threadKeys.lists() });
       options?.onSuccess?.();
     },
   });

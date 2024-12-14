@@ -1,5 +1,4 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
-import { useHouseholds } from "@/hooks/households/useHouseholds";
 import { useUser } from "@/hooks/users/useUser";
 import { useCreateThread } from "@/hooks/threads/useThread";
 import { useQueryClient } from "@tanstack/react-query";
@@ -10,6 +9,10 @@ import Button from "@/components/common/Button";
 import Input from "@/components/common/Input";
 import { debounce } from "lodash";
 import { ApiError, ApiErrorType } from "@/lib/api/errors/apiErrors";
+import {
+  useHouseholds,
+  getHouseholdMembers,
+} from "@/hooks/households/useHouseholds";
 
 interface ThreadCreatorProps {
   isOpen: boolean;
@@ -29,11 +32,11 @@ export function ThreadCreator({
 }: ThreadCreatorProps) {
   const queryClient = useQueryClient();
   const { data: userData } = useUser();
-  const {
-    data: householdsData,
-    isLoading: isLoadingHouseholds,
-    error: householdsError,
-  } = useHouseholds();
+  const activeHouseholdId = userData?.data?.activeHouseholdId;
+  const { data: householdsData } = useHouseholds();
+  const members = activeHouseholdId
+    ? getHouseholdMembers(householdsData, activeHouseholdId)
+    : undefined;
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,34 +45,27 @@ export function ThreadCreator({
   );
   const [title, setTitle] = useState("");
   const [initialMessage, setInitialMessage] = useState("");
-  const [selectedParticipants, setSelectedParticipants] = useState<string[]>(
-    []
-  );
-  const [selectedHouseholdId, setSelectedHouseholdId] = useState<string>("");
 
-  // Memoize validation states
-  const validation = useMemo(
-    () => ({
-      hasSelectedHousehold: !!selectedHouseholdId?.trim(),
-      hasMessage: !!initialMessage.trim(),
-      isValid: !!selectedHouseholdId?.trim() && !!initialMessage.trim(),
-    }),
-    [selectedHouseholdId, initialMessage]
+  // Memoize validation state
+  const isValid = useMemo(
+    () => !!activeHouseholdId && !!initialMessage.trim() && !!members,
+    [activeHouseholdId, initialMessage, members]
   );
 
-  // Initialize createThread mutation with proper error typing
-  const { mutateAsync: createThread } = useCreateThread(selectedHouseholdId, {
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: threadKeys.lists() });
-      onSuccess?.();
-    },
-  });
+  // Initialize createThread mutation
+  const { mutateAsync: createThread } = useCreateThread(
+    activeHouseholdId ?? "",
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: threadKeys.lists() });
+        onSuccess?.();
+      },
+    }
+  );
 
   const resetForm = useCallback(() => {
     setTitle("");
     setInitialMessage("");
-    setSelectedParticipants([]);
-    setSelectedHouseholdId("");
     setError(null);
     setValidationErrors([]);
   }, []);
@@ -79,77 +75,66 @@ export function ThreadCreator({
     onClose();
   }, [onClose, resetForm]);
 
-  // Debounced submit handler with proper error handling
+  // Debounced submit handler with error handling
   const debouncedSubmit = useCallback(
-    debounce(
-      async (data: {
-        title: string;
-        participants: string[];
-        message: string;
-      }) => {
-        if (!validation.isValid) {
-          logger.debug("Cannot submit - validation failed", {
-            hasSelectedHousehold: validation.hasSelectedHousehold,
-            hasMessage: validation.hasMessage,
-          });
-          setError("Please select a household and enter a message");
-          return;
+    debounce(async (data: { title?: string; message: string }) => {
+      if (!isValid || !activeHouseholdId || !members) {
+        logger.debug("Cannot submit - validation failed", {
+          hasActiveHousehold: !!activeHouseholdId,
+          hasMessage: !!data.message.trim(),
+          hasMembers: !!members,
+        });
+        setError("Please fill in all required fields");
+        return;
+      }
+
+      try {
+        setIsSubmitting(true);
+        setError(null);
+        setValidationErrors([]);
+
+        logger.debug("Creating thread", {
+          householdId: activeHouseholdId,
+          title: data.title,
+        });
+
+        await createThread({
+          title: data.title?.trim(),
+          content: data.message.trim(),
+          participants: members.map((member) => member.userId),
+        });
+
+        logger.info("Thread created successfully", {
+          householdId: activeHouseholdId,
+        });
+
+        handleClose();
+      } catch (err) {
+        const error = err as ApiError;
+        logger.error("Failed to create thread", { error });
+
+        if (
+          error.type === ApiErrorType.VALIDATION &&
+          error.data?.validationErrors
+        ) {
+          setValidationErrors(
+            Object.entries(error.data.validationErrors).map(
+              ([field, messages]) => ({
+                field,
+                message: Array.isArray(messages)
+                  ? messages[0]
+                  : (messages as string),
+              })
+            )
+          );
+        } else {
+          setError(error.message || "Failed to create thread");
         }
-
-        try {
-          setIsSubmitting(true);
-          setError(null);
-          setValidationErrors([]);
-
-          logger.debug("Creating thread", {
-            householdId: selectedHouseholdId,
-            title: data.title,
-            participantsCount: data.participants.length,
-          });
-
-          await createThread({
-            title: data.title.trim() || undefined,
-            participants: data.participants,
-            initialMessage: {
-              content: data.message.trim(),
-            },
-          });
-
-          logger.info("Thread created successfully", {
-            householdId: selectedHouseholdId,
-          });
-
-          handleClose();
-        } catch (err) {
-          const error = err as ApiError;
-          logger.error("Failed to create thread", { error });
-
-          if (
-            error.type === ApiErrorType.VALIDATION &&
-            error.data?.validationErrors
-          ) {
-            const errors: ValidationError[] = [];
-            Object.entries(error.data.validationErrors).forEach(
-              ([field, messages]) => {
-                errors.push({
-                  field,
-                  message: Array.isArray(messages)
-                    ? messages[0]
-                    : (messages as string),
-                });
-              }
-            );
-            setValidationErrors(errors);
-          } else {
-            setError(error.message || "Failed to create thread");
-          }
-        } finally {
-          setIsSubmitting(false);
-        }
-      },
-      300
-    ),
-    [validation.isValid, selectedHouseholdId, createThread, handleClose]
+      } finally {
+        setIsSubmitting(false);
+      }
+    }, 300),
+    [isValid, activeHouseholdId, createThread, handleClose, members]
   );
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -160,14 +145,13 @@ export function ThreadCreator({
       return;
     }
 
-    if (!validation.hasSelectedHousehold) {
-      setError("Please select a household first");
+    if (!activeHouseholdId) {
+      setError("No active household selected");
       return;
     }
 
     debouncedSubmit({
       title,
-      participants: selectedParticipants,
       message: initialMessage,
     });
   };
@@ -186,29 +170,16 @@ export function ThreadCreator({
     }
   }, [isOpen, resetForm]);
 
-  // Show loading state while households are loading
-  if (isLoadingHouseholds) {
-    return (
-      <Modal isOpen={isOpen} onClose={handleClose} title="Create New Thread">
-        <div className="flex justify-center items-center h-48">
-          <div className="animate-pulse text-text-secondary">
-            Loading households...
-          </div>
-        </div>
-      </Modal>
-    );
-  }
-
-  // Show error state if households failed to load
-  if (householdsError) {
-    const error = householdsError as ApiError;
+  if (!activeHouseholdId) {
     return (
       <Modal isOpen={isOpen} onClose={handleClose} title="Create New Thread">
         <div className="flex flex-col items-center justify-center h-48 space-y-4">
-          <p className="text-red-500">
-            {error.message || "Failed to load households"}
+          <p className="text-red-600 dark:text-red-400">
+            Please select an active household first
           </p>
-          <Button onClick={() => window.location.reload()}>Retry</Button>
+          <Button variant="secondary" onClick={handleClose}>
+            Close
+          </Button>
         </div>
       </Modal>
     );
@@ -216,51 +187,25 @@ export function ThreadCreator({
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Create New Thread">
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="space-y-1">
-          <label className="form-label">Household</label>
-          <select
-            value={selectedHouseholdId}
-            onChange={(e) => setSelectedHouseholdId(e.target.value)}
-            className="input"
-            required
-          >
-            <option value="">Select a household</option>
-            {householdsData?.data?.map((household) => (
-              <option key={household.id} value={household.id}>
-                {household.name}
-              </option>
-            ))}
-          </select>
-          {validationErrors.find((e) => e.field === "householdId") && (
-            <p className="text-red-500 text-sm mt-1">
-              {validationErrors.find((e) => e.field === "householdId")?.message}
-            </p>
-          )}
-        </div>
-        {!validation.hasSelectedHousehold && (
-          <div className="p-4 bg-red-50 dark:bg-red-900/10 rounded-md">
-            <p className="text-red-600 dark:text-red-400 text-sm">
-              Please select a household before creating a thread
-            </p>
-          </div>
-        )}
+      <form onSubmit={handleSubmit} className="space-y-md">
         <Input
-          label="Title (Optional)"
+          label="Title"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Enter thread title"
-          disabled={isSubmitting || !validation.hasSelectedHousehold}
+          required
+          disabled={isSubmitting}
           error={validationErrors.find((e) => e.field === "title")?.message}
         />
-        <div className="space-y-1">
+
+        <div className="space-y-2xs">
           <label className="form-label">Message</label>
           <textarea
             value={initialMessage}
             onChange={(e) => setInitialMessage(e.target.value)}
             placeholder="Enter your message"
             required
-            disabled={isSubmitting || !validation.hasSelectedHousehold}
+            disabled={isSubmitting}
             className={`input min-h-[100px] resize-y ${
               validationErrors.find((e) => e.field === "message")
                 ? "border-red-500"
@@ -268,17 +213,19 @@ export function ThreadCreator({
             }`}
           />
           {validationErrors.find((e) => e.field === "message") && (
-            <p className="text-red-500 text-sm mt-1">
+            <p className="form-error">
               {validationErrors.find((e) => e.field === "message")?.message}
             </p>
           )}
         </div>
+
         {error && (
-          <div className="p-4 bg-red-50 dark:bg-red-900/10 rounded-md">
+          <div className="p-md bg-red-50 dark:bg-red-900/10 rounded-md">
             <p className="text-red-600 dark:text-red-400 text-sm">{error}</p>
           </div>
         )}
-        <div className="flex justify-end space-x-2">
+
+        <div className="flex justify-end space-x-sm">
           <Button
             type="button"
             variant="secondary"
@@ -289,8 +236,9 @@ export function ThreadCreator({
           </Button>
           <Button
             type="submit"
+            variant="primary"
             isLoading={isSubmitting}
-            disabled={!validation.isValid}
+            disabled={!isValid}
           >
             Create Thread
           </Button>

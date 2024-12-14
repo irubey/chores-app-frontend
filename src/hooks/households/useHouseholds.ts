@@ -29,6 +29,15 @@ interface UpdateHouseholdVars {
   data: UpdateHouseholdDTO;
 }
 
+// Utility function to get members from household data
+export const getHouseholdMembers = (
+  householdsData: ApiResponse<HouseholdWithMembers[]> | undefined,
+  householdId: string
+): HouseholdMember[] | undefined => {
+  const household = householdsData?.data.find((h) => h.id === householdId);
+  return household?.members;
+};
+
 // List hook
 export const useHouseholds = (
   options?: Omit<
