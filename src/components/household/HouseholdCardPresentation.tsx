@@ -22,11 +22,11 @@ export default function HouseholdCardPresentation({
       disabled={isPending}
       className={`
         inline-flex items-center px-4 py-1.5 rounded-full text-sm font-medium
-        transition-all duration-200 
+        transition-all duration-200 border-2
         ${
           isActive
-            ? "bg-primary text-white hover:bg-primary-dark"
-            : "border-2 border-primary text-primary hover:bg-primary hover:text-white"
+            ? "bg-primary text-white border-primary hover:bg-primary-dark hover:border-primary-dark"
+            : "bg-white text-primary border-gray-200 hover:border-primary hover:text-primary-dark"
         }
         ${isPending ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
       `}

@@ -1,21 +1,16 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import {
-  useAuthUser,
-  useAuthActions,
-  useAuthStatus,
-} from "@/contexts/UserContext";
+import { useAuth } from "@/contexts/UserContext";
 import Input from "@/components/common/Input";
 import Button from "@/components/common/Button";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { logger } from "@/lib/api/logger";
+import { ApiError } from "@/lib/api/errors/apiErrors";
 
 const RegisterPage: React.FC = () => {
-  const user = useAuthUser();
-  const { register } = useAuthActions();
-  const { status, error: authError } = useAuthStatus();
+  const { user, status, error: authError, register } = useAuth();
   const isLoading = status === "loading";
   const router = useRouter();
   const [formData, setFormData] = useState({
@@ -32,10 +27,14 @@ const RegisterPage: React.FC = () => {
   });
 
   useEffect(() => {
-    if (user) {
-      router.replace("/dashboard");
+    // Redirect if already authenticated
+    if (status === "authenticated" && user) {
+      const redirectPath =
+        sessionStorage.getItem("redirectAfterLogin") || "/dashboard";
+      sessionStorage.removeItem("redirectAfterLogin");
+      router.replace(redirectPath);
     }
-  }, [user, router]);
+  }, [status, user, router]);
 
   const validateForm = () => {
     const errors = {
@@ -91,10 +90,18 @@ const RegisterPage: React.FC = () => {
 
     try {
       await register(formData.email, formData.password, formData.name);
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      router.replace("/dashboard");
+      // Registration successful - auth context will handle redirect
     } catch (err) {
       logger.error("Registration failed", { error: err });
+      if (err instanceof ApiError) {
+        // Handle specific API errors
+        if (err.data?.code === "EMAIL_TAKEN") {
+          setFormErrors((prev) => ({
+            ...prev,
+            email: "This email is already registered",
+          }));
+        }
+      }
     }
   };
 

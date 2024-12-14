@@ -21,6 +21,9 @@ import {
 } from "@tanstack/react-query";
 import { hasAuthSession } from "@/utils/cookieUtils";
 import { userKeys } from "@/lib/api/services/userService";
+import { useRouter } from "next/navigation";
+import { AUTH_ERROR_EVENT } from "@/lib/api/interceptors";
+import { isPublicRoute, isAuthRoute } from "@/lib/constants/routes";
 
 type AuthStatus =
   | "idle"
@@ -36,6 +39,7 @@ interface AuthState {
     code?: string;
     details?: unknown;
   } | null;
+  lastTokenCheck: number;
 }
 
 interface AuthActions {
@@ -57,6 +61,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 const initialState: AuthState = {
   status: "idle",
   error: null,
+  lastTokenCheck: 0,
 };
 
 const getErrorMessage = (error: unknown): AuthState["error"] => {
@@ -84,7 +89,12 @@ const getErrorMessage = (error: unknown): AuthState["error"] => {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
-  const [state, setState] = useState<AuthState>(initialState);
+  const router = useRouter();
+  const [state, setState] = useState<AuthState>({
+    status: "idle",
+    error: null,
+    lastTokenCheck: 0,
+  });
   const initRef = useRef(false);
   const [shouldInitialize, setShouldInitialize] = useState(false);
 
@@ -114,6 +124,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  // Handle auth error events
+  useEffect(() => {
+    const handleAuthError = (event: CustomEvent<ApiError>) => {
+      logger.debug("Auth error event received", {
+        error: event.detail,
+      });
+
+      // Clear auth state
+      updateState({
+        status: "unauthenticated",
+        error: {
+          message: "Session expired",
+          code: event.detail.data?.code,
+          details: event.detail.data,
+        },
+      });
+
+      // Clear queries and cache
+      queryClient.setQueryData(authKeys.session(), null);
+      queryClient.setQueryData(userKeys.profile(), null);
+      queryClient.clear();
+
+      // Store current path for redirect after login
+      const currentPath = window.location.pathname;
+      // Skip redirect if on public route or auth page
+      if (!isPublicRoute(currentPath) && !isAuthRoute(currentPath)) {
+        sessionStorage.setItem("redirectAfterLogin", currentPath);
+        router.push("/login");
+      }
+    };
+
+    window.addEventListener(AUTH_ERROR_EVENT, handleAuthError as EventListener);
+    return () => {
+      window.removeEventListener(
+        AUTH_ERROR_EVENT,
+        handleAuthError as EventListener
+      );
+    };
+  }, [queryClient, router, updateState]);
+
   // Auth initialization query
   const {
     data: authData,
@@ -128,6 +178,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       try {
+        // Skip auth check if no session exists
+        if (!hasAuthSession()) {
+          logger.debug("No auth session - skipping initialization");
+          return null;
+        }
+
         const response = await authApi.auth.initializeAuth();
         const data = response?.data ?? null;
 
@@ -152,7 +208,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Handle refresh token failure
         if (
           error instanceof ApiError &&
-          error.type === ApiErrorType.UNAUTHORIZED
+          (error.type === ApiErrorType.UNAUTHORIZED ||
+            error.data?.code === "NO_REFRESH_TOKEN" ||
+            error.data?.code === "AUTH_REFRESH_FAILED")
         ) {
           logger.debug("Auth refresh failed, clearing state", {
             errorType: error.type,
@@ -169,6 +227,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             },
           });
 
+          // Clear all queries and cache
           queryClient.setQueryData(authKeys.session(), null);
           queryClient.setQueryData(userKeys.profile(), null);
           queryClient.clear();
@@ -178,7 +237,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw error;
       }
     },
-    retry: 0,
+    retry: (failureCount, error) => {
+      // Don't retry on auth errors
+      if (
+        error instanceof ApiError &&
+        (error.type === ApiErrorType.UNAUTHORIZED ||
+          error.data?.code === "NO_REFRESH_TOKEN" ||
+          error.data?.code === "AUTH_REFRESH_FAILED")
+      ) {
+        return false;
+      }
+      return failureCount < 3;
+    },
     staleTime: Infinity,
     gcTime: Infinity,
     refetchOnMount: false,

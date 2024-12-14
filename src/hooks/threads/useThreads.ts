@@ -20,6 +20,7 @@ import { useSocket } from "@/contexts/SocketContext";
 import { socketClient } from "@/lib/socketClient";
 import { ApiRequestOptions } from "@/lib/api/utils/apiUtils";
 import { useUser } from "@/hooks/users/useUser";
+import { ApiError, ApiErrorType } from "@/lib/api/errors/apiErrors";
 
 // Types
 interface ThreadsOptions {
@@ -64,8 +65,49 @@ export const useThreads = (
   const { data: userData } = useUser();
   const currentUser = userData?.data;
 
+  const isActiveHousehold = currentUser?.activeHouseholdId === householdId;
+
+  const query = useQuery({
+    queryKey: threadKeys.list(householdId),
+    queryFn: async () => {
+      try {
+        const result = await threadApi.threads.list(
+          householdId,
+          requestOptions
+        );
+        logger.debug("API Request: List Threads", {
+          householdId,
+          params: requestOptions,
+          timestamp: new Date().toISOString(),
+        });
+        return result.data;
+      } catch (error) {
+        logger.error("Failed to fetch thread list", {
+          householdId,
+          params: requestOptions,
+          error,
+        });
+        throw error;
+      }
+    },
+    enabled: enabled && isActiveHousehold && !!householdId,
+    staleTime: 30000, // 30 seconds
+    gcTime: 5 * 60 * 1000, // 5 minutes
+    retry: (failureCount, error) => {
+      // Don't retry on auth errors
+      if (
+        error instanceof ApiError &&
+        error.type === ApiErrorType.UNAUTHORIZED
+      ) {
+        return false;
+      }
+      return failureCount < 3;
+    },
+    ...options,
+  });
+
   useEffect(() => {
-    if (!isConnected || !enabled) return;
+    if (!isConnected || !enabled || !isActiveHousehold) return;
 
     const handleThreadCreate = (newThread: ThreadWithDetails) => {
       if (newThread.householdId !== householdId) return;
@@ -129,36 +171,7 @@ export const useThreads = (
         householdId,
       });
     };
-  }, [isConnected, householdId, enabled, queryClient]);
-
-  const query = useQuery({
-    queryKey: threadKeys.list(householdId),
-    queryFn: async () => {
-      try {
-        const result = await threadApi.threads.list(
-          householdId,
-          requestOptions
-        );
-        logger.debug("Thread list fetched", {
-          householdId,
-          count: result.data.length,
-          params: requestOptions?.params,
-        });
-        return result.data;
-      } catch (error) {
-        logger.error("Failed to fetch thread list", {
-          householdId,
-          params: requestOptions?.params,
-          error,
-        });
-        throw error;
-      }
-    },
-    staleTime: STALE_TIMES.STANDARD,
-    gcTime: CACHE_TIMES.STANDARD,
-    enabled: enabled && Boolean(householdId),
-    ...options,
-  });
+  }, [isConnected, enabled, householdId, isActiveHousehold, queryClient]);
 
   const createThread = useMutation<
     ThreadWithDetails,

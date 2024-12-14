@@ -6,17 +6,20 @@ import HouseholdCardContainer from "./HouseholdCardContainer";
 interface HouseholdSelectorProps {
   households: HouseholdWithMembers[] | undefined;
   isLoading: boolean;
+  activeHouseholdId: string | undefined;
   className?: string;
 }
 
 function HouseholdSelector({
   households,
   isLoading,
+  activeHouseholdId,
   className = "",
 }: HouseholdSelectorProps) {
   logger.debug("Rendering HouseholdSelector", {
     householdsCount: households?.length ?? 0,
     isLoading,
+    activeHouseholdId,
   });
 
   // Only show if there are multiple households
@@ -30,7 +33,10 @@ function HouseholdSelector({
         <div className="flex items-center justify-center gap-2">
           {households.map((household) => (
             <div key={household.id} className="flex-shrink-0">
-              <HouseholdCardContainer household={household} />
+              <HouseholdCardContainer
+                household={household}
+                activeHouseholdId={activeHouseholdId}
+              />
             </div>
           ))}
         </div>
@@ -39,22 +45,32 @@ function HouseholdSelector({
   );
 }
 
-// Memoize the component to prevent unnecessary renders
+// Memoize the component with updated comparison
 export default memo(HouseholdSelector, (prevProps, nextProps) => {
-  // Only re-render if the households array changes or loading state changes
+  // Compare loading state
+  if (prevProps.isLoading !== nextProps.isLoading) {
+    return false;
+  }
+
+  // Compare active household
+  if (prevProps.activeHouseholdId !== nextProps.activeHouseholdId) {
+    return false;
+  }
+
+  // Compare households
   const prevCount = prevProps.households?.length ?? 0;
   const nextCount = nextProps.households?.length ?? 0;
 
-  if (prevCount !== nextCount || prevProps.isLoading !== nextProps.isLoading) {
-    return false; // Re-render
+  if (prevCount !== nextCount) {
+    return false;
   }
 
   // If counts match, check if the household IDs are the same
   if (prevProps.households && nextProps.households) {
-    return prevProps.households.every(
-      (h, i) => h.id === nextProps.households![i].id
-    );
+    const prevIds = prevProps.households.map((h) => h.id).join(",");
+    const nextIds = nextProps.households.map((h) => h.id).join(",");
+    return prevIds === nextIds;
   }
 
-  return true; // Don't re-render
+  return true;
 });

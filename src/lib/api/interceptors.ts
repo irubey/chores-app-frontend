@@ -1,168 +1,168 @@
 import {
   AxiosError,
-  AxiosResponse,
-  AxiosRequestConfig,
   AxiosInstance,
   InternalAxiosRequestConfig,
+  AxiosRequestConfig,
 } from "axios";
-import { ApiError, ApiErrorType, NetworkError } from "./errors/apiErrors";
-import { logger } from "@/lib/api/logger";
+import { ApiError, ApiErrorType } from "./errors/apiErrors";
+import { hasAuthSession } from "@/utils/cookieUtils";
+import { isPublicRoute } from "@/lib/constants/routes";
+import { refreshInstance } from "./axiosInstance";
 
-// Extend InternalAxiosRequestConfig to include _retry
-interface ExtendedInternalAxiosRequestConfig
-  extends InternalAxiosRequestConfig {
-  _retry?: boolean;
+// Custom event for auth failures
+export const AUTH_ERROR_EVENT = "auth:error";
+export const emitAuthError = (error: ApiError) => {
+  window.dispatchEvent(new CustomEvent(AUTH_ERROR_EVENT, { detail: error }));
+};
+
+interface ExtendedAxiosRequestConfig extends AxiosRequestConfig {
+  _isRefreshRequest?: boolean;
   _refreshAttempts?: number;
 }
 
-// Track if we're currently refreshing to prevent multiple refresh attempts
-let isRefreshing = false;
-let refreshSubscribers: (() => void)[] = [];
-let lastRefreshTime = 0;
-const MIN_REFRESH_INTERVAL = 1000; // 1 second minimum between refresh attempts
-
-// Subscribe failed requests to be retried after token refresh
-function subscribeTokenRefresh(cb: () => void) {
-  refreshSubscribers.push(cb);
+interface ExtendedInternalAxiosRequestConfig
+  extends InternalAxiosRequestConfig {
+  _isRefreshRequest?: boolean;
+  _refreshAttempts?: number;
 }
 
-// Retry failed requests
-function onTokenRefreshed() {
-  refreshSubscribers.forEach((cb) => cb());
-  refreshSubscribers = [];
+interface RefreshResponse {
+  data: {
+    accessToken: string;
+    refreshToken: string;
+    sessionId: string;
+  };
 }
 
-// Reject all requests if refresh fails
-function onRefreshError() {
-  refreshSubscribers = [];
+// Single refresh attempt promise and request queue
+let refreshAttempt: Promise<string> | null = null;
+const MAX_RETRY_ATTEMPTS = 3;
+
+interface QueuedRequest {
+  config: ExtendedInternalAxiosRequestConfig;
+  resolve: (value: any) => void;
+  reject: (error: any) => void;
 }
 
-/**
- * Handles token refresh for 401 responses
- * Returns a promise that resolves with the original request config for retry
- */
+let requestQueue: QueuedRequest[] = [];
+let isProcessingQueue = false;
+
+async function processQueue(newToken: string, axiosInstance: AxiosInstance) {
+  if (isProcessingQueue) return;
+
+  try {
+    isProcessingQueue = true;
+    while (requestQueue.length > 0) {
+      const { config, resolve, reject } = requestQueue.shift()!;
+      try {
+        config.headers.Authorization = `Bearer ${newToken}`;
+        resolve(await axiosInstance(config));
+      } catch (error) {
+        reject(error);
+      }
+    }
+  } finally {
+    isProcessingQueue = false;
+  }
+}
+
+function getCurrentSessionId(): string | null {
+  return (
+    document.cookie
+      .split("; ")
+      .find((row) => row.startsWith("auth_session="))
+      ?.split("=")[1] || null
+  );
+}
+
+interface TokenState {
+  accessToken: string | null;
+  expiresAt: number | null;
+}
+
+let currentTokenState: TokenState = {
+  accessToken: null,
+  expiresAt: null,
+};
+
+function isTokenExpired(): boolean {
+  return (
+    !currentTokenState.expiresAt || Date.now() >= currentTokenState.expiresAt
+  );
+}
+
 async function handleTokenRefresh(
-  axiosInstance: AxiosInstance,
-  originalRequest: ExtendedInternalAxiosRequestConfig
-): Promise<AxiosRequestConfig> {
-  // Initialize refresh attempts counter
-  originalRequest._refreshAttempts =
-    (originalRequest._refreshAttempts || 0) + 1;
+  axiosInstance: AxiosInstance
+): Promise<string> {
+  if (!isTokenExpired() && currentTokenState.accessToken) {
+    return currentTokenState.accessToken;
+  }
 
-  // Prevent infinite refresh loops
-  if (
-    originalRequest?.url?.includes("/auth/refresh-token") ||
-    originalRequest._retry ||
-    originalRequest._refreshAttempts > 1
-  ) {
-    logger.debug("Skipping token refresh", {
-      url: originalRequest.url,
-      isRetry: originalRequest._retry,
-      attempts: originalRequest._refreshAttempts,
+  if (refreshAttempt) {
+    return refreshAttempt;
+  }
+
+  const sessionId = getCurrentSessionId();
+  if (!sessionId) {
+    throw new ApiError("No session available", ApiErrorType.UNAUTHORIZED, 401, {
+      code: "NO_SESSION",
     });
-    throw new ApiError(
-      "Authentication refresh failed",
-      ApiErrorType.UNAUTHORIZED,
-      401,
-      { code: "AUTH_REFRESH_FAILED" }
-    );
   }
 
   try {
-    // Check if we've refreshed recently
-    const now = Date.now();
-    if (now - lastRefreshTime < MIN_REFRESH_INTERVAL) {
-      logger.debug("Skipping refresh - too soon since last attempt", {
-        timeSinceLastRefresh: now - lastRefreshTime,
-      });
-      throw new ApiError(
-        "Too many refresh attempts",
-        ApiErrorType.UNAUTHORIZED,
-        401,
-        { code: "REFRESH_RATE_LIMIT" }
-      );
-    }
-
-    if (!isRefreshing) {
-      isRefreshing = true;
-      lastRefreshTime = now;
-
-      // Check for refresh token in cookies
-      const cookies = document.cookie.split(";").reduce((acc, cookie) => {
-        const [key, value] = cookie.trim().split("=");
-        acc[key] = value;
-        return acc;
-      }, {} as Record<string, string>);
-
-      if (!cookies.auth_session) {
-        isRefreshing = false;
-        throw new ApiError(
-          "No refresh token available",
-          ApiErrorType.UNAUTHORIZED,
-          401,
-          { code: "NO_REFRESH_TOKEN" }
+    refreshAttempt = (async () => {
+      try {
+        const response = await refreshInstance.post<RefreshResponse>(
+          "/auth/refresh",
+          null,
+          { withCredentials: true }
         );
+
+        const { accessToken } = response.data.data;
+        currentTokenState = {
+          accessToken,
+          expiresAt: Date.now() + 15 * 1000 - 500,
+        };
+
+        [axiosInstance, refreshInstance].forEach((instance) => {
+          instance.defaults.headers.common[
+            "Authorization"
+          ] = `Bearer ${accessToken}`;
+        });
+
+        const newSessionId = getCurrentSessionId();
+        if (!newSessionId || newSessionId === sessionId) {
+          throw new ApiError(
+            "Session not updated",
+            ApiErrorType.UNAUTHORIZED,
+            401,
+            {
+              code: "SESSION_NOT_UPDATED",
+            }
+          );
+        }
+
+        await processQueue(accessToken, axiosInstance);
+        return accessToken;
+      } catch (error) {
+        refreshAttempt = null;
+        while (requestQueue.length > 0) {
+          const { reject } = requestQueue.shift()!;
+          reject(error);
+        }
+        throw error;
       }
+    })();
 
-      logger.debug("Attempting token refresh");
-      await axiosInstance.post("/auth/refresh-token", null, {
-        withCredentials: true,
-      });
-
-      logger.debug("Token refresh successful");
-      isRefreshing = false;
-      onTokenRefreshed();
-    }
-
-    // Mark request as retried to prevent loops
-    originalRequest._retry = true;
-    return originalRequest;
-  } catch (refreshError) {
-    isRefreshing = false;
-    onRefreshError();
-    throw refreshError instanceof ApiError
-      ? refreshError
-      : new ApiError(
-          "Authentication refresh failed",
-          ApiErrorType.UNAUTHORIZED,
-          401,
-          { code: "AUTH_REFRESH_FAILED" }
-        );
+    return refreshAttempt;
+  } catch (error) {
+    currentTokenState = { accessToken: null, expiresAt: null };
+    refreshAttempt = null;
+    throw error;
   }
 }
 
-/**
- * Handles network errors.
- */
-function handleNetworkError(
-  error: AxiosError,
-  originalRequest: AxiosRequestConfig
-): Promise<never> {
-  return Promise.reject(new NetworkError("Network error. Please try again."));
-}
-
-/**
- * Handles API errors.
- */
-function handleApiError(
-  error: AxiosError,
-  originalRequest: AxiosRequestConfig
-): Promise<never> {
-  const apiError = ApiError.fromHttpError(
-    error.response?.status || 500,
-    (error.response?.data as { message?: string })?.message,
-    error.response?.data
-  );
-
-  return Promise.reject(apiError);
-}
-
-/**
- * Sets up Axios response interceptors.
- * Handles token refresh before apiUtils handles the final response/error.
- */
 export function setupInterceptors(axiosInstance: AxiosInstance) {
-  // Add request interceptor to ensure credentials are sent
   axiosInstance.interceptors.request.use(
     (config) => {
       config.withCredentials = true;
@@ -171,51 +171,78 @@ export function setupInterceptors(axiosInstance: AxiosInstance) {
     (error) => Promise.reject(error)
   );
 
-  // Add response interceptor for token refresh
   axiosInstance.interceptors.response.use(
-    (response: AxiosResponse) => response,
+    (response) => response,
     async (error: AxiosError) => {
       const originalRequest =
         error.config as ExtendedInternalAxiosRequestConfig;
 
-      // Skip token refresh for auth endpoints or already retried requests
       if (
         !originalRequest ||
-        originalRequest?.url?.startsWith("/auth/") ||
-        originalRequest._retry
+        originalRequest.url.startsWith("/auth/") ||
+        (originalRequest.url && isPublicRoute(originalRequest.url)) ||
+        (originalRequest._refreshAttempts || 0) >= MAX_RETRY_ATTEMPTS ||
+        !error.response ||
+        error.response.status !== 401 ||
+        !hasAuthSession() ||
+        originalRequest._isRefreshRequest
       ) {
+        if (
+          error.response?.status === 401 &&
+          originalRequest?.url &&
+          !isPublicRoute(originalRequest.url) &&
+          !originalRequest.url.startsWith("/auth/") &&
+          !originalRequest._isRefreshRequest
+        ) {
+          emitAuthError(
+            new ApiError(
+              "Authentication failed",
+              ApiErrorType.UNAUTHORIZED,
+              401,
+              {
+                code: "AUTH_FAILED",
+              }
+            )
+          );
+        }
         throw error;
       }
 
-      // Only handle 401s for token refresh, let apiUtils handle other errors
-      if (error.response?.status === 401) {
-        try {
-          // If we're already refreshing, queue this request
-          if (isRefreshing) {
-            logger.debug("Token refresh in progress, queueing request", {
-              url: originalRequest.url,
-            });
-            return new Promise((resolve) => {
-              subscribeTokenRefresh(() => {
-                resolve(axiosInstance(originalRequest));
-              });
-            });
-          }
+      try {
+        originalRequest._refreshAttempts =
+          (originalRequest._refreshAttempts || 0) + 1;
 
-          // Attempt token refresh and retry original request
-          const retryConfig = await handleTokenRefresh(
-            axiosInstance,
-            originalRequest
-          );
-          return axiosInstance(retryConfig);
-        } catch (refreshError) {
-          // Let apiUtils handle the error transformation and logging
-          throw refreshError;
+        if (refreshAttempt) {
+          return new Promise((resolve, reject) => {
+            requestQueue.push({
+              config: originalRequest,
+              resolve,
+              reject,
+            });
+          });
         }
-      }
 
-      // Let apiUtils handle all other errors
-      throw error;
+        const newToken = await handleTokenRefresh(axiosInstance);
+        if (newToken) {
+          originalRequest.headers.Authorization = `Bearer ${newToken}`;
+          return axiosInstance(originalRequest);
+        }
+
+        throw error;
+      } catch (refreshError) {
+        const authError =
+          refreshError instanceof ApiError
+            ? refreshError
+            : new ApiError(
+                "Authentication refresh failed",
+                ApiErrorType.UNAUTHORIZED,
+                401,
+                { code: "AUTH_REFRESH_FAILED" }
+              );
+
+        emitAuthError(authError);
+        throw authError;
+      }
     }
   );
 }

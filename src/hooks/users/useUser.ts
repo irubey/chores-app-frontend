@@ -5,13 +5,13 @@ import { ApiResponse } from "@shared/interfaces/apiResponse";
 import { logger } from "@/lib/api/logger";
 import { useAuth } from "@/contexts/UserContext";
 import { authKeys } from "@/lib/api/services/authService";
-import { ApiError } from "@/lib/api/errors";
+import { ApiError, ApiErrorType } from "@/lib/api/errors/apiErrors";
 
 export function useUser() {
   const { status, user: authUser } = useAuth();
   const queryClient = useQueryClient();
 
-  return useQuery({
+  const query = useQuery({
     queryKey: userKeys.profile(),
     queryFn: async () => {
       try {
@@ -22,17 +22,49 @@ export function useUser() {
         return result;
       } catch (error) {
         logger.error("Failed to fetch user profile", { error });
+        // Don't retry on auth errors
+        if (
+          error instanceof ApiError &&
+          error.type === ApiErrorType.UNAUTHORIZED
+        ) {
+          queryClient.setQueryData(userKeys.profile(), null);
+          queryClient.setQueryData(authKeys.session(), null);
+        }
         throw error;
       }
     },
-    // Only fetch if authenticated and no initial data
-    enabled: status === "authenticated" && !authUser,
-    // Use auth data as initial data
+    enabled: status === "authenticated",
     initialData: authUser
       ? ({ data: authUser } as ApiResponse<User>)
       : undefined,
     staleTime: 30000, // 30 seconds
+    retry: (failureCount, error) => {
+      // Don't retry on auth errors
+      if (
+        error instanceof ApiError &&
+        error.type === ApiErrorType.UNAUTHORIZED
+      ) {
+        return false;
+      }
+      return failureCount < 3;
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+    gcTime: 5 * 60 * 1000, // 5 minutes
   });
+
+  return {
+    ...query,
+    // Add helper method to manually update cache
+    updateCache: (
+      updater: (oldData: ApiResponse<User> | undefined) => ApiResponse<User>
+    ) => {
+      const newData = updater(queryClient.getQueryData(userKeys.profile()));
+      if (newData) {
+        queryClient.setQueryData(userKeys.profile(), newData);
+        queryClient.setQueryData(authKeys.session(), newData.data);
+      }
+    },
+  };
 }
 
 export function useUpdateProfile() {
@@ -62,19 +94,54 @@ export function useUpdateProfile() {
 
 export function useSetActiveHousehold() {
   const queryClient = useQueryClient();
+  const { updateCache } = useUser();
 
   interface MutationContext {
     previousUser: ApiResponse<User> | undefined;
+    previousHouseholdId: string | null;
   }
 
-  return useMutation<ApiResponse<User>, ApiError, string | null>({
+  return useMutation<
+    ApiResponse<User>,
+    ApiError,
+    string | null,
+    MutationContext
+  >({
     mutationFn: async (householdId) => {
       try {
-        const result = await userApi.users.setActiveHousehold(householdId);
-        logger.info("Active household updated", {
-          householdId,
-        });
-        return result;
+        // Add retry logic for auth failures
+        const maxRetries = 2;
+        let retries = 0;
+        let lastError: Error | null = null;
+
+        while (retries < maxRetries) {
+          try {
+            const result = await userApi.users.setActiveHousehold(householdId);
+            logger.info("Active household updated", { householdId });
+            return result;
+          } catch (error) {
+            lastError = error as Error;
+            if (
+              error instanceof ApiError &&
+              error.type === ApiErrorType.UNAUTHORIZED &&
+              retries < maxRetries - 1
+            ) {
+              retries++;
+              logger.debug("Retrying household update after auth error", {
+                attempt: retries,
+                householdId,
+              });
+              await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait before retry
+              continue;
+            }
+            throw error;
+          }
+        }
+
+        throw (
+          lastError ||
+          new Error("Failed to update active household after retries")
+        );
       } catch (error) {
         logger.error("Failed to update active household", { error });
         throw error;
@@ -89,32 +156,45 @@ export function useSetActiveHousehold() {
         userKeys.profile()
       );
 
-      // Optimistically update both caches
+      const previousHouseholdId = previousUser?.data?.activeHouseholdId || null;
+
+      // Optimistically update the cache
       if (previousUser) {
-        const updatedUser = {
-          ...previousUser,
-          data: {
-            ...previousUser.data,
-            activeHouseholdId: householdId,
-          },
-        };
-        queryClient.setQueryData(userKeys.profile(), updatedUser);
-        queryClient.setQueryData(authKeys.session(), updatedUser.data);
+        logger.debug("Optimistically updated household", {
+          from: previousHouseholdId,
+          to: householdId,
+        });
+
+        updateCache((old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            data: {
+              ...old.data,
+              activeHouseholdId: householdId,
+            },
+          };
+        });
       }
 
-      return { previousUser };
+      return { previousUser, previousHouseholdId };
     },
-    onError: (_, __, context: MutationContext | undefined) => {
-      // Rollback both caches
-      if (context?.previousUser) {
-        queryClient.setQueryData(userKeys.profile(), context.previousUser);
-        queryClient.setQueryData(authKeys.session(), context.previousUser.data);
+    onError: (error, _, context) => {
+      if (context) {
+        logger.debug("Rolling back household change", {
+          from: context.previousHouseholdId,
+          error: error.message,
+        });
+
+        // Revert optimistic update on error
+        if (context.previousUser) {
+          updateCache(() => context.previousUser!);
+        }
       }
     },
-    onSuccess: (response) => {
-      // Update both caches
-      queryClient.setQueryData(userKeys.profile(), response);
-      queryClient.setQueryData(authKeys.session(), response.data);
+    onSettled: () => {
+      // Invalidate related queries after settling
+      queryClient.invalidateQueries({ queryKey: userKeys.profile() });
     },
   });
 }

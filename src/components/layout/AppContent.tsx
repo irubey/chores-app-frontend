@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useCallback } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { logger } from "@/lib/api/logger";
 import { useAuthStatus, useIsAuthenticated } from "@/contexts/UserContext";
@@ -11,19 +11,7 @@ import Header from "./Header";
 import HouseholdSelector from "../household/HouseholdSelector";
 import Footer from "./Footer";
 import Spinner from "../common/Spinner";
-
-// Public routes that don't require authentication
-const PUBLIC_ROUTES = [
-  "/login",
-  "/register",
-  "/",
-  "/forgot-password",
-  "/reset-password",
-  "/privacy",
-  "/terms",
-  "/about",
-  "/contact",
-] as const;
+import { isPublicRoute } from "@/lib/constants/routes";
 
 interface AppContentProps {
   children: React.ReactNode;
@@ -38,14 +26,7 @@ export default function AppContent({ children }: AppContentProps) {
   const router = useRouter();
   const pathname = usePathname();
   const isRedirecting = useRef(false);
-  const lastPathname = useRef(pathname);
-  const isMounted = useRef(false);
-
-  // Memoize isPublicRoute check
-  const isPublicRoute = useMemo(
-    () => PUBLIC_ROUTES.includes(pathname as (typeof PUBLIC_ROUTES)[number]),
-    [pathname]
-  );
+  const hasRedirected = useRef(false);
 
   // Memoize auth state
   const authState = useMemo(
@@ -66,6 +47,7 @@ export default function AppContent({ children }: AppContentProps) {
           <HouseholdSelector
             households={householdsData?.data}
             isLoading={isLoadingHouseholds}
+            activeHouseholdId={userData?.data?.activeHouseholdId}
           />
         )}
         <main className="container mx-auto flex-1 px-4 py-8">{children}</main>
@@ -74,6 +56,7 @@ export default function AppContent({ children }: AppContentProps) {
     ),
     [
       userData?.data,
+      userData?.data?.activeHouseholdId,
       isAuthenticated,
       householdsData?.data,
       isLoadingHouseholds,
@@ -81,67 +64,38 @@ export default function AppContent({ children }: AppContentProps) {
     ]
   );
 
-  // Memoize redirect handlers
-  const handleRedirect = useCallback(
-    (path: string, type: "login" | "dashboard") => {
-      if (isRedirecting.current || pathname === path) return;
+  // Handle auth redirects
+  useEffect(() => {
+    if (!authState.isReady || isRedirecting.current) return;
+
+    const currentIsPublic = isPublicRoute(pathname);
+    const shouldRedirectToLogin = !currentIsPublic && !isAuthenticated;
+    const shouldRedirectToDashboard = currentIsPublic && isAuthenticated;
+
+    if (shouldRedirectToLogin || shouldRedirectToDashboard) {
       isRedirecting.current = true;
-      logger.debug(`Redirecting to ${type}`, {
+      const targetPath = shouldRedirectToLogin ? "/login" : "/dashboard";
+      const redirectType = shouldRedirectToLogin ? "login" : "dashboard";
+
+      logger.debug(`Redirecting to ${redirectType}`, {
         from: pathname,
-        to: path,
+        to: targetPath,
         status,
         isAuthenticated,
+        isInitialRedirect: !hasRedirected.current,
       });
-      router.push(path);
+
+      router.push(targetPath);
+      hasRedirected.current = true;
+
       setTimeout(() => {
         isRedirecting.current = false;
       }, 100);
-    },
-    [router, pathname, status, isAuthenticated]
-  );
-
-  // Handle initial mount
-  useEffect(() => {
-    isMounted.current = true;
-    return () => {
-      isMounted.current = false;
-    };
-  }, []);
-
-  // Handle auth redirects
-  useEffect(() => {
-    if (
-      !isMounted.current ||
-      !authState.isReady ||
-      pathname === lastPathname.current
-    ) {
-      return;
     }
-
-    lastPathname.current = pathname;
-
-    const shouldRedirectToLogin = !isPublicRoute && !isAuthenticated;
-    const shouldRedirectToDashboard = isPublicRoute && isAuthenticated;
-
-    if (shouldRedirectToLogin) {
-      handleRedirect("/login", "login");
-    } else if (shouldRedirectToDashboard) {
-      handleRedirect("/dashboard", "dashboard");
-    }
-  }, [
-    authState.isReady,
-    isPublicRoute,
-    isAuthenticated,
-    pathname,
-    handleRedirect,
-  ]);
+  }, [authState.isReady, isAuthenticated, pathname, router, status]);
 
   // Show loading spinner during auth check
-  if (
-    !isMounted.current ||
-    authState.isLoading ||
-    (!authState.isReady && !isPublicRoute)
-  ) {
+  if (authState.isLoading || (!authState.isReady && !isPublicRoute(pathname))) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Spinner size="large" />
@@ -150,14 +104,20 @@ export default function AppContent({ children }: AppContentProps) {
   }
 
   // Show error state if auth failed and not on public route
-  if (authState.isError && !isPublicRoute) {
+  if (authState.isError && !isPublicRoute(pathname)) {
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-4">
         <p className="text-lg font-semibold text-red-600">
           Authentication Error
         </p>
         <button
-          onClick={() => handleRedirect("/login", "login")}
+          onClick={() => {
+            isRedirecting.current = true;
+            router.push("/login");
+            setTimeout(() => {
+              isRedirecting.current = false;
+            }, 100);
+          }}
           className="rounded bg-primary px-4 py-2 text-white hover:bg-primary-dark"
         >
           Return to Login
