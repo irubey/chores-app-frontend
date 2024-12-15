@@ -1,11 +1,6 @@
 // frontend/src/hooks/threads/usePoll.ts
 import { useEffect } from "react";
-import {
-  useQuery,
-  useMutation,
-  useQueryClient,
-  type UseQueryOptions,
-} from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { threadApi, threadKeys } from "@/lib/api/services/threadService";
 import {
   PollWithDetails,
@@ -13,14 +8,14 @@ import {
   UpdatePollDTO,
   CreatePollVoteDTO,
   PollVoteWithUser,
+  ThreadWithDetails,
 } from "@shared/types";
 import { PollStatus } from "@shared/enums/poll";
-import { ApiResponse } from "@shared/interfaces/apiResponse";
 import { logger } from "@/lib/api/logger";
-import { CACHE_TIMES, STALE_TIMES } from "@/lib/api/utils/apiUtils";
 import { useSocket } from "@/contexts/SocketContext";
 import { socketClient } from "@/lib/socketClient";
 import { useUser } from "@/hooks/users/useUser";
+import { getThreadById, getMessageById } from "./useThreads";
 
 // Types
 interface PollOptions {
@@ -28,57 +23,46 @@ interface PollOptions {
   readonly threadId: string;
   readonly messageId: string;
   readonly pollId: string;
-  readonly enabled?: boolean;
-}
-
-interface MutationContext {
-  readonly previousPoll: PollWithDetails | undefined;
-}
-
-interface OptimisticPollVote {
-  readonly id: string;
-  readonly optionId: string;
-  readonly pollId: string;
-  readonly userId: string;
-  readonly rank?: number;
-  readonly availability?: boolean;
-  readonly createdAt: Date;
-  readonly user: {
-    readonly id: string;
-    readonly name: string;
-    readonly email: string;
-    readonly profileImageURL: null;
-    readonly activeHouseholdId: null;
-    readonly createdAt: Date;
-    readonly updatedAt: Date;
-  };
 }
 
 /**
- * Hook for managing a single poll with real-time updates
+ * Hook for managing polls using thread data
  */
-export const usePoll = (
-  { householdId, threadId, messageId, pollId, enabled = true }: PollOptions,
-  options?: Omit<UseQueryOptions<PollWithDetails>, "queryKey" | "queryFn">
-) => {
+export const usePoll = ({
+  householdId,
+  threadId,
+  messageId,
+  pollId,
+}: PollOptions) => {
   const queryClient = useQueryClient();
   const { isConnected } = useSocket();
   const { data: userData } = useUser();
   const currentUser = userData?.data;
 
   useEffect(() => {
-    if (!isConnected || !enabled) return;
+    if (!isConnected) return;
 
     const handlePollUpdate = (updatedPoll: PollWithDetails) => {
-      queryClient.setQueryData(
-        threadKeys.messages.polls.detail(
-          householdId,
-          threadId,
-          messageId,
-          pollId
-        ),
-        updatedPoll
+      const threads = queryClient.getQueryData<readonly ThreadWithDetails[]>(
+        threadKeys.list(householdId)
       );
+
+      if (threads) {
+        queryClient.setQueryData<readonly ThreadWithDetails[]>(
+          threadKeys.list(householdId),
+          threads.map((t) =>
+            t.id === threadId
+              ? {
+                  ...t,
+                  messages: t.messages.map((m) =>
+                    m.id === messageId ? { ...m, poll: updatedPoll } : m
+                  ),
+                }
+              : t
+          )
+        );
+      }
+
       logger.debug("Poll updated via socket", {
         pollId,
         messageId,
@@ -88,160 +72,54 @@ export const usePoll = (
     };
 
     const handlePollVote = (vote: PollVoteWithUser) => {
-      queryClient.setQueryData<PollWithDetails>(
-        threadKeys.messages.polls.detail(
-          householdId,
-          threadId,
-          messageId,
-          pollId
-        ),
-        (old) => {
-          if (!old) return old;
-          return {
-            ...old,
-            options: old.options.map((option) =>
-              option.id === vote.optionId
-                ? {
-                    ...option,
-                    votes: [...option.votes, vote],
-                    voteCount: option.voteCount + 1,
-                  }
-                : option
-            ),
-          };
-        }
+      const threads = queryClient.getQueryData<readonly ThreadWithDetails[]>(
+        threadKeys.list(householdId)
       );
-      logger.debug("Poll vote added via socket", {
-        pollId,
-        messageId,
-        threadId,
-        householdId,
-        voteId: vote.id,
-      });
+
+      if (threads) {
+        queryClient.setQueryData<readonly ThreadWithDetails[]>(
+          threadKeys.list(householdId),
+          threads.map((t) =>
+            t.id === threadId
+              ? {
+                  ...t,
+                  messages: t.messages.map((m) =>
+                    m.id === messageId && m.poll
+                      ? {
+                          ...m,
+                          poll: {
+                            ...m.poll,
+                            options: m.poll.options.map((option) =>
+                              option.id === vote.optionId
+                                ? {
+                                    ...option,
+                                    votes: [...option.votes, vote],
+                                    voteCount: option.voteCount + 1,
+                                  }
+                                : option
+                            ),
+                          },
+                        }
+                      : m
+                  ),
+                }
+              : t
+          )
+        );
+      }
     };
 
-    const handlePollVoteRemove = (voteId: string) => {
-      queryClient.setQueryData<PollWithDetails>(
-        threadKeys.messages.polls.detail(
-          householdId,
-          threadId,
-          messageId,
-          pollId
-        ),
-        (old) => {
-          if (!old) return old;
-          return {
-            ...old,
-            options: old.options.map((option) => ({
-              ...option,
-              votes: option.votes.filter((v) => v.id !== voteId),
-              voteCount:
-                option.voteCount -
-                (option.votes.some((v) => v.id === voteId) ? 1 : 0),
-            })),
-          };
-        }
-      );
-      logger.debug("Poll vote removed via socket", {
-        pollId,
-        messageId,
-        threadId,
-        householdId,
-        voteId,
-      });
-    };
-
-    // Subscribe to socket events
     socketClient.on(`poll:${pollId}:update`, handlePollUpdate);
     socketClient.on(`poll:${pollId}:vote:add`, handlePollVote);
-    socketClient.on(`poll:${pollId}:vote:remove`, handlePollVoteRemove);
-
-    logger.debug("Subscribed to poll socket events", {
-      pollId,
-      messageId,
-      threadId,
-      householdId,
-      events: [
-        `poll:${pollId}:update`,
-        `poll:${pollId}:vote:add`,
-        `poll:${pollId}:vote:remove`,
-      ],
-    });
 
     return () => {
-      // Cleanup socket subscriptions
       socketClient.off(`poll:${pollId}:update`, handlePollUpdate);
       socketClient.off(`poll:${pollId}:vote:add`, handlePollVote);
-      socketClient.off(`poll:${pollId}:vote:remove`, handlePollVoteRemove);
-
-      logger.debug("Unsubscribed from poll socket events", {
-        pollId,
-        messageId,
-        threadId,
-        householdId,
-      });
     };
-  }, [
-    isConnected,
-    pollId,
-    messageId,
-    threadId,
-    householdId,
-    enabled,
-    queryClient,
-  ]);
+  }, [isConnected, pollId, messageId, threadId, householdId, queryClient]);
 
-  const query = useQuery({
-    queryKey: threadKeys.messages.polls.detail(
-      householdId,
-      threadId,
-      messageId,
-      pollId
-    ),
-    queryFn: async () => {
-      try {
-        const result = await threadApi.messages.polls.get(
-          householdId,
-          threadId,
-          messageId,
-          pollId
-        );
-        logger.debug("Poll data fetched", {
-          pollId,
-          messageId,
-          threadId,
-          householdId,
-        });
-        return result;
-      } catch (error) {
-        logger.error("Failed to fetch poll", {
-          pollId,
-          messageId,
-          threadId,
-          householdId,
-          error,
-        });
-        throw error;
-      }
-    },
-    staleTime: STALE_TIMES.STANDARD,
-    gcTime: CACHE_TIMES.STANDARD,
-    enabled:
-      enabled &&
-      Boolean(pollId) &&
-      Boolean(messageId) &&
-      Boolean(threadId) &&
-      Boolean(householdId),
-    ...options,
-  });
-
-  const updatePoll = useMutation<
-    PollWithDetails,
-    Error,
-    UpdatePollDTO,
-    MutationContext
-  >({
-    mutationFn: async (data) => {
+  const updatePoll = useMutation({
+    mutationFn: async (data: UpdatePollDTO) => {
       try {
         const result = await threadApi.messages.polls.update(
           householdId,
@@ -271,38 +149,35 @@ export const usePoll = (
     },
     onMutate: async (data) => {
       await queryClient.cancelQueries({
-        queryKey: threadKeys.messages.polls.detail(
-          householdId,
-          threadId,
-          messageId,
-          pollId
-        ),
+        queryKey: threadKeys.list(householdId),
       });
 
-      const previousPoll = queryClient.getQueryData<PollWithDetails>(
-        threadKeys.messages.polls.detail(
-          householdId,
-          threadId,
-          messageId,
-          pollId
-        )
+      const threads = queryClient.getQueryData<readonly ThreadWithDetails[]>(
+        threadKeys.list(householdId)
       );
+      const thread = getThreadById(threads, threadId);
+      const message = thread ? getMessageById(thread, messageId) : undefined;
+      const previousPoll = message?.poll;
 
-      if (previousPoll) {
-        const optimisticPoll: PollWithDetails = {
-          ...previousPoll,
+      if (threads && message?.poll) {
+        const updatedPoll = {
+          ...message.poll,
           ...data,
           updatedAt: new Date(),
         };
 
-        queryClient.setQueryData<PollWithDetails>(
-          threadKeys.messages.polls.detail(
-            householdId,
-            threadId,
-            messageId,
-            pollId
-          ),
-          optimisticPoll
+        queryClient.setQueryData<readonly ThreadWithDetails[]>(
+          threadKeys.list(householdId),
+          threads.map((t) =>
+            t.id === threadId
+              ? {
+                  ...t,
+                  messages: t.messages.map((m) =>
+                    m.id === messageId ? { ...m, poll: updatedPoll } : m
+                  ),
+                }
+              : t
+          )
         );
       }
 
@@ -310,36 +185,38 @@ export const usePoll = (
     },
     onError: (_, __, context) => {
       if (context?.previousPoll) {
-        queryClient.setQueryData(
-          threadKeys.messages.polls.detail(
-            householdId,
-            threadId,
-            messageId,
-            pollId
-          ),
-          context.previousPoll
+        const threads = queryClient.getQueryData<readonly ThreadWithDetails[]>(
+          threadKeys.list(householdId)
         );
+
+        if (threads) {
+          queryClient.setQueryData<readonly ThreadWithDetails[]>(
+            threadKeys.list(householdId),
+            threads.map((t) =>
+              t.id === threadId
+                ? {
+                    ...t,
+                    messages: t.messages.map((m) =>
+                      m.id === messageId
+                        ? { ...m, poll: context.previousPoll }
+                        : m
+                    ),
+                  }
+                : t
+            )
+          );
+        }
       }
     },
     onSettled: () => {
       queryClient.invalidateQueries({
-        queryKey: threadKeys.messages.polls.detail(
-          householdId,
-          threadId,
-          messageId,
-          pollId
-        ),
+        queryKey: threadKeys.list(householdId),
       });
     },
   });
 
-  const vote = useMutation<
-    PollVoteWithUser,
-    Error,
-    CreatePollVoteDTO,
-    MutationContext
-  >({
-    mutationFn: async (data) => {
+  const vote = useMutation({
+    mutationFn: async (data: CreatePollVoteDTO) => {
       try {
         const result = await threadApi.messages.polls.vote(
           householdId,
@@ -369,66 +246,53 @@ export const usePoll = (
     },
     onMutate: async (data) => {
       await queryClient.cancelQueries({
-        queryKey: threadKeys.messages.polls.detail(
-          householdId,
-          threadId,
-          messageId,
-          pollId
-        ),
+        queryKey: threadKeys.list(householdId),
       });
 
-      const previousPoll = queryClient.getQueryData<PollWithDetails>(
-        threadKeys.messages.polls.detail(
-          householdId,
-          threadId,
-          messageId,
-          pollId
-        )
+      const threads = queryClient.getQueryData<readonly ThreadWithDetails[]>(
+        threadKeys.list(householdId)
       );
+      const thread = getThreadById(threads, threadId);
+      const message = thread ? getMessageById(thread, messageId) : undefined;
+      const previousPoll = message?.poll;
 
-      if (previousPoll && currentUser) {
-        const now = new Date();
-        const optimisticVote: OptimisticPollVote = {
-          id: `temp-${now.getTime()}`,
+      if (threads && message?.poll && currentUser) {
+        const optimisticVote: PollVoteWithUser = {
+          id: `temp-${Date.now()}`,
           pollId,
           userId: currentUser.id,
           optionId: data.optionId,
           rank: data.rank,
           availability: data.availability,
-          createdAt: now,
-          user: {
-            id: currentUser.id,
-            name: currentUser.name,
-            email: currentUser.email,
-            profileImageURL: null,
-            activeHouseholdId: null,
-            createdAt: now,
-            updatedAt: now,
-          },
+          createdAt: new Date(),
+          user: currentUser,
         };
 
-        const optimisticPoll: PollWithDetails = {
-          ...previousPoll,
-          options: previousPoll.options.map((option) =>
+        const updatedPoll = {
+          ...message.poll,
+          options: message.poll.options.map((option) =>
             option.id === data.optionId
               ? {
                   ...option,
-                  votes: [...option.votes, optimisticVote as PollVoteWithUser],
+                  votes: [...option.votes, optimisticVote],
                   voteCount: option.voteCount + 1,
                 }
               : option
           ),
-          updatedAt: now,
         };
 
-        queryClient.setQueryData<PollWithDetails>(
-          threadKeys.messages.polls.detail(
-            householdId,
-            threadId,
-            messageId,
-            pollId
-          ),
-          optimisticPoll
+        queryClient.setQueryData<readonly ThreadWithDetails[]>(
+          threadKeys.list(householdId),
+          threads.map((t) =>
+            t.id === threadId
+              ? {
+                  ...t,
+                  messages: t.messages.map((m) =>
+                    m.id === messageId ? { ...m, poll: updatedPoll } : m
+                  ),
+                }
+              : t
+          )
         );
       }
 
@@ -436,133 +300,39 @@ export const usePoll = (
     },
     onError: (_, __, context) => {
       if (context?.previousPoll) {
-        queryClient.setQueryData(
-          threadKeys.messages.polls.detail(
-            householdId,
-            threadId,
-            messageId,
-            pollId
-          ),
-          context.previousPoll
+        const threads = queryClient.getQueryData<readonly ThreadWithDetails[]>(
+          threadKeys.list(householdId)
         );
+
+        if (threads) {
+          queryClient.setQueryData<readonly ThreadWithDetails[]>(
+            threadKeys.list(householdId),
+            threads.map((t) =>
+              t.id === threadId
+                ? {
+                    ...t,
+                    messages: t.messages.map((m) =>
+                      m.id === messageId
+                        ? { ...m, poll: context.previousPoll }
+                        : m
+                    ),
+                  }
+                : t
+            )
+          );
+        }
       }
     },
     onSettled: () => {
       queryClient.invalidateQueries({
-        queryKey: threadKeys.messages.polls.detail(
-          householdId,
-          threadId,
-          messageId,
-          pollId
-        ),
-      });
-    },
-  });
-
-  const removeVote = useMutation<void, Error, string, MutationContext>({
-    mutationFn: async (voteId) => {
-      try {
-        await threadApi.messages.polls.removeVote(
-          householdId,
-          threadId,
-          messageId,
-          pollId,
-          voteId
-        );
-        logger.info("Poll vote removed", {
-          pollId,
-          messageId,
-          threadId,
-          householdId,
-          voteId,
-        });
-      } catch (error) {
-        logger.error("Failed to remove poll vote", {
-          pollId,
-          messageId,
-          threadId,
-          householdId,
-          voteId,
-          error,
-        });
-        throw error;
-      }
-    },
-    onMutate: async (voteId) => {
-      await queryClient.cancelQueries({
-        queryKey: threadKeys.messages.polls.detail(
-          householdId,
-          threadId,
-          messageId,
-          pollId
-        ),
-      });
-
-      const previousPoll = queryClient.getQueryData<PollWithDetails>(
-        threadKeys.messages.polls.detail(
-          householdId,
-          threadId,
-          messageId,
-          pollId
-        )
-      );
-
-      if (previousPoll) {
-        const optimisticPoll: PollWithDetails = {
-          ...previousPoll,
-          options: previousPoll.options.map((option) => ({
-            ...option,
-            votes: option.votes.filter((v) => v.id !== voteId),
-            voteCount:
-              option.voteCount -
-              (option.votes.some((v) => v.id === voteId) ? 1 : 0),
-          })),
-          updatedAt: new Date(),
-        };
-
-        queryClient.setQueryData<PollWithDetails>(
-          threadKeys.messages.polls.detail(
-            householdId,
-            threadId,
-            messageId,
-            pollId
-          ),
-          optimisticPoll
-        );
-      }
-
-      return { previousPoll };
-    },
-    onError: (_, __, context) => {
-      if (context?.previousPoll) {
-        queryClient.setQueryData(
-          threadKeys.messages.polls.detail(
-            householdId,
-            threadId,
-            messageId,
-            pollId
-          ),
-          context.previousPoll
-        );
-      }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({
-        queryKey: threadKeys.messages.polls.detail(
-          householdId,
-          threadId,
-          messageId,
-          pollId
-        ),
+        queryKey: threadKeys.list(householdId),
       });
     },
   });
 
   return {
-    ...query,
     updatePoll,
     vote,
-    removeVote,
   };
 };
 

@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useUser } from "@/hooks/users/useUser";
-import { useCreateThread } from "@/hooks/threads/useThread";
+import { useThreads } from "@/hooks/threads/useThreads";
 import { useQueryClient } from "@tanstack/react-query";
 import { threadKeys } from "@/lib/api/services/threadService";
 import { logger } from "@/lib/api/logger";
@@ -13,6 +13,9 @@ import {
   useHouseholds,
   getHouseholdMembers,
 } from "@/hooks/households/useHouseholds";
+import { CreateThreadDTO } from "@shared/types";
+import { useSocket } from "@/contexts/SocketContext";
+import { ChartBarIcon, PaperClipIcon } from "@heroicons/react/24/outline";
 
 interface ThreadCreatorProps {
   isOpen: boolean;
@@ -32,6 +35,7 @@ export function ThreadCreator({
 }: ThreadCreatorProps) {
   const queryClient = useQueryClient();
   const { data: userData } = useUser();
+  const { isConnected } = useSocket();
   const activeHouseholdId = userData?.data?.activeHouseholdId;
   const { data: householdsData } = useHouseholds();
   const members = activeHouseholdId
@@ -52,16 +56,11 @@ export function ThreadCreator({
     [activeHouseholdId, initialMessage, members]
   );
 
-  // Initialize createThread mutation
-  const { mutateAsync: createThread } = useCreateThread(
-    activeHouseholdId ?? "",
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: threadKeys.lists() });
-        onSuccess?.();
-      },
-    }
-  );
+  // Initialize threads hook with proper options
+  const { mutateAsync: createThread } = useThreads({
+    householdId: activeHouseholdId ?? "",
+    enabled: !!activeHouseholdId,
+  }).createThread;
 
   const resetForm = useCallback(() => {
     setTitle("");
@@ -83,6 +82,7 @@ export function ThreadCreator({
           hasActiveHousehold: !!activeHouseholdId,
           hasMessage: !!data.message.trim(),
           hasMembers: !!members,
+          isSocketConnected: isConnected,
         });
         setError("Please fill in all required fields");
         return;
@@ -96,22 +96,37 @@ export function ThreadCreator({
         logger.debug("Creating thread", {
           householdId: activeHouseholdId,
           title: data.title,
+          participantCount: members.length,
+          isSocketConnected: isConnected,
         });
 
-        await createThread({
+        const createThreadDTO: CreateThreadDTO = {
+          householdId: activeHouseholdId,
           title: data.title?.trim(),
-          content: data.message.trim(),
           participants: members.map((member) => member.userId),
-        });
+          initialMessage: {
+            content: data.message.trim(),
+            attachments: [],
+            mentions: [],
+          },
+        };
+
+        await createThread(createThreadDTO);
 
         logger.info("Thread created successfully", {
           householdId: activeHouseholdId,
+          isSocketConnected: isConnected,
         });
 
         handleClose();
+        onSuccess?.();
       } catch (err) {
         const error = err as ApiError;
-        logger.error("Failed to create thread", { error });
+        logger.error("Failed to create thread", {
+          error,
+          isSocketConnected: isConnected,
+          householdId: activeHouseholdId,
+        });
 
         if (
           error.type === ApiErrorType.VALIDATION &&
@@ -127,6 +142,14 @@ export function ThreadCreator({
               })
             )
           );
+        } else if (error.type === ApiErrorType.UNAUTHORIZED) {
+          setError(
+            "You are not authorized to create threads in this household"
+          );
+        } else if (error.type === ApiErrorType.NETWORK) {
+          setError(
+            "Network error. Please check your connection and try again."
+          );
         } else {
           setError(error.message || "Failed to create thread");
         }
@@ -134,7 +157,15 @@ export function ThreadCreator({
         setIsSubmitting(false);
       }
     }, 300),
-    [isValid, activeHouseholdId, createThread, handleClose, members]
+    [
+      isValid,
+      activeHouseholdId,
+      createThread,
+      handleClose,
+      members,
+      isConnected,
+      onSuccess,
+    ]
   );
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -200,18 +231,44 @@ export function ThreadCreator({
 
         <div className="space-y-2xs">
           <label className="form-label">Message</label>
-          <textarea
-            value={initialMessage}
-            onChange={(e) => setInitialMessage(e.target.value)}
-            placeholder="Enter your message"
-            required
-            disabled={isSubmitting}
-            className={`input min-h-[100px] resize-y ${
-              validationErrors.find((e) => e.field === "message")
-                ? "border-red-500"
-                : ""
-            }`}
-          />
+          <div className="relative">
+            <textarea
+              value={initialMessage}
+              onChange={(e) => setInitialMessage(e.target.value)}
+              placeholder="Enter your message"
+              required
+              disabled={isSubmitting}
+              className={`input min-h-[100px] resize-y pb-12 ${
+                validationErrors.find((e) => e.field === "message")
+                  ? "border-red-500"
+                  : ""
+              }`}
+            />
+            <div className="absolute bottom-2 left-2 flex space-x-2">
+              <button
+                type="button"
+                className="btn-icon text-text-secondary hover:text-primary"
+                title="Create poll"
+                onClick={() => {
+                  // TODO: Implement poll creation
+                  logger.debug("Poll button clicked");
+                }}
+              >
+                <ChartBarIcon className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                className="btn-icon text-text-secondary hover:text-primary"
+                title="Add attachment"
+                onClick={() => {
+                  // TODO: Implement file attachment
+                  logger.debug("Attachment button clicked");
+                }}
+              >
+                <PaperClipIcon className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
           {validationErrors.find((e) => e.field === "message") && (
             <p className="form-error">
               {validationErrors.find((e) => e.field === "message")?.message}

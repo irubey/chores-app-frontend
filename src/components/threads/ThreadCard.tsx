@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { ThreadWithDetails } from "@shared/types";
 import { formatDistanceToNow, format } from "date-fns";
 import {
@@ -7,15 +7,16 @@ import {
   ChartBarIcon,
 } from "@heroicons/react/24/outline";
 import { logger } from "@/lib/api/logger";
-import Link from "next/link";
+import { ThreadModal } from "./ThreadModal";
 import { useUser } from "@/hooks/users/useUser";
 
 interface ThreadCardProps {
-  thread: ThreadWithDetails;
-  animationDelay?: number;
+  readonly thread: ThreadWithDetails;
+  readonly animationDelay?: number;
 }
 
 export function ThreadCard({ thread, animationDelay = 0 }: ThreadCardProps) {
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const { data: userData } = useUser();
   const user = userData?.data;
 
@@ -65,9 +66,10 @@ export function ThreadCard({ thread, animationDelay = 0 }: ThreadCardProps) {
       className="animate-slide-up"
       style={{ animationDelay: `${animationDelay}s` }}
     >
-      <Link
-        href={`/threads/${thread.id}`}
-        className="block transition-transform hover:scale-[1.02] focus:outline-none focus-ring rounded-lg"
+      <button
+        onClick={() => setIsModalOpen(true)}
+        className="w-full text-left transition-transform hover:scale-[1.02] focus:outline-none focus-ring rounded-lg"
+        aria-label={`Open thread: ${thread.title || "Untitled Thread"}`}
       >
         <div className="card hover:shadow-lg transition-shadow duration-200">
           <div className="flex items-start justify-between">
@@ -124,7 +126,13 @@ export function ThreadCard({ thread, animationDelay = 0 }: ThreadCardProps) {
             )}
           </div>
         </div>
-      </Link>
+      </button>
+
+      <ThreadModal
+        thread={thread}
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+      />
     </div>
   );
 }

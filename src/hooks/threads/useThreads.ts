@@ -50,6 +50,25 @@ interface OptimisticHousehold
   readonly createdBy: string;
 }
 
+// Utility functions for accessing thread data
+export const getThreadById = (
+  threads: readonly ThreadWithDetails[] | undefined,
+  threadId: string
+): ThreadWithDetails | undefined =>
+  threads?.find((thread) => thread.id === threadId);
+
+export const getMessageById = (
+  thread: ThreadWithDetails | undefined,
+  messageId: string
+): MessageWithDetails | undefined =>
+  thread?.messages.find((message) => message.id === messageId);
+
+export const getMessagesByThreadId = (
+  threads: readonly ThreadWithDetails[] | undefined,
+  threadId: string
+): MessageWithDetails[] | undefined =>
+  getThreadById(threads, threadId)?.messages;
+
 /**
  * Hook for managing thread list with real-time updates and filtering
  */
