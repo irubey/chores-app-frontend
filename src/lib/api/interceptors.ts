@@ -113,8 +113,8 @@ async function handleTokenRefresh(
     refreshAttempt = (async () => {
       try {
         const response = await refreshInstance.post<RefreshResponse>(
-          "/auth/refresh",
-          null,
+          "/auth/refresh-token",
+          {},
           { withCredentials: true }
         );
 
