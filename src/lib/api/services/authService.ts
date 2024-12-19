@@ -6,7 +6,6 @@ import {
 import { axiosInstance } from "../axiosInstance";
 import { ApiResponse } from "@shared/interfaces";
 import { LoginCredentials, User, RegisterUserDTO } from "@shared/types";
-import { logger } from "../logger";
 import { ApiError } from "../errors";
 
 export const authKeys = {

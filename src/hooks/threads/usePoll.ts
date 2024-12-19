@@ -1,6 +1,6 @@
 // frontend/src/hooks/threads/usePoll.ts
 import { useEffect } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { threadApi, threadKeys } from "@/lib/api/services/threadService";
 import {
   PollWithDetails,
@@ -16,6 +16,7 @@ import { useSocket } from "@/contexts/SocketContext";
 import { socketClient } from "@/lib/socketClient";
 import { useUser } from "@/hooks/users/useUser";
 import { getThreadById, getMessageById } from "./useThreads";
+import { PollAnalytics } from "@/lib/api/services/threadService";
 
 // Types
 interface PollOptions {
@@ -109,12 +110,29 @@ export const usePoll = ({
       }
     };
 
+    const handleAnalyticsUpdate = (data: PollAnalytics) => {
+      queryClient.setQueryData(
+        threadKeys.messages.polls.analytics(
+          householdId,
+          threadId,
+          messageId,
+          pollId
+        ),
+        data
+      );
+    };
+
     socketClient.on(`poll:${pollId}:update`, handlePollUpdate);
     socketClient.on(`poll:${pollId}:vote:add`, handlePollVote);
+    socketClient.on(`poll:${pollId}:analytics:update`, handleAnalyticsUpdate);
 
     return () => {
       socketClient.off(`poll:${pollId}:update`, handlePollUpdate);
       socketClient.off(`poll:${pollId}:vote:add`, handlePollVote);
+      socketClient.off(
+        `poll:${pollId}:analytics:update`,
+        handleAnalyticsUpdate
+      );
     };
   }, [isConnected, pollId, messageId, threadId, householdId, queryClient]);
 
@@ -330,9 +348,60 @@ export const usePoll = ({
     },
   });
 
+  const prefetchPollAnalytics = async () => {
+    return queryClient.prefetchQuery({
+      queryKey: threadKeys.messages.polls.analytics(
+        householdId,
+        threadId,
+        messageId,
+        pollId
+      ),
+      queryFn: () =>
+        threadApi.messages.polls.getAnalytics(
+          householdId,
+          threadId,
+          messageId,
+          pollId
+        ),
+    });
+  };
+
+  const invalidatePoll = async () => {
+    await queryClient.invalidateQueries({
+      queryKey: threadKeys.messages.polls.detail(
+        householdId,
+        threadId,
+        messageId,
+        pollId
+      ),
+    });
+  };
+
+  const analytics = useQuery({
+    queryKey: threadKeys.messages.polls.analytics(
+      householdId,
+      threadId,
+      messageId,
+      pollId
+    ),
+    queryFn: async () => {
+      const result = await threadApi.messages.polls.getAnalytics(
+        householdId,
+        threadId,
+        messageId,
+        pollId
+      );
+      return result.data;
+    },
+    enabled: Boolean(pollId),
+  });
+
   return {
     updatePoll,
     vote,
+    prefetchPollAnalytics,
+    invalidatePoll,
+    analytics,
   };
 };
 
@@ -381,4 +450,39 @@ export const pollUtils = {
     const optionVotes = pollUtils.getOptionVoteCount(poll, optionId);
     return (optionVotes / totalVotes) * 100;
   },
+
+  getWinningOption: (poll: PollWithDetails | undefined) => {
+    if (!poll?.options) return undefined;
+    return [...poll.options].sort((a, b) => b.voteCount - a.voteCount)[0];
+  },
+
+  getVoteDistribution: (poll: PollWithDetails | undefined) => {
+    if (!poll?.options) return {};
+    const total = pollUtils.getVoteCount(poll);
+    return poll.options.reduce(
+      (acc, option) => ({
+        ...acc,
+        [option.id]: total ? (option.voteCount / total) * 100 : 0,
+      }),
+      {}
+    );
+  },
+
+  isExpired: (poll: PollWithDetails | undefined): boolean => {
+    if (!poll?.endDate) return false;
+    return new Date() > new Date(poll.endDate);
+  },
+
+  canUserVote: (poll: PollWithDetails | undefined, userId: string): boolean => {
+    if (!poll || pollUtils.isExpired(poll)) return false;
+    return !pollUtils.hasVoted(poll, userId);
+  },
 };
+
+export interface UsePollResult {
+  updatePoll: ReturnType<typeof usePoll>["updatePoll"];
+  vote: ReturnType<typeof usePoll>["vote"];
+  analytics: ReturnType<typeof usePoll>["analytics"];
+  prefetchPollAnalytics: () => Promise<void>;
+  invalidatePoll: () => Promise<void>;
+}

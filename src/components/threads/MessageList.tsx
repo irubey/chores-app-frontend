@@ -47,7 +47,7 @@ export const MessageList: React.FC<MessageListProps> = ({
         <div className="divide-y divide-neutral-200 dark:divide-neutral-700">
           {thread.messages.map((message) => (
             <Message
-              key={message.id}
+              key={`${message.id}-${message.updatedAt}`}
               message={message}
               householdId={thread.householdId}
               threadId={thread.id}

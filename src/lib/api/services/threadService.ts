@@ -23,10 +23,28 @@ import type {
   PollVoteWithUser,
   MessageReadWithUser,
   Attachment as MessageAttachment,
+  HouseholdMember,
 } from "@shared/types";
 import type { PaginationOptions } from "@shared/interfaces";
 import type { ApiResponse } from "@shared/interfaces/apiResponse";
-import { ReactionType, PollStatus } from "@shared/enums";
+import { ReactionType } from "@shared/enums";
+
+interface ThreadAnalytics {
+  messageCount: number;
+  participantCount: number;
+  lastActivityAt: Date;
+  reactionStats: Record<ReactionType, number>;
+}
+
+export interface PollAnalytics {
+  totalVotes: number;
+  optionBreakdown: {
+    optionId: string;
+    votes: number;
+    percentage: number;
+  }[];
+  stats: Record<string, number>;
+}
 
 export const threadKeys = {
   all: ["threads"] as const,
@@ -102,6 +120,13 @@ export const threadKeys = {
     mentions: (householdId: string) =>
       [...threadKeys.all, householdId, "mentions"] as const,
   },
+  analytics: () => [...threadKeys.all, "analytics"] as const,
+  threadAnalytics: (householdId: string, threadId: string) =>
+    [...threadKeys.analytics(), householdId, threadId] as const,
+
+  participants: () => [...threadKeys.all, "participants"] as const,
+  threadParticipants: (householdId: string, threadId: string) =>
+    [...threadKeys.participants(), householdId, threadId] as const,
 } as const;
 
 export const threadApi = {
@@ -228,6 +253,44 @@ export const threadApi = {
         }
       );
       return result.data;
+    },
+
+    getParticipants: async (
+      householdId: string,
+      threadId: string,
+      config?: ApiRequestOptions
+    ): Promise<ApiResponse<HouseholdMember[]>> => {
+      return handleApiRequest<HouseholdMember[]>(
+        () =>
+          axiosInstance.get(
+            `/households/${householdId}/threads/${threadId}/participants`,
+            buildRequestConfig(config)
+          ),
+        {
+          operation: "Get Thread Participants",
+          metadata: { householdId, threadId },
+        }
+      );
+    },
+
+    updateParticipants: async (
+      householdId: string,
+      threadId: string,
+      data: { add?: string[]; remove?: string[] },
+      config?: ApiRequestOptions
+    ): Promise<ApiResponse<ThreadWithDetails>> => {
+      return handleApiRequest<ThreadWithDetails>(
+        () =>
+          axiosInstance.patch(
+            `/households/${householdId}/threads/${threadId}/participants`,
+            data,
+            buildRequestConfig(config)
+          ),
+        {
+          operation: "Update Thread Participants",
+          metadata: { householdId, threadId, participantChanges: data },
+        }
+      );
     },
   },
 
@@ -723,8 +786,8 @@ export const threadApi = {
         messageId: string,
         pollId: string,
         config?: ApiRequestOptions
-      ): Promise<ApiResponse<Record<string, number>>> => {
-        return handleApiRequest<Record<string, number>>(
+      ): Promise<ApiResponse<PollAnalytics>> => {
+        return handleApiRequest<PollAnalytics>(
           () =>
             axiosInstance.get(
               `/households/${householdId}/threads/${threadId}/messages/${messageId}/polls/${pollId}/analytics`,
@@ -821,48 +884,48 @@ export const threadApi = {
         );
       },
     },
-  },
 
-  readStatus: {
-    mark: async (
-      householdId: string,
-      threadId: string,
-      messageId: string,
-      config?: ApiRequestOptions
-    ): Promise<MessageReadStatus> => {
-      const result = await handleApiRequest<MessageReadStatus>(
-        () =>
-          axiosInstance.post(
-            `/households/${householdId}/threads/${threadId}/messages/${messageId}/read`,
-            {},
-            buildRequestConfig(config)
-          ),
-        {
-          operation: "Mark Message as Read",
-          metadata: { householdId, threadId, messageId },
-        }
-      );
-      return result.data;
-    },
+    readStatus: {
+      mark: async (
+        householdId: string,
+        threadId: string,
+        messageId: string,
+        config?: ApiRequestOptions
+      ): Promise<MessageReadStatus> => {
+        const result = await handleApiRequest<MessageReadStatus>(
+          () =>
+            axiosInstance.post(
+              `/households/${householdId}/threads/${threadId}/messages/${messageId}/read`,
+              {},
+              buildRequestConfig(config)
+            ),
+          {
+            operation: "Mark Message as Read",
+            metadata: { householdId, threadId, messageId },
+          }
+        );
+        return result.data;
+      },
 
-    get: async (
-      householdId: string,
-      threadId: string,
-      messageId: string,
-      config?: ApiRequestOptions
-    ): Promise<MessageReadStatus> => {
-      const result = await handleApiRequest<MessageReadStatus>(
-        () =>
-          axiosInstance.get(
-            `/households/${householdId}/threads/${threadId}/messages/${messageId}/read-status`,
-            buildRequestConfig(config)
-          ),
-        {
-          operation: "Get Message Read Status",
-          metadata: { householdId, threadId, messageId },
-        }
-      );
-      return result.data;
+      get: async (
+        householdId: string,
+        threadId: string,
+        messageId: string,
+        config?: ApiRequestOptions
+      ): Promise<MessageReadStatus> => {
+        const result = await handleApiRequest<MessageReadStatus>(
+          () =>
+            axiosInstance.get(
+              `/households/${householdId}/threads/${threadId}/messages/${messageId}/read-status`,
+              buildRequestConfig(config)
+            ),
+          {
+            operation: "Get Message Read Status",
+            metadata: { householdId, threadId, messageId },
+          }
+        );
+        return result.data;
+      },
     },
   },
 } as const;

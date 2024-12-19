@@ -46,6 +46,16 @@ interface OptimisticMentionUser extends Pick<User, "id" | "name" | "email"> {
   readonly updatedAt: Date;
 }
 
+export interface UseMessageMentionsResult {
+  data: readonly MentionWithUser[] | undefined;
+  isLoading: boolean;
+  error: Error | null;
+  addMention: ReturnType<typeof useMessageMentions>["addMention"];
+  removeMention: ReturnType<typeof useMessageMentions>["removeMention"];
+  prefetchMentions: () => Promise<void>;
+  invalidateMentions: () => Promise<void>;
+}
+
 /**
  * Hook for managing message mentions with real-time updates
  */
@@ -298,10 +308,30 @@ export const useMessageMentions = (
     },
   });
 
+  const prefetchMentions = async () => {
+    return queryClient.prefetchQuery({
+      queryKey: threadKeys.messages.mentions(householdId, threadId, messageId),
+      queryFn: () =>
+        threadApi.messages.mentions.getMessageMentions(
+          householdId,
+          threadId,
+          messageId
+        ),
+    });
+  };
+
+  const invalidateMentions = async () => {
+    await queryClient.invalidateQueries({
+      queryKey: threadKeys.messages.mentions(householdId, threadId, messageId),
+    });
+  };
+
   return {
     ...query,
     addMention,
     removeMention,
+    prefetchMentions,
+    invalidateMentions,
   };
 };
 
@@ -330,5 +360,35 @@ export const mentionUtils = {
   ): readonly string[] => {
     if (!mentions) return [];
     return mentions.map((m) => m.userId);
+  },
+
+  getMentionsByUser: (
+    mentions: readonly MentionWithUser[] | undefined,
+    userId: string
+  ): readonly MentionWithUser[] => {
+    if (!mentions) return [];
+    return mentions.filter((m) => m.userId === userId);
+  },
+
+  sortMentionsByDate: (
+    mentions: readonly MentionWithUser[] | undefined
+  ): readonly MentionWithUser[] => {
+    if (!mentions) return [];
+    return [...mentions].sort(
+      (a, b) =>
+        new Date(b.mentionedAt).getTime() - new Date(a.mentionedAt).getTime()
+    );
+  },
+
+  filterMentionsByDate: (
+    mentions: readonly MentionWithUser[] | undefined,
+    startDate: Date,
+    endDate: Date
+  ): readonly MentionWithUser[] => {
+    if (!mentions) return [];
+    return mentions.filter((m) => {
+      const date = new Date(m.mentionedAt);
+      return date >= startDate && date <= endDate;
+    });
   },
 };

@@ -16,6 +16,11 @@ export const ThreadModal: React.FC<ThreadModalProps> = ({
   isOpen,
   onClose,
 }) => {
+  // Create a key that changes when messages are updated
+  const messagesKey = thread.messages
+    .map((m) => `${m.id}-${m.updatedAt}`)
+    .join("-");
+
   return (
     <Modal
       isOpen={isOpen}
@@ -32,7 +37,7 @@ export const ThreadModal: React.FC<ThreadModalProps> = ({
       }
     >
       <div className="flex-1 overflow-y-auto min-h-0 px-4">
-        <MessageList thread={thread} />
+        <MessageList key={messagesKey} thread={thread} />
       </div>
     </Modal>
   );

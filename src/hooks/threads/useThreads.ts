@@ -4,6 +4,7 @@ import {
   useMutation,
   useQueryClient,
   type UseQueryOptions,
+  type UseMutationResult,
 } from "@tanstack/react-query";
 import { threadApi, threadKeys } from "@/lib/api/services/threadService";
 import {
@@ -13,6 +14,7 @@ import {
   User,
   Household,
   MessageWithDetails,
+  UpdateThreadDTO,
 } from "@shared/types";
 import { logger } from "@/lib/api/logger";
 import { CACHE_TIMES, STALE_TIMES } from "@/lib/api/utils/apiUtils";
@@ -170,14 +172,60 @@ export const useThreads = (
       });
     };
 
+    const handleParticipantAdd = (data: {
+      threadId: string;
+      participant: HouseholdMember;
+    }) => {
+      queryClient.setQueryData<readonly ThreadWithDetails[]>(
+        threadKeys.list(householdId),
+        (old) =>
+          old?.map((thread) =>
+            thread.id === data.threadId
+              ? {
+                  ...thread,
+                  participants: [...thread.participants, data.participant],
+                }
+              : thread
+          )
+      );
+    };
+
+    const handleParticipantRemove = (data: {
+      threadId: string;
+      participantId: string;
+    }) => {
+      queryClient.setQueryData<readonly ThreadWithDetails[]>(
+        threadKeys.list(householdId),
+        (old) =>
+          old?.map((thread) =>
+            thread.id === data.threadId
+              ? {
+                  ...thread,
+                  participants: thread.participants.filter(
+                    (p) => p.id !== data.participantId
+                  ),
+                }
+              : thread
+          )
+      );
+    };
+
     // Subscribe to socket events
     socketClient.on("thread:create", handleThreadCreate);
     socketClient.on("thread:update", handleThreadUpdate);
     socketClient.on("thread:delete", handleThreadDelete);
+    socketClient.on("thread:participant:add", handleParticipantAdd);
+    socketClient.on("thread:participant:remove", handleParticipantRemove);
 
     logger.debug("Subscribed to thread list socket events", {
       householdId,
-      events: ["thread:create", "thread:update", "thread:delete"],
+      events: [
+        "thread:create",
+        "thread:update",
+        "thread:delete",
+        "thread:participant:add",
+        "thread:participant:remove",
+      ],
     });
 
     return () => {
@@ -185,6 +233,8 @@ export const useThreads = (
       socketClient.off("thread:create", handleThreadCreate);
       socketClient.off("thread:update", handleThreadUpdate);
       socketClient.off("thread:delete", handleThreadDelete);
+      socketClient.off("thread:participant:add", handleParticipantAdd);
+      socketClient.off("thread:participant:remove", handleParticipantRemove);
 
       logger.debug("Unsubscribed from thread list socket events", {
         householdId,
@@ -285,8 +335,139 @@ export const useThreads = (
     },
   });
 
+  const updateThread = useMutation<
+    ThreadWithDetails,
+    Error,
+    UpdateThreadDTO & { threadId: string }
+  >({
+    mutationFn: async ({ threadId, ...data }) => {
+      return threadApi.threads.update(householdId, threadId, data);
+    },
+    onSuccess: (updatedThread) => {
+      queryClient.setQueryData<readonly ThreadWithDetails[]>(
+        threadKeys.list(householdId),
+        (old) =>
+          old?.map((thread) =>
+            thread.id === updatedThread.id ? updatedThread : thread
+          )
+      );
+    },
+  });
+
+  const deleteThread = useMutation<void, Error, string>({
+    mutationFn: async (threadId) => {
+      await threadApi.threads.delete(householdId, threadId);
+    },
+    onSuccess: (_, threadId) => {
+      queryClient.setQueryData<readonly ThreadWithDetails[]>(
+        threadKeys.list(householdId),
+        (old) => old?.filter((thread) => thread.id !== threadId)
+      );
+    },
+  });
+
+  const inviteToThread = useMutation<
+    ThreadWithDetails,
+    Error,
+    { threadId: string; userIds: string[] }
+  >({
+    mutationFn: async ({ threadId, userIds }) => {
+      const result = await threadApi.threads.invite(
+        householdId,
+        threadId,
+        userIds
+      );
+      return result;
+    },
+    onSuccess: (updatedThread) => {
+      queryClient.setQueryData<readonly ThreadWithDetails[]>(
+        threadKeys.list(householdId),
+        (old) =>
+          old?.map((thread) =>
+            thread.id === updatedThread.id ? updatedThread : thread
+          )
+      );
+    },
+  });
+
+  const updateParticipants = useMutation<
+    ThreadWithDetails,
+    Error,
+    { threadId: string; add?: string[]; remove?: string[] }
+  >({
+    mutationFn: async ({ threadId, ...data }) => {
+      const result = await threadApi.threads.updateParticipants(
+        householdId,
+        threadId,
+        data
+      );
+      return result.data;
+    },
+    onSuccess: (updatedThread) => {
+      queryClient.setQueryData<readonly ThreadWithDetails[]>(
+        threadKeys.list(householdId),
+        (old) =>
+          old?.map((thread) =>
+            thread.id === updatedThread.id ? updatedThread : thread
+          )
+      );
+    },
+  });
+
+  const prefetchThread = async (threadId: string) => {
+    return queryClient.prefetchQuery({
+      queryKey: threadKeys.detail(householdId, threadId),
+      queryFn: () => threadApi.threads.get(householdId, threadId),
+    });
+  };
+
+  const invalidateThread = async (threadId: string) => {
+    await queryClient.invalidateQueries({
+      queryKey: threadKeys.detail(householdId, threadId),
+    });
+  };
+
+  const setThreadData = (threadId: string, data: ThreadWithDetails) => {
+    queryClient.setQueryData(threadKeys.detail(householdId, threadId), data);
+  };
+
   return {
     ...query,
     createThread,
+    updateThread,
+    deleteThread,
+    inviteToThread,
+    updateParticipants,
+    prefetchThread,
+    invalidateThread,
+    setThreadData,
   };
+};
+
+export interface UseThreadsResult {
+  data: readonly ThreadWithDetails[] | undefined;
+  isLoading: boolean;
+  error: Error | null;
+  createThread: ReturnType<typeof useThreads>["createThread"];
+  updateThread: ReturnType<typeof useThreads>["updateThread"];
+  deleteThread: ReturnType<typeof useThreads>["deleteThread"];
+  inviteToThread: ReturnType<typeof useThreads>["inviteToThread"];
+  updateParticipants: ReturnType<typeof useThreads>["updateParticipants"];
+  prefetchThread: ReturnType<typeof useThreads>["prefetchThread"];
+  invalidateThread: ReturnType<typeof useThreads>["invalidateThread"];
+  setThreadData: ReturnType<typeof useThreads>["setThreadData"];
+}
+
+export const useThread = (
+  householdId: string,
+  threadId: string,
+  options?: Omit<UseQueryOptions<ThreadWithDetails>, "queryKey" | "queryFn">
+) => {
+  return useQuery({
+    queryKey: threadKeys.detail(householdId, threadId),
+    queryFn: async () => {
+      return threadApi.threads.get(householdId, threadId);
+    },
+    ...options,
+  });
 };

@@ -13,6 +13,7 @@ import {
   HouseholdMemberWithUser,
   CreateReactionDTO,
   ReactionWithUser,
+  CreatePollDTO,
 } from "@shared/types";
 import { PollStatus, PollType } from "@shared/enums/poll";
 import { logger } from "@/lib/api/logger";
@@ -264,7 +265,7 @@ export const useMessageInteractions = ({
       const thread = getThreadById(threads, threadId);
       const message = thread ? getMessageById(thread, messageId) : undefined;
 
-      if (thread && message) {
+      if (threads && message) {
         const updatedMessage: MessageWithDetails = {
           ...message,
           content: data.content || message.content,
@@ -273,7 +274,7 @@ export const useMessageInteractions = ({
 
         queryClient.setQueryData<readonly ThreadWithDetails[]>(
           threadKeys.list(householdId),
-          threads?.map((t) =>
+          threads.map((t) =>
             t.id === threadId
               ? {
                   ...t,
@@ -313,6 +314,9 @@ export const useMessageInteractions = ({
     onSettled: () => {
       queryClient.invalidateQueries({
         queryKey: threadKeys.list(householdId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: threadKeys.detail(householdId, threadId),
       });
     },
   });
@@ -596,17 +600,243 @@ export const useMessageInteractions = ({
     },
   });
 
+  const markAsRead = useMutation({
+    mutationFn: async () => {
+      if (!messageId)
+        throw new Error("messageId is required for marking as read");
+      const result = await threadApi.messages.readStatus.mark(
+        householdId,
+        threadId,
+        messageId
+      );
+      return result;
+    },
+    onMutate: async () => {
+      // Optimistic update for read status
+      const threads = queryClient.getQueryData<readonly ThreadWithDetails[]>(
+        threadKeys.list(householdId)
+      );
+      if (threads && currentUser) {
+        queryClient.setQueryData<readonly ThreadWithDetails[]>(
+          threadKeys.list(householdId),
+          threads.map((t) =>
+            t.id === threadId
+              ? {
+                  ...t,
+                  messages: t.messages.map((m) =>
+                    m.id === messageId
+                      ? {
+                          ...m,
+                          reads: [
+                            ...m.reads,
+                            {
+                              id: `temp-${Date.now()}`,
+                              messageId,
+                              userId: currentUser.id,
+                              readAt: new Date(),
+                              user: currentUser,
+                            },
+                          ],
+                        }
+                      : m
+                  ),
+                }
+              : t
+          )
+        );
+      }
+    },
+  });
+
+  const createPoll = useMutation({
+    mutationFn: async (data: CreatePollDTO) => {
+      if (!messageId)
+        throw new Error("messageId is required for creating polls");
+      const result = await threadApi.messages.polls.create(
+        householdId,
+        threadId,
+        messageId,
+        data
+      );
+      return result;
+    },
+    onMutate: async (data) => {
+      // Optimistic update for poll creation
+      const threads = queryClient.getQueryData<readonly ThreadWithDetails[]>(
+        threadKeys.list(householdId)
+      );
+      if (threads && currentUser) {
+        const optimisticPoll: PollWithDetails = {
+          id: `temp-${Date.now()}`,
+          messageId,
+          question: data.question,
+          pollType: data.pollType,
+          maxChoices: data.maxChoices,
+          maxRank: data.maxRank,
+          endDate: data.endDate,
+          eventId: data.eventId,
+          status: PollStatus.OPEN,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          options: data.options.map((option, index) => ({
+            id: `temp-option-${Date.now()}-${index}`,
+            pollId: `temp-${Date.now()}`,
+            text: option.text,
+            order: option.order,
+            startTime: option.startTime,
+            endTime: option.endTime,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            votes: [],
+            voteCount: 0,
+          })),
+        };
+
+        queryClient.setQueryData<readonly ThreadWithDetails[]>(
+          threadKeys.list(householdId),
+          threads.map((t) =>
+            t.id === threadId
+              ? {
+                  ...t,
+                  messages: t.messages.map((m) =>
+                    m.id === messageId ? { ...m, poll: optimisticPoll } : m
+                  ),
+                }
+              : t
+          )
+        );
+      }
+    },
+  });
+
+  const addAttachment = useMutation({
+    mutationFn: async (data: FormData) => {
+      if (!messageId)
+        throw new Error("messageId is required for adding attachments");
+      const result = await threadApi.messages.attachments.create(
+        householdId,
+        threadId,
+        messageId,
+        data
+      );
+      return result;
+    },
+    onMutate: async (data) => {
+      // Optimistic update for attachment
+      const threads = queryClient.getQueryData<readonly ThreadWithDetails[]>(
+        threadKeys.list(householdId)
+      );
+      if (threads) {
+        const optimisticAttachment: Attachment = {
+          id: `temp-${Date.now()}`,
+          messageId,
+          url: URL.createObjectURL(data.get("file") as File),
+          fileType: (data.get("file") as File).type,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+
+        queryClient.setQueryData<readonly ThreadWithDetails[]>(
+          threadKeys.list(householdId),
+          threads.map((t) =>
+            t.id === threadId
+              ? {
+                  ...t,
+                  messages: t.messages.map((m) =>
+                    m.id === messageId
+                      ? {
+                          ...m,
+                          attachments: [
+                            ...(m.attachments || []),
+                            optimisticAttachment,
+                          ],
+                        }
+                      : m
+                  ),
+                }
+              : t
+          )
+        );
+      }
+    },
+  });
+
+  const removeAttachment = useMutation({
+    mutationFn: async (attachmentId: string) => {
+      if (!messageId)
+        throw new Error("messageId is required for removing attachments");
+      await threadApi.messages.attachments.delete(
+        householdId,
+        threadId,
+        messageId,
+        attachmentId
+      );
+    },
+    onMutate: async (attachmentId) => {
+      // Optimistic update for attachment removal
+      const threads = queryClient.getQueryData<readonly ThreadWithDetails[]>(
+        threadKeys.list(householdId)
+      );
+      if (threads) {
+        queryClient.setQueryData<readonly ThreadWithDetails[]>(
+          threadKeys.list(householdId),
+          threads.map((t) =>
+            t.id === threadId
+              ? {
+                  ...t,
+                  messages: t.messages.map((m) =>
+                    m.id === messageId
+                      ? {
+                          ...m,
+                          attachments:
+                            m.attachments?.filter(
+                              (a) => a.id !== attachmentId
+                            ) || [],
+                        }
+                      : m
+                  ),
+                }
+              : t
+          )
+        );
+      }
+    },
+  });
+
+  const getReadStatus = useMutation({
+    mutationFn: async () => {
+      if (!messageId)
+        throw new Error("messageId is required for getting read status");
+      const result = await threadApi.messages.readStatus.get(
+        householdId,
+        threadId,
+        messageId
+      );
+      return result;
+    },
+  });
+
   return {
     createMessage,
     updateMessage,
     deleteMessage,
     addReaction,
     removeReaction,
+    markAsRead,
+    createPoll,
+    addAttachment,
+    removeAttachment,
+    getReadStatus,
     isPending:
       createMessage.isPending ||
       updateMessage.isPending ||
       deleteMessage.isPending ||
       addReaction.isPending ||
-      removeReaction.isPending,
+      removeReaction.isPending ||
+      markAsRead.isPending ||
+      createPoll.isPending ||
+      addAttachment.isPending ||
+      removeAttachment.isPending ||
+      getReadStatus.isPending,
   };
 };
