@@ -91,15 +91,20 @@ function isTokenExpired(): boolean {
   );
 }
 
+// Add a semaphore to track refresh state
+let isRefreshing = false;
+let refreshPromise: Promise<string> | null = null;
+
 async function handleTokenRefresh(
   axiosInstance: AxiosInstance
 ): Promise<string> {
-  if (!isTokenExpired() && currentTokenState.accessToken) {
-    return currentTokenState.accessToken;
+  // Return existing refresh promise if one is in progress
+  if (isRefreshing && refreshPromise) {
+    return refreshPromise;
   }
 
-  if (refreshAttempt) {
-    return refreshAttempt;
+  if (!isTokenExpired() && currentTokenState.accessToken) {
+    return currentTokenState.accessToken;
   }
 
   const sessionId = getCurrentSessionId();
@@ -110,7 +115,8 @@ async function handleTokenRefresh(
   }
 
   try {
-    refreshAttempt = (async () => {
+    isRefreshing = true;
+    refreshPromise = (async () => {
       try {
         const response = await refreshInstance.post<RefreshResponse>(
           "/auth/refresh-token",
@@ -124,6 +130,7 @@ async function handleTokenRefresh(
           expiresAt: Date.now() + 15 * 1000 - 500,
         };
 
+        // Update token in both axios instances
         [axiosInstance, refreshInstance].forEach((instance) => {
           instance.defaults.headers.common[
             "Authorization"
@@ -136,35 +143,39 @@ async function handleTokenRefresh(
             "Session not updated",
             ApiErrorType.UNAUTHORIZED,
             401,
-            {
-              code: "SESSION_NOT_UPDATED",
-            }
+            { code: "SESSION_NOT_UPDATED" }
           );
         }
 
-        await processQueue(accessToken, axiosInstance);
         return accessToken;
-      } catch (error) {
-        refreshAttempt = null;
-        while (requestQueue.length > 0) {
-          const { reject } = requestQueue.shift()!;
-          reject(error);
-        }
-        throw error;
+      } finally {
+        isRefreshing = false;
+        refreshPromise = null;
       }
     })();
 
-    return refreshAttempt;
+    const newToken = await refreshPromise;
+    await processQueue(newToken, axiosInstance);
+    return newToken;
   } catch (error) {
     currentTokenState = { accessToken: null, expiresAt: null };
-    refreshAttempt = null;
+    refreshPromise = null;
+    isRefreshing = false;
     throw error;
   }
 }
 
 export function setupInterceptors(axiosInstance: AxiosInstance) {
+  if ((axiosInstance as any).__interceptorsInitialized) {
+    return;
+  }
+  (axiosInstance as any).__interceptorsInitialized = true;
+
   axiosInstance.interceptors.request.use(
-    (config) => {
+    (config: ExtendedInternalAxiosRequestConfig) => {
+      if ((config as ExtendedAxiosRequestConfig)._isRefreshRequest) {
+        config._isRefreshRequest = true;
+      }
       config.withCredentials = true;
       return config;
     },
@@ -212,7 +223,8 @@ export function setupInterceptors(axiosInstance: AxiosInstance) {
         originalRequest._refreshAttempts =
           (originalRequest._refreshAttempts || 0) + 1;
 
-        if (refreshAttempt) {
+        // If refresh is in progress, queue the request
+        if (isRefreshing) {
           return new Promise((resolve, reject) => {
             requestQueue.push({
               config: originalRequest,

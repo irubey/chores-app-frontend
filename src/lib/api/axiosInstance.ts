@@ -33,5 +33,6 @@ export const refreshInstance = axios.create({
   _isRefreshRequest: true, // Set this by default for all requests
 } as ExtendedAxiosRequestConfig);
 
-// Initialize interceptors after creating the axios instance
+// Apply interceptors to both instances
 setupInterceptors(axiosInstance);
+setupInterceptors(refreshInstance);

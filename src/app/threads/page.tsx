@@ -43,7 +43,7 @@ export default function ThreadsPage() {
   const [isCreatorOpen, setIsCreatorOpen] = useState(false);
 
   const {
-    data: threads = [] as ThreadWithDetails[],
+    data: threads = [],
     isLoading: isLoadingThreads,
     error,
   } = useThreads({
@@ -51,9 +51,11 @@ export default function ThreadsPage() {
     requestOptions: {
       params: {
         limit: THREADS_PER_PAGE,
+        sort: "lastMessageAt:desc",
       },
     },
     enabled: Boolean(activeHouseholdId),
+    enableSockets: false,
   });
 
   const isLoading = isLoadingUser || (isLoadingThreads && threads.length === 0);

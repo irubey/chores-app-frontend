@@ -139,7 +139,13 @@ export const threadApi = {
         () =>
           axiosInstance.get(
             `/households/${householdId}/threads`,
-            buildRequestConfig(config)
+            buildRequestConfig({
+              ...config,
+              params: {
+                ...config?.params,
+                sort: "lastMessageAt:desc",
+              },
+            })
           ),
         {
           operation: "List Threads",

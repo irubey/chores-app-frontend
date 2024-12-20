@@ -28,6 +28,16 @@ interface ValidationError {
   message: string;
 }
 
+interface FormData {
+  title: string;
+  message: string;
+}
+
+interface ValidationState {
+  title: boolean;
+  message: boolean;
+}
+
 export function ThreadCreator({
   isOpen,
   onClose,
@@ -35,7 +45,6 @@ export function ThreadCreator({
 }: ThreadCreatorProps) {
   const queryClient = useQueryClient();
   const { data: userData } = useUser();
-  const { isConnected } = useSocket();
   const activeHouseholdId = userData?.data?.activeHouseholdId;
   const { data: householdsData } = useHouseholds();
   const members = activeHouseholdId
@@ -52,7 +61,8 @@ export function ThreadCreator({
 
   // Memoize validation state
   const isValid = useMemo(
-    () => !!activeHouseholdId && !!initialMessage.trim() && !!members,
+    () =>
+      Boolean(activeHouseholdId && initialMessage.trim() && members?.length),
     [activeHouseholdId, initialMessage, members]
   );
 
@@ -82,7 +92,6 @@ export function ThreadCreator({
           hasActiveHousehold: !!activeHouseholdId,
           hasMessage: !!data.message.trim(),
           hasMembers: !!members,
-          isSocketConnected: isConnected,
         });
         setError("Please fill in all required fields");
         return;
@@ -97,7 +106,6 @@ export function ThreadCreator({
           householdId: activeHouseholdId,
           title: data.title,
           participantCount: members.length,
-          isSocketConnected: isConnected,
         });
 
         const createThreadDTO: CreateThreadDTO = {
@@ -106,8 +114,6 @@ export function ThreadCreator({
           participants: members.map((member) => member.userId),
           initialMessage: {
             content: data.message.trim(),
-            attachments: [],
-            mentions: [],
           },
         };
 
@@ -115,7 +121,6 @@ export function ThreadCreator({
 
         logger.info("Thread created successfully", {
           householdId: activeHouseholdId,
-          isSocketConnected: isConnected,
         });
 
         handleClose();
@@ -124,7 +129,6 @@ export function ThreadCreator({
         const error = err as ApiError;
         logger.error("Failed to create thread", {
           error,
-          isSocketConnected: isConnected,
           householdId: activeHouseholdId,
         });
 
@@ -157,15 +161,7 @@ export function ThreadCreator({
         setIsSubmitting(false);
       }
     }, 300),
-    [
-      isValid,
-      activeHouseholdId,
-      createThread,
-      handleClose,
-      members,
-      isConnected,
-      onSuccess,
-    ]
+    [isValid, activeHouseholdId, createThread, handleClose, members]
   );
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -244,30 +240,6 @@ export function ThreadCreator({
                   : ""
               }`}
             />
-            <div className="absolute bottom-2 left-2 flex space-x-2">
-              <button
-                type="button"
-                className="btn-icon text-text-secondary hover:text-primary"
-                title="Create poll"
-                onClick={() => {
-                  // TODO: Implement poll creation
-                  logger.debug("Poll button clicked");
-                }}
-              >
-                <ChartBarIcon className="h-5 w-5" />
-              </button>
-              <button
-                type="button"
-                className="btn-icon text-text-secondary hover:text-primary"
-                title="Add attachment"
-                onClick={() => {
-                  // TODO: Implement file attachment
-                  logger.debug("Attachment button clicked");
-                }}
-              >
-                <PaperClipIcon className="h-5 w-5" />
-              </button>
-            </div>
           </div>
           {validationErrors.find((e) => e.field === "message") && (
             <p className="form-error">
@@ -295,9 +267,9 @@ export function ThreadCreator({
             type="submit"
             variant="primary"
             isLoading={isSubmitting}
-            disabled={!isValid}
+            disabled={!isValid || isSubmitting}
           >
-            Create Thread
+            {isSubmitting ? "Creating..." : "Create Thread"}
           </Button>
         </div>
       </form>

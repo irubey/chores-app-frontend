@@ -4,6 +4,7 @@ import { MessageList } from "./MessageList";
 import { ThreadWithDetails } from "@shared/types";
 import { ThreadHeader } from "./ThreadHeader";
 import MessageInput from "./MessageInput";
+import { useMessageInteractions } from "@/hooks/threads/useMessageInteractions";
 
 interface ThreadModalProps {
   readonly thread: ThreadWithDetails;
@@ -16,10 +17,17 @@ export const ThreadModal: React.FC<ThreadModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  // Create a key that changes when messages are updated
-  const messagesKey = thread.messages
-    .map((m) => `${m.id}-${m.updatedAt}`)
-    .join("-");
+  // Mark thread as read when opened
+  const { markAsRead } = useMessageInteractions({
+    householdId: thread.householdId,
+    threadId: thread.id,
+  });
+
+  React.useEffect(() => {
+    if (isOpen) {
+      markAsRead.mutate();
+    }
+  }, [isOpen, markAsRead]);
 
   return (
     <Modal
@@ -37,7 +45,7 @@ export const ThreadModal: React.FC<ThreadModalProps> = ({
       }
     >
       <div className="flex-1 overflow-y-auto min-h-0 px-4">
-        <MessageList key={messagesKey} thread={thread} />
+        <MessageList thread={thread} />
       </div>
     </Modal>
   );

@@ -1,7 +1,7 @@
 import { ThreadWithDetails } from "@shared/types";
 
 interface ThreadHeaderProps {
-  thread: ThreadWithDetails;
+  readonly thread: ThreadWithDetails;
 }
 
 export function ThreadHeader({ thread }: ThreadHeaderProps) {

@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import { ReactionWithUser } from "@shared/types";
 import { ReactionType } from "@shared/enums/messages";
 import { cn } from "@/lib/utils";
+import { REACTION_EMOJIS } from "./constants";
 
 interface ReactionListProps {
   readonly reactions: ReactionWithUser[];
@@ -12,16 +13,6 @@ interface GroupedReaction {
   count: number;
   users: string[];
 }
-
-// Map reaction types to emojis (same as in ReactionPicker)
-const REACTION_EMOJIS: Record<ReactionType, string> = {
-  [ReactionType.LIKE]: "👍",
-  [ReactionType.LOVE]: "❤️",
-  [ReactionType.HAHA]: "😂",
-  [ReactionType.WOW]: "😮",
-  [ReactionType.SAD]: "😢",
-  [ReactionType.ANGRY]: "😠",
-};
 
 export const ReactionList: React.FC<ReactionListProps> = ({ reactions }) => {
   const groupedReactions = useMemo(() => {

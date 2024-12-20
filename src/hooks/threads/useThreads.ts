@@ -29,6 +29,7 @@ interface ThreadsOptions {
   readonly householdId: string;
   readonly requestOptions?: ApiRequestOptions;
   readonly enabled?: boolean;
+  readonly enableSockets?: boolean;
 }
 
 interface MutationContext {
@@ -74,13 +75,12 @@ export const getMessagesByThreadId = (
 /**
  * Hook for managing thread list with real-time updates and filtering
  */
-export const useThreads = (
-  { householdId, requestOptions, enabled = true }: ThreadsOptions,
-  options?: Omit<
-    UseQueryOptions<readonly ThreadWithDetails[]>,
-    "queryKey" | "queryFn"
-  >
-) => {
+export const useThreads = ({
+  householdId,
+  requestOptions,
+  enabled = true,
+  enableSockets = false,
+}: ThreadsOptions) => {
   const queryClient = useQueryClient();
   const { isConnected } = useSocket();
   const { data: userData } = useUser();
@@ -124,11 +124,10 @@ export const useThreads = (
       }
       return failureCount < 3;
     },
-    ...options,
   });
 
   useEffect(() => {
-    if (!isConnected || !enabled || !isActiveHousehold) return;
+    if (!isConnected || !enabled || !enableSockets) return;
 
     const handleThreadCreate = (newThread: ThreadWithDetails) => {
       if (newThread.householdId !== householdId) return;
@@ -240,7 +239,7 @@ export const useThreads = (
         householdId,
       });
     };
-  }, [isConnected, enabled, householdId, isActiveHousehold, queryClient]);
+  }, [isConnected, enabled, enableSockets]);
 
   const createThread = useMutation<
     ThreadWithDetails,

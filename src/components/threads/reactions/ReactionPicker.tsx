@@ -3,26 +3,19 @@ import { useMessageInteractions } from "@/hooks/threads/useMessageInteractions";
 import { useUser } from "@/hooks/users/useUser";
 import { logger } from "@/lib/api/logger";
 import { cn } from "@/lib/utils";
+import { REACTION_EMOJIS } from "./constants";
 import { ReactionType } from "@shared/enums/messages";
 
 interface ReactionPickerProps {
   readonly messageId: string;
   readonly onClose: () => void;
+  readonly position?: "left" | "right";
 }
-
-// Map reaction types to emojis
-const REACTION_EMOJIS: Record<ReactionType, string> = {
-  [ReactionType.LIKE]: "👍",
-  [ReactionType.LOVE]: "❤️",
-  [ReactionType.HAHA]: "😂",
-  [ReactionType.WOW]: "😮",
-  [ReactionType.SAD]: "😢",
-  [ReactionType.ANGRY]: "😠",
-};
 
 export const ReactionPicker: React.FC<ReactionPickerProps> = ({
   messageId,
   onClose,
+  position = "right",
 }) => {
   const pickerRef = useRef<HTMLDivElement>(null);
   const { data: userData } = useUser();
@@ -77,11 +70,13 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
     <div
       ref={pickerRef}
       className={cn(
-        "absolute right-0 top-8 z-popover",
+        "absolute top-8 z-popover",
+        position === "right" ? "right-0" : "left-0",
         "bg-white dark:bg-background-dark rounded-lg shadow-lg",
         "border border-neutral-200 dark:border-neutral-700",
         "p-2 grid grid-cols-3 gap-1",
-        "animate-scale origin-top-right"
+        "animate-scale",
+        position === "right" ? "origin-top-right" : "origin-top-left"
       )}
     >
       {Object.entries(REACTION_EMOJIS).map(([type, emoji]) => (

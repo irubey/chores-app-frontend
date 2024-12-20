@@ -18,22 +18,15 @@ interface MessageProps {
   readonly message: MessageWithDetails;
   readonly householdId: string;
   readonly threadId: string;
-  readonly isEditing: boolean;
-  readonly onEditClick: () => void;
-  readonly onDeleteClick: () => void;
+  readonly showAvatar?: boolean;
 }
 
 export const Message = memo<MessageProps>(
-  ({
-    message,
-    householdId,
-    threadId,
-    isEditing,
-    onEditClick,
-    onDeleteClick,
-  }) => {
+  ({ message, householdId, threadId, showAvatar = true }) => {
+    const [isEditing, setIsEditing] = useState(false);
     const [editContent, setEditContent] = useState(message.content);
     const [showReactionPicker, setShowReactionPicker] = useState(false);
+
     const { data: userData } = useUser();
     const currentUser = userData?.data;
     const isAuthor = currentUser?.id === message.authorId;
@@ -44,10 +37,14 @@ export const Message = memo<MessageProps>(
       messageId: message.id,
     });
 
+    const isOwnMessage = currentUser?.id === message.authorId;
+
     const handleDelete = async () => {
+      if (!window.confirm("Are you sure you want to delete this message?"))
+        return;
+
       try {
         await deleteMessage.mutateAsync();
-        onDeleteClick();
       } catch (err) {
         logger.error("Failed to delete message", {
           messageId: message.id,
@@ -60,13 +57,13 @@ export const Message = memo<MessageProps>(
 
     const handleUpdate = async () => {
       if (editContent.trim() === message.content) {
-        onEditClick(); // Cancel edit mode
+        setIsEditing(false);
         return;
       }
 
       try {
         await updateMessage.mutateAsync({ content: editContent.trim() });
-        onEditClick(); // Exit edit mode
+        setIsEditing(false);
       } catch (err) {
         logger.error("Failed to update message", {
           messageId: message.id,
@@ -75,6 +72,11 @@ export const Message = memo<MessageProps>(
           error: err,
         });
       }
+    };
+
+    const handleCancelEdit = () => {
+      setEditContent(message.content);
+      setIsEditing(false);
     };
 
     // Safely format message content with mentions
@@ -103,20 +105,28 @@ export const Message = memo<MessageProps>(
       <div
         className={cn(
           "group relative flex gap-4 px-4 py-3 transition-colors",
-          "hover:bg-neutral-50 dark:hover:bg-neutral-800"
+          "hover:bg-neutral-50 dark:hover:bg-neutral-800",
+          isOwnMessage && "flex-row-reverse"
         )}
       >
         {/* Author Avatar */}
-        <div className="flex-shrink-0">
-          <div className="h-10 w-10 rounded-full bg-primary text-white flex items-center justify-center">
-            {message.author.name[0].toUpperCase()}
+        {showAvatar && (
+          <div className="flex-shrink-0">
+            <div className="h-10 w-10 rounded-full bg-primary text-white flex items-center justify-center">
+              {message.author.name[0].toUpperCase()}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Message Content */}
-        <div className="flex-grow min-w-0">
+        <div className={cn("flex-grow min-w-0", isOwnMessage && "items-end")}>
           {/* Message Header */}
-          <div className="flex items-baseline gap-2 mb-1">
+          <div
+            className={cn(
+              "flex items-baseline gap-2 mb-1",
+              isOwnMessage && "flex-row-reverse"
+            )}
+          >
             <span className="font-semibold text-text-primary dark:text-text-secondary">
               {message.author.name}
             </span>
@@ -124,11 +134,17 @@ export const Message = memo<MessageProps>(
               {formatDistanceToNow(new Date(message.createdAt), {
                 addSuffix: true,
               })}
+              {message.updatedAt !== message.createdAt && " (edited)"}
             </span>
           </div>
 
           {/* Message Body */}
-          <div className="text-text-primary dark:text-text-secondary">
+          <div
+            className={cn(
+              "text-text-primary dark:text-text-secondary",
+              isOwnMessage && "text-right"
+            )}
+          >
             {isEditing ? (
               <div className="space-y-2">
                 <textarea
@@ -136,6 +152,7 @@ export const Message = memo<MessageProps>(
                   onChange={(e) => setEditContent(e.target.value)}
                   className="input min-h-[60px] max-h-[200px] resize-y w-full"
                   rows={1}
+                  autoFocus
                 />
                 <div className="flex gap-2">
                   <button
@@ -146,7 +163,7 @@ export const Message = memo<MessageProps>(
                     Save
                   </button>
                   <button
-                    onClick={onEditClick}
+                    onClick={handleCancelEdit}
                     className="btn btn-secondary btn-sm"
                   >
                     Cancel
@@ -154,68 +171,84 @@ export const Message = memo<MessageProps>(
                 </div>
               </div>
             ) : (
-              renderContent()
+              <div
+                className={cn(
+                  "whitespace-pre-wrap",
+                  "inline-block max-w-[80%] rounded-lg p-2",
+                  isOwnMessage
+                    ? "bg-primary text-white ml-auto"
+                    : "bg-neutral-100 dark:bg-neutral-800"
+                )}
+              >
+                {renderContent()}
+              </div>
             )}
           </div>
 
           {/* Poll (if exists) */}
           {message.poll && (
-            <Poll
-              poll={message.poll}
-              householdId={householdId}
-              threadId={threadId}
-              messageId={message.id}
-              isAuthor={isAuthor}
-            />
+            <div className={cn(isOwnMessage && "flex justify-end")}>
+              <Poll
+                poll={message.poll}
+                householdId={householdId}
+                threadId={threadId}
+                messageId={message.id}
+                isAuthor={isAuthor}
+              />
+            </div>
           )}
 
           {/* Reactions */}
           {message.reactions && message.reactions.length > 0 && (
-            <div className="mt-2">
+            <div className={cn("mt-2", isOwnMessage && "flex justify-end")}>
               <ReactionList reactions={message.reactions} />
             </div>
           )}
         </div>
 
         {/* Message Actions */}
-        <div
-          className={cn(
-            "absolute right-4 top-3 flex gap-2",
-            "opacity-0 group-hover:opacity-100 transition-opacity"
-          )}
-        >
-          <button
-            onClick={() => setShowReactionPicker(true)}
-            className="text-text-secondary hover:text-primary p-1 rounded"
-            aria-label="Add reaction"
+        {!isEditing && (
+          <div
+            className={cn(
+              "absolute top-3 flex gap-2",
+              isOwnMessage ? "left-4" : "right-4",
+              "opacity-0 group-hover:opacity-100 transition-opacity"
+            )}
           >
-            <FaceSmileIcon className="h-4 w-4" />
-          </button>
-          {isAuthor && (
-            <>
-              <button
-                onClick={onEditClick}
-                className="text-text-secondary hover:text-primary p-1 rounded"
-                aria-label="Edit message"
-              >
-                <PencilIcon className="h-4 w-4" />
-              </button>
-              <button
-                onClick={handleDelete}
-                className="text-text-secondary hover:text-red-500 p-1 rounded"
-                aria-label="Delete message"
-              >
-                <TrashIcon className="h-4 w-4" />
-              </button>
-            </>
-          )}
-        </div>
+            <button
+              onClick={() => setShowReactionPicker(true)}
+              className="text-text-secondary hover:text-primary p-1 rounded"
+              aria-label="Add reaction"
+            >
+              <FaceSmileIcon className="h-4 w-4" />
+            </button>
+            {isAuthor && (
+              <>
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="text-text-secondary hover:text-primary p-1 rounded"
+                  aria-label="Edit message"
+                >
+                  <PencilIcon className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={handleDelete}
+                  className="text-text-secondary hover:text-red-500 p-1 rounded"
+                  aria-label="Delete message"
+                >
+                  <TrashIcon className="h-4 w-4" />
+                </button>
+              </>
+            )}
+          </div>
+        )}
 
         {/* Reaction Picker */}
         {showReactionPicker && (
           <ReactionPicker
             messageId={message.id}
             onClose={() => setShowReactionPicker(false)}
+            position={isOwnMessage ? "left" : "right"}
           />
         )}
       </div>
@@ -226,7 +259,7 @@ export const Message = memo<MessageProps>(
       prevProps.message.id === nextProps.message.id &&
       prevProps.message.content === nextProps.message.content &&
       prevProps.message.updatedAt === nextProps.message.updatedAt &&
-      prevProps.isEditing === nextProps.isEditing
+      prevProps.showAvatar === nextProps.showAvatar
     );
   }
 );

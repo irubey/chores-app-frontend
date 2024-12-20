@@ -1,8 +1,13 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useMessageInteractions } from "@/hooks/threads/useMessageInteractions";
 import { useUser } from "@/hooks/users/useUser";
 import { logger } from "@/lib/api/logger";
-import { ThreadWithDetails, HouseholdMemberWithUser } from "@shared/types";
+import {
+  ThreadWithDetails,
+  HouseholdMemberWithUser,
+  CreatePollDTO,
+  CreateAttachmentDTO,
+} from "@shared/types";
 import { cn } from "@/lib/utils";
 import {
   PaperAirplaneIcon,
@@ -10,6 +15,16 @@ import {
   PaperClipIcon,
 } from "@heroicons/react/24/outline";
 import Textarea from "@/components/common/Textarea";
+import PollCreator from "@/components/threads/Poll/PollCreator";
+import { MentionDropdown } from "@/components/threads/Mention/MentionDropdown";
+import { getCaretCoordinates } from "@/lib/utils/textAreaUtils";
+import { AttachmentPreview } from "./Attachment/AttachmentPreview";
+import {
+  validateFile,
+  FileValidationError,
+  ALLOWED_FILE_TYPES,
+} from "@/lib/utils/fileUtils";
+import PollPreview from "./Poll/PollPreview";
 
 interface MessageInputProps {
   readonly thread: Omit<ThreadWithDetails, "participants"> & {
@@ -19,9 +34,39 @@ interface MessageInputProps {
 
 const MAX_MESSAGE_LENGTH = 2000;
 
+interface MessageInputState {
+  content: string;
+  attachments: CreateAttachmentDTO[];
+  pollData?: CreatePollDTO;
+  mentions: string[];
+}
+
+interface MentionState {
+  isActive: boolean;
+  startPosition: number;
+  searchText: string;
+  selectedIndex: number;
+  dropdownPosition: { top: number; left: number };
+}
+
 const MessageInput: React.FC<MessageInputProps> = ({ thread }) => {
-  const [content, setContent] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [state, setState] = useState<MessageInputState>({
+    content: "",
+    attachments: [],
+    mentions: [],
+  });
+  const [showPollCreator, setShowPollCreator] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [mentionState, setMentionState] = useState<MentionState>({
+    isActive: false,
+    startPosition: 0,
+    searchText: "",
+    selectedIndex: 0,
+    dropdownPosition: { top: 0, left: 0 },
+  });
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [fileErrors, setFileErrors] = useState<FileValidationError[]>([]);
+
   const { data: userData } = useUser();
   const user = userData?.data;
 
@@ -31,132 +76,281 @@ const MessageInput: React.FC<MessageInputProps> = ({ thread }) => {
   });
 
   const canSendMessage = Boolean(
-    content.trim() &&
+    state.content.trim() &&
       !isPending &&
       user &&
       user.activeHouseholdId === thread.householdId &&
-      content.length <= MAX_MESSAGE_LENGTH
+      state.content.length <= MAX_MESSAGE_LENGTH
   );
-
-  const extractMentions = (text: string) => {
-    const mentions = new Set<string>();
-    const regex = /@([\w\s]+)/g;
-    let match;
-
-    while ((match = regex.exec(text)) !== null) {
-      const username = match[1].trim();
-      const member = thread.participants.find(
-        (p) =>
-          p.user.name?.toLowerCase() === username.toLowerCase() ||
-          p.nickname?.toLowerCase() === username.toLowerCase()
-      );
-      if (member?.userId) {
-        mentions.add(member.userId);
-      }
-    }
-
-    return Array.from(mentions);
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-
     if (!canSendMessage) return;
 
     try {
-      const mentions = extractMentions(content);
       await createMessage.mutateAsync({
         threadId: thread.id,
-        content: content.trim(),
-        mentions,
+        content: state.content.trim(),
+        mentions: state.mentions,
+        attachments: state.attachments,
+        poll: state.pollData,
       });
-      setContent("");
-      logger.info("Message sent", {
-        threadId: thread.id,
-        householdId: thread.householdId,
-        userId: user?.id,
-        hasMentions: mentions.length > 0,
+
+      // Reset state after successful send
+      setState({
+        content: "",
+        attachments: [],
+        mentions: [],
       });
+      setShowPollCreator(false);
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to send message";
-      setError(errorMessage);
-      logger.error("Failed to send message", {
-        threadId: thread.id,
-        householdId: thread.householdId,
-        userId: user?.id,
-        error,
+      // Error handling
+    }
+  };
+
+  const handleAttachmentClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    setFileErrors([]);
+
+    // Validate files
+    const errors: FileValidationError[] = [];
+    const validFiles: File[] = [];
+
+    files.forEach((file) => {
+      const error = validateFile(file);
+      if (error) {
+        errors.push(error);
+      } else {
+        validFiles.push(file);
+      }
+    });
+
+    if (errors.length > 0) {
+      setFileErrors(errors);
+      return;
+    }
+
+    const attachments: CreateAttachmentDTO[] = validFiles.map((file) => ({
+      url: URL.createObjectURL(file),
+      fileType: file.type,
+    }));
+
+    setState((prev) => ({
+      ...prev,
+      attachments: [...prev.attachments, ...attachments],
+    }));
+
+    // Clear input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const handlePollCreate = (data: CreatePollDTO) => {
+    setState((prev) => ({
+      ...prev,
+      pollData: data,
+    }));
+    setShowPollCreator(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!mentionState.isActive) return;
+
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        setMentionState((prev) => ({
+          ...prev,
+          selectedIndex: Math.min(
+            prev.selectedIndex + 1,
+            getFilteredParticipants().length - 1
+          ),
+        }));
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        setMentionState((prev) => ({
+          ...prev,
+          selectedIndex: Math.max(prev.selectedIndex - 1, 0),
+        }));
+        break;
+      case "Enter":
+      case "Tab":
+        if (mentionState.isActive) {
+          e.preventDefault();
+          const participant =
+            getFilteredParticipants()[mentionState.selectedIndex];
+          if (participant) {
+            handleMentionSelect(participant);
+          }
+        }
+        break;
+      case "Escape":
+        setMentionState((prev) => ({ ...prev, isActive: false }));
+        break;
+    }
+  };
+
+  const handleContentChange = (value: string) => {
+    const lastAtSymbol = value.lastIndexOf("@");
+    if (lastAtSymbol !== -1 && lastAtSymbol >= value.lastIndexOf(" ")) {
+      // Get cursor position and calculate dropdown position
+      const textArea = textareaRef.current;
+      if (textArea) {
+        const { top, left } = getCaretCoordinates(textArea, lastAtSymbol);
+        setMentionState({
+          isActive: true,
+          startPosition: lastAtSymbol,
+          searchText: value.slice(lastAtSymbol + 1),
+          selectedIndex: 0,
+          dropdownPosition: { top: top + 20, left },
+        });
+      }
+    } else {
+      setMentionState((prev) => ({ ...prev, isActive: false }));
+    }
+
+    setState((prev) => ({ ...prev, content: value }));
+  };
+
+  const handleMentionSelect = (participant: HouseholdMemberWithUser) => {
+    const beforeMention = state.content.slice(0, mentionState.startPosition);
+    const afterMention = state.content.slice(
+      mentionState.startPosition + mentionState.searchText.length + 1
+    );
+    const newContent = `${beforeMention}@${participant.user.name} ${afterMention}`;
+
+    setState((prev) => ({
+      ...prev,
+      content: newContent,
+      mentions: [...prev.mentions, participant.userId],
+    }));
+
+    setMentionState((prev) => ({ ...prev, isActive: false }));
+  };
+
+  const getFilteredParticipants = () => {
+    return thread.participants.filter(
+      (p) =>
+        p.user.name
+          ?.toLowerCase()
+          .includes(mentionState.searchText.toLowerCase()) ||
+        p.nickname
+          ?.toLowerCase()
+          .includes(mentionState.searchText.toLowerCase())
+    );
+  };
+
+  const handleRemoveAttachment = (attachmentToRemove: CreateAttachmentDTO) => {
+    setState((prev) => ({
+      ...prev,
+      attachments: prev.attachments.filter((a) => a !== attachmentToRemove),
+    }));
+
+    // Cleanup blob URL if it exists
+    if (attachmentToRemove.url.startsWith("blob:")) {
+      URL.revokeObjectURL(attachmentToRemove.url);
+    }
+  };
+
+  const handleRemovePoll = () => {
+    setState((prev) => ({
+      ...prev,
+      pollData: undefined,
+    }));
+  };
+
+  useEffect(() => {
+    return () => {
+      state.attachments.forEach((attachment) => {
+        if (attachment.url.startsWith("blob:")) {
+          URL.revokeObjectURL(attachment.url);
+        }
       });
-    }
-  };
-
-  const getErrorMessage = () => {
-    if (!user) return "You must be logged in to send messages";
-    if (user.activeHouseholdId !== thread.householdId) {
-      return "You must be in this household to send messages";
-    }
-    if (content.length > MAX_MESSAGE_LENGTH) {
-      return `Message is too long (${content.length}/${MAX_MESSAGE_LENGTH} characters)`;
-    }
-    return error;
-  };
-
-  const displayError = getErrorMessage();
+    };
+  }, [state.attachments]);
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="h-full"
-      aria-label="Message input form"
-    >
-      {displayError && (
-        <p
-          role="alert"
-          className="text-sm text-red-500 bg-red-50 dark:bg-red-900/10 p-2 rounded mb-2"
-        >
-          {displayError}
-        </p>
+    <form onSubmit={handleSubmit} className="h-full relative">
+      {fileErrors.length > 0 && (
+        <div className="mb-2 p-2 bg-red-50 dark:bg-red-900/10 rounded">
+          <h4 className="text-sm font-medium text-red-600 dark:text-red-400 mb-1">
+            File Upload Errors:
+          </h4>
+          <ul className="text-sm text-red-600 dark:text-red-400 list-disc list-inside">
+            {fileErrors.map((error, index) => (
+              <li key={index}>
+                {error.file.name}: {error.error}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
+
+      {/* Error display */}
+      {/* Poll creator modal */}
+      <PollCreator
+        isOpen={showPollCreator}
+        onClose={() => setShowPollCreator(false)}
+        onSubmit={handlePollCreate}
+      />
+
       <div className="grid grid-cols-[auto_1fr_auto] gap-2 h-full">
         <div className="flex flex-col gap-2">
           <button
             type="button"
-            className="btn-icon text-text-secondary hover:text-primary bg-white dark:bg-background-dark"
-            title="Create poll"
-            onClick={() => {
-              logger.debug("Poll button clicked");
-            }}
+            onClick={() => setShowPollCreator(true)}
+            className="btn-icon"
           >
             <ChartBarIcon className="h-5 w-5" />
           </button>
           <button
             type="button"
-            className="btn-icon text-text-secondary hover:text-primary bg-white dark:bg-background-dark"
+            onClick={handleAttachmentClick}
+            className="btn-icon group relative"
             title="Add attachment"
-            onClick={() => {
-              logger.debug("Attachment button clicked");
-            }}
           >
             <PaperClipIcon className="h-5 w-5" />
+            <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 hidden group-hover:block">
+              <div className="bg-white dark:bg-gray-800 shadow-lg rounded p-2 text-xs whitespace-nowrap">
+                Max size: 10MB
+                <br />
+                Supported: Images, PDF, Word, Text
+              </div>
+            </div>
           </button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            className="hidden"
+            multiple
+            accept={ALLOWED_FILE_TYPES.join(",")}
+          />
         </div>
 
         <Textarea
-          value={content}
-          onChange={setContent}
+          ref={textareaRef}
+          value={state.content}
+          onChange={handleContentChange}
+          onKeyDown={handleKeyDown}
           placeholder="Type your message... Use @ to mention someone"
           className="h-full"
           disabled={isPending}
           autoGrow={false}
           error={
-            content.length > MAX_MESSAGE_LENGTH
+            state.content.length > MAX_MESSAGE_LENGTH
               ? "Message is too long"
               : undefined
           }
           helperText={
-            content.length > 0
-              ? `${content.length}/${MAX_MESSAGE_LENGTH} characters`
+            state.content.length > 0
+              ? `${state.content.length}/${MAX_MESSAGE_LENGTH} characters`
               : undefined
           }
         />
@@ -175,6 +369,44 @@ const MessageInput: React.FC<MessageInputProps> = ({ thread }) => {
           </button>
         </div>
       </div>
+
+      {/* Preview area for attachments and poll */}
+      {(state.attachments.length > 0 || state.pollData) && (
+        <div className="mt-2 space-y-2">
+          {state.attachments.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium text-text-secondary">
+                Attachments ({state.attachments.length})
+              </h4>
+              <div className="space-y-1">
+                {state.attachments.map((attachment, index) => (
+                  <AttachmentPreview
+                    key={`${attachment.url}-${index}`}
+                    attachment={attachment}
+                    onRemove={handleRemoveAttachment}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+          {state.pollData && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium text-text-secondary">Poll</h4>
+              <PollPreview poll={state.pollData} onRemove={handleRemovePoll} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {mentionState.isActive && (
+        <MentionDropdown
+          participants={thread.participants}
+          searchText={mentionState.searchText}
+          selectedIndex={mentionState.selectedIndex}
+          onSelect={handleMentionSelect}
+          position={mentionState.dropdownPosition}
+        />
+      )}
     </form>
   );
 };

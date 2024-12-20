@@ -1,11 +1,7 @@
 import { useMemo, useState } from "react";
 import { ThreadWithDetails } from "@shared/types";
 import { formatDistanceToNow, format } from "date-fns";
-import {
-  ChatBubbleLeftIcon,
-  PaperClipIcon,
-  ChartBarIcon,
-} from "@heroicons/react/24/outline";
+import { ChatBubbleLeftIcon } from "@heroicons/react/24/outline";
 import { logger } from "@/lib/api/logger";
 import { ThreadModal } from "./ThreadModal";
 import { useUser } from "@/hooks/users/useUser";
@@ -36,29 +32,17 @@ export function ThreadCard({ thread, animationDelay = 0 }: ThreadCardProps) {
     }, 0);
   }, [thread.messages, user?.id]);
 
-  const hasPoll = useMemo(
-    () => thread.messages.some((m) => m.poll),
-    [thread.messages]
-  );
-
-  const hasAttachments = useMemo(
-    () => thread.messages.some((m) => m.attachments?.length),
-    [thread.messages]
-  );
-
   const timestamp = useMemo(() => {
     const date = new Date(lastMessage?.createdAt || thread.createdAt);
     return {
       relative: formatDistanceToNow(date, { addSuffix: true }),
-      absolute: format(date, "PPp"), // e.g., "Apr 29, 2023, 3:00 PM"
+      absolute: format(date, "PPp"),
     };
   }, [lastMessage?.createdAt, thread.createdAt]);
 
   logger.debug("Rendering thread card", {
     threadId: thread.id,
     unreadCount,
-    hasPoll,
-    hasAttachments,
   });
 
   return (
@@ -114,16 +98,6 @@ export function ThreadCard({ thread, animationDelay = 0 }: ThreadCardProps) {
                 {thread.messages.length}
               </span>
             </div>
-            {hasAttachments && (
-              <div className="flex items-center hover:text-primary dark:hover:text-primary-light transition-colors">
-                <PaperClipIcon className="h-5 w-5" />
-              </div>
-            )}
-            {hasPoll && (
-              <div className="flex items-center hover:text-primary dark:hover:text-primary-light transition-colors">
-                <ChartBarIcon className="h-5 w-5" />
-              </div>
-            )}
           </div>
         </div>
       </button>
