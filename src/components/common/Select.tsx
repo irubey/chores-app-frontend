@@ -2,20 +2,21 @@ import React from "react";
 import { twMerge } from "tailwind-merge";
 
 export interface SelectOption {
-  value: string;
+  value: string | number;
   label: string;
 }
 
 interface SelectProps {
   label: string;
-  value: string;
-  onChange: (value: string) => void;
+  value: string | number | string[];
+  onChange: (value: string | number | string[]) => void;
   options: SelectOption[];
   required?: boolean;
   disabled?: boolean;
   error?: string;
   helperText?: string;
   className?: string;
+  multiple?: boolean;
 }
 
 export function Select({
@@ -28,8 +29,20 @@ export function Select({
   error,
   helperText,
   className,
+  multiple = false,
 }: SelectProps) {
   const id = React.useId();
+
+  const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    if (multiple) {
+      const selectedOptions = Array.from(e.target.selectedOptions).map(
+        (option) => option.value
+      );
+      onChange(selectedOptions);
+    } else {
+      onChange(e.target.value);
+    }
+  };
 
   return (
     <div className={twMerge("flex flex-col gap-1", className)}>
@@ -43,9 +56,10 @@ export function Select({
       <select
         id={id}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={handleChange}
         disabled={disabled}
         required={required}
+        multiple={multiple}
         className={twMerge(
           "block w-full rounded-md border-gray-300 dark:border-gray-600",
           "bg-white dark:bg-gray-800",
@@ -54,12 +68,15 @@ export function Select({
           "sm:text-sm",
           error && "border-red-500 focus:border-red-500 focus:ring-red-500",
           disabled && "opacity-50 cursor-not-allowed",
+          multiple && "min-h-[120px]",
           "transition-colors duration-200"
         )}
       >
-        <option value="" disabled>
-          Select {label.toLowerCase()}...
-        </option>
+        {!multiple && (
+          <option value="" disabled>
+            Select {label.toLowerCase()}...
+          </option>
+        )}
         {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}

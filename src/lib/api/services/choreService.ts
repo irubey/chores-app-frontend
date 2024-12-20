@@ -1,230 +1,269 @@
+import {
+  handleApiRequest,
+  ApiRequestOptions,
+  buildRequestConfig,
+} from "../utils/apiUtils";
+import { axiosInstance } from "../axiosInstance";
 import { ApiResponse } from "@shared/interfaces";
 import {
+  Chore,
+  ChoreWithAssignees,
+  Subtask,
   CreateChoreDTO,
   UpdateChoreDTO,
-  Subtask,
   CreateSubtaskDTO,
   UpdateSubtaskDTO,
   ChoreSwapRequest,
-  ChoreWithAssignees,
 } from "@shared/types";
-import { BaseApiClient } from "../baseClient";
-import { logger } from "../logger";
 
-export class ChoreService extends BaseApiClient {
-  /**
-   * Get all chores for a household
-   */
-  public async getChores(
-    householdId: string,
-    signal?: AbortSignal
-  ): Promise<ApiResponse<ChoreWithAssignees[]>> {
-    logger.debug("Getting chores", { householdId });
-    return this.handleRequest(() =>
-      this.axiosInstance.get<ApiResponse<ChoreWithAssignees[]>>(
-        `/households/${householdId}/chores`,
-        { signal }
-      )
-    );
-  }
-
-  /**
-   * Create a new chore
-   */
-  public async createChore(
-    householdId: string,
-    choreData: CreateChoreDTO,
-    signal?: AbortSignal
-  ): Promise<ApiResponse<ChoreWithAssignees>> {
-    logger.debug("Creating chore", { householdId, choreData });
-    return this.handleRequest(() =>
-      this.axiosInstance.post<ApiResponse<ChoreWithAssignees>>(
-        `/households/${householdId}/chores`,
-        choreData,
-        { signal }
-      )
-    );
-  }
-
-  /**
-   * Get details of a specific chore
-   */
-  public async getChoreDetails(
-    householdId: string,
-    choreId: string,
-    signal?: AbortSignal
-  ): Promise<ApiResponse<ChoreWithAssignees>> {
-    logger.debug("Getting chore details", { householdId, choreId });
-    return this.handleRequest(() =>
-      this.axiosInstance.get<ApiResponse<ChoreWithAssignees>>(
-        `/households/${householdId}/chores/${choreId}`,
-        { signal }
-      )
-    );
-  }
-
-  /**
-   * Update an existing chore
-   */
-  public async updateChore(
-    householdId: string,
-    choreId: string,
-    choreData: UpdateChoreDTO,
-    signal?: AbortSignal
-  ): Promise<ApiResponse<ChoreWithAssignees>> {
-    logger.debug("Updating chore", { householdId, choreId, choreData });
-    return this.handleRequest(() =>
-      this.axiosInstance.patch<ApiResponse<ChoreWithAssignees>>(
-        `/households/${householdId}/chores/${choreId}`,
-        choreData,
-        { signal }
-      )
-    );
-  }
-
-  /**
-   * Delete a chore
-   */
-  public async deleteChore(
-    householdId: string,
-    choreId: string,
-    signal?: AbortSignal
-  ): Promise<ApiResponse<void>> {
-    logger.debug("Deleting chore", { householdId, choreId });
-    return this.handleRequest(() =>
-      this.axiosInstance.delete<ApiResponse<void>>(
-        `/households/${householdId}/chores/${choreId}`,
-        { signal }
-      )
-    );
-  }
-
-  /**
-   * Request a chore swap with another user
-   */
-  public async requestChoreSwap(
-    householdId: string,
-    choreId: string,
-    targetUserId: string,
-    signal?: AbortSignal
-  ): Promise<ApiResponse<ChoreSwapRequest>> {
-    logger.debug("Requesting chore swap", {
-      householdId,
-      choreId,
-      targetUserId,
-    });
-    return this.handleRequest(() =>
-      this.axiosInstance.post<ApiResponse<ChoreSwapRequest>>(
-        `/households/${householdId}/chores/${choreId}/swap-request`,
-        { targetUserId },
-        { signal }
-      )
-    );
-  }
-
-  /**
-   * Approve or reject a chore swap request
-   */
-  public async approveChoreSwap(
-    householdId: string,
-    choreId: string,
-    swapRequestId: string,
-    approved: boolean,
-    signal?: AbortSignal
-  ): Promise<ApiResponse<ChoreWithAssignees>> {
-    logger.debug("Approving chore swap", {
-      householdId,
-      choreId,
-      swapRequestId,
-      approved,
-    });
-    return this.handleRequest(() =>
-      this.axiosInstance.patch<ApiResponse<ChoreWithAssignees>>(
-        `/households/${householdId}/chores/${choreId}/swap-approve`,
-        { approved, swapRequestId },
-        { signal }
-      )
-    );
-  }
-
-  public readonly subtasks = {
-    /**
-     * Get all subtasks for a chore
-     */
-    getSubtasks: async (
-      householdId: string,
-      choreId: string,
-      signal?: AbortSignal
-    ): Promise<ApiResponse<Subtask[]>> => {
-      logger.debug("Getting subtasks", { householdId, choreId });
-      return this.handleRequest(() =>
-        this.axiosInstance.get<ApiResponse<Subtask[]>>(
-          `/households/${householdId}/chores/${choreId}/subtasks`,
-          { signal }
-        )
-      );
-    },
-
-    /**
-     * Add a new subtask to a chore
-     */
-    addSubtask: async (
-      householdId: string,
-      choreId: string,
-      subtaskData: CreateSubtaskDTO,
-      signal?: AbortSignal
-    ): Promise<ApiResponse<Subtask>> => {
-      logger.debug("Adding subtask", { householdId, choreId, subtaskData });
-      return this.handleRequest(() =>
-        this.axiosInstance.post<ApiResponse<Subtask>>(
-          `/households/${householdId}/chores/${choreId}/subtasks`,
-          subtaskData,
-          { signal }
-        )
-      );
-    },
-
-    /**
-     * Update an existing subtask
-     */
-    updateSubtask: async (
-      householdId: string,
-      choreId: string,
-      subtaskId: string,
-      subtaskData: UpdateSubtaskDTO,
-      signal?: AbortSignal
-    ): Promise<ApiResponse<Subtask>> => {
-      logger.debug("Updating subtask", {
-        householdId,
-        choreId,
+export const choreKeys = {
+  all: ["chores"] as const,
+  lists: () => [...choreKeys.all, "list"] as const,
+  list: (householdId: string, params?: Record<string, unknown>) =>
+    [...choreKeys.lists(), householdId, params] as const,
+  details: () => [...choreKeys.all, "detail"] as const,
+  detail: (householdId: string, choreId: string) =>
+    [...choreKeys.details(), householdId, choreId] as const,
+  subtasks: {
+    all: (householdId: string, choreId: string) =>
+      [...choreKeys.detail(householdId, choreId), "subtasks"] as const,
+    detail: (householdId: string, choreId: string, subtaskId: string) =>
+      [
+        ...choreKeys.detail(householdId, choreId),
+        "subtasks",
         subtaskId,
-        subtaskData,
-      });
-      return this.handleRequest(() =>
-        this.axiosInstance.patch<ApiResponse<Subtask>>(
-          `/households/${householdId}/chores/${choreId}/subtasks/${subtaskId}`,
-          subtaskData,
-          { signal }
-        )
+      ] as const,
+  },
+  swapRequests: (householdId: string, choreId: string) =>
+    [...choreKeys.detail(householdId, choreId), "swap-requests"] as const,
+} as const;
+
+export const choreApi = {
+  chores: {
+    list: async (
+      householdId: string,
+      config?: ApiRequestOptions
+    ): Promise<ApiResponse<ChoreWithAssignees[]>> => {
+      return handleApiRequest<ChoreWithAssignees[]>(
+        () =>
+          axiosInstance.get(
+            `/households/${householdId}/chores`,
+            buildRequestConfig(config)
+          ),
+        {
+          operation: "List Chores",
+          metadata: { householdId },
+        }
       );
     },
 
-    /**
-     * Delete a subtask
-     */
-    deleteSubtask: async (
+    get: async (
+      householdId: string,
+      choreId: string,
+      config?: ApiRequestOptions
+    ): Promise<ApiResponse<ChoreWithAssignees>> => {
+      return handleApiRequest<ChoreWithAssignees>(
+        () =>
+          axiosInstance.get(
+            `/households/${householdId}/chores/${choreId}`,
+            buildRequestConfig(config)
+          ),
+        {
+          operation: "Get Chore",
+          metadata: { householdId, choreId },
+        }
+      );
+    },
+
+    create: async (
+      householdId: string,
+      data: CreateChoreDTO,
+      config?: ApiRequestOptions
+    ): Promise<ApiResponse<ChoreWithAssignees>> => {
+      return handleApiRequest<ChoreWithAssignees>(
+        () =>
+          axiosInstance.post(
+            `/households/${householdId}/chores`,
+            data,
+            buildRequestConfig(config)
+          ),
+        {
+          operation: "Create Chore",
+          metadata: { householdId, title: data.title },
+        }
+      );
+    },
+
+    update: async (
+      householdId: string,
+      choreId: string,
+      data: UpdateChoreDTO,
+      config?: ApiRequestOptions
+    ): Promise<ApiResponse<ChoreWithAssignees>> => {
+      return handleApiRequest<ChoreWithAssignees>(
+        () =>
+          axiosInstance.patch(
+            `/households/${householdId}/chores/${choreId}`,
+            data,
+            buildRequestConfig(config)
+          ),
+        {
+          operation: "Update Chore",
+          metadata: {
+            householdId,
+            choreId,
+            updatedFields: Object.keys(data),
+          },
+        }
+      );
+    },
+
+    delete: async (
+      householdId: string,
+      choreId: string,
+      config?: ApiRequestOptions
+    ): Promise<void> => {
+      await handleApiRequest<void>(
+        () =>
+          axiosInstance.delete(
+            `/households/${householdId}/chores/${choreId}`,
+            buildRequestConfig(config)
+          ),
+        {
+          operation: "Delete Chore",
+          metadata: { householdId, choreId },
+        }
+      );
+    },
+  },
+
+  subtasks: {
+    list: async (
+      householdId: string,
+      choreId: string,
+      config?: ApiRequestOptions
+    ): Promise<ApiResponse<Subtask[]>> => {
+      return handleApiRequest<Subtask[]>(
+        () =>
+          axiosInstance.get(
+            `/households/${householdId}/chores/${choreId}/subtasks`,
+            buildRequestConfig(config)
+          ),
+        {
+          operation: "List Subtasks",
+          metadata: { householdId, choreId },
+        }
+      );
+    },
+
+    create: async (
+      householdId: string,
+      choreId: string,
+      data: CreateSubtaskDTO,
+      config?: ApiRequestOptions
+    ): Promise<ApiResponse<Subtask>> => {
+      return handleApiRequest<Subtask>(
+        () =>
+          axiosInstance.post(
+            `/households/${householdId}/chores/${choreId}/subtasks`,
+            data,
+            buildRequestConfig(config)
+          ),
+        {
+          operation: "Create Subtask",
+          metadata: { householdId, choreId, title: data.title },
+        }
+      );
+    },
+
+    update: async (
       householdId: string,
       choreId: string,
       subtaskId: string,
-      signal?: AbortSignal
-    ): Promise<ApiResponse<void>> => {
-      logger.debug("Deleting subtask", { householdId, choreId, subtaskId });
-      return this.handleRequest(() =>
-        this.axiosInstance.delete<ApiResponse<void>>(
-          `/households/${householdId}/chores/${choreId}/subtasks/${subtaskId}`,
-          { signal }
-        )
+      data: UpdateSubtaskDTO,
+      config?: ApiRequestOptions
+    ): Promise<ApiResponse<Subtask>> => {
+      return handleApiRequest<Subtask>(
+        () =>
+          axiosInstance.patch(
+            `/households/${householdId}/chores/${choreId}/subtasks/${subtaskId}`,
+            data,
+            buildRequestConfig(config)
+          ),
+        {
+          operation: "Update Subtask",
+          metadata: {
+            householdId,
+            choreId,
+            subtaskId,
+            updatedFields: Object.keys(data),
+          },
+        }
       );
     },
-  };
-}
+
+    delete: async (
+      householdId: string,
+      choreId: string,
+      subtaskId: string,
+      config?: ApiRequestOptions
+    ): Promise<void> => {
+      await handleApiRequest<void>(
+        () =>
+          axiosInstance.delete(
+            `/households/${householdId}/chores/${choreId}/subtasks/${subtaskId}`,
+            buildRequestConfig(config)
+          ),
+        {
+          operation: "Delete Subtask",
+          metadata: { householdId, choreId, subtaskId },
+        }
+      );
+    },
+  },
+
+  swapRequests: {
+    create: async (
+      householdId: string,
+      choreId: string,
+      targetUserId: string,
+      config?: ApiRequestOptions
+    ): Promise<ApiResponse<ChoreSwapRequest>> => {
+      return handleApiRequest<ChoreSwapRequest>(
+        () =>
+          axiosInstance.post(
+            `/households/${householdId}/chores/${choreId}/swap-request`,
+            { targetUserId },
+            buildRequestConfig(config)
+          ),
+        {
+          operation: "Create Swap Request",
+          metadata: { householdId, choreId, targetUserId },
+        }
+      );
+    },
+
+    approveOrReject: async (
+      householdId: string,
+      choreId: string,
+      swapRequestId: string,
+      approved: boolean,
+      config?: ApiRequestOptions
+    ): Promise<ApiResponse<ChoreWithAssignees>> => {
+      return handleApiRequest<ChoreWithAssignees>(
+        () =>
+          axiosInstance.patch(
+            `/households/${householdId}/chores/${choreId}/swap-approve`,
+            { approved },
+            buildRequestConfig(config)
+          ),
+        {
+          operation: "Approve/Reject Swap Request",
+          metadata: { householdId, choreId, swapRequestId, approved },
+        }
+      );
+    },
+  },
+} as const;
+
+export type ChoreApi = typeof choreApi;

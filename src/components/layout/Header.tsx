@@ -4,7 +4,6 @@ import Link from "next/link";
 import { User } from "@shared/types";
 import { useAuth, useAuthActions } from "@/contexts/UserContext";
 import { useTheme } from "../../contexts/ThemeContext";
-import { useNotifications } from "../../hooks/useNotifications";
 import { useRouter } from "next/navigation";
 import {
   FaTasks,
@@ -24,15 +23,7 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ user }) => {
   const router = useRouter();
   const { logout } = useAuthActions();
-  const { notifications } = useNotifications();
   const { theme, toggleTheme } = useTheme();
-
-  // Helper function to count unseen notifications per feature
-  const countUnseen = (type: string) => {
-    return notifications.filter(
-      (notification) => notification.type === type && !notification.isRead
-    ).length;
-  };
 
   const handleLogout = async () => {
     try {
@@ -56,11 +47,6 @@ const Header: React.FC<HeaderProps> = ({ user }) => {
       className="relative flex flex-col items-center text-white hover:text-accent-light transition-colors duration-200"
     >
       {icon}
-      {notificationType && countUnseen(notificationType) > 0 && (
-        <span className="absolute -top-1 -right-1 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-red-100 bg-red-600 rounded-full">
-          {countUnseen(notificationType)}
-        </span>
-      )}
       <span className="mt-1 text-sm font-medium">{label}</span>
     </Link>
   );
