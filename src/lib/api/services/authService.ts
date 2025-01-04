@@ -3,7 +3,7 @@ import {
   buildRequestConfig,
   ApiRequestOptions,
 } from "../utils/apiUtils";
-import { axiosInstance } from "../axiosInstance";
+import { axiosInstance, refreshInstance } from "../axiosInstance";
 import { ApiResponse } from "@shared/interfaces";
 import { LoginCredentials, User, RegisterUserDTO } from "@shared/types";
 import { ApiError } from "../errors";
@@ -75,7 +75,7 @@ export const authApi = {
     ): Promise<ApiResponse<void>> => {
       return handleApiRequest<void>(
         () =>
-          axiosInstance.post(
+          refreshInstance.post(
             "/auth/refresh",
             {},
             {

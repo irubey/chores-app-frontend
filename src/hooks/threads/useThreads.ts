@@ -23,6 +23,7 @@ import { socketClient } from "@/lib/socketClient";
 import { ApiRequestOptions } from "@/lib/api/utils/apiUtils";
 import { useUser } from "@/hooks/users/useUser";
 import { ApiError, ApiErrorType } from "@/lib/api/errors/apiErrors";
+import { useAuth } from "@/contexts/UserContext";
 
 // Types
 interface ThreadsOptions {
@@ -85,6 +86,42 @@ export const useThreads = ({
   const { isConnected } = useSocket();
   const { data: userData } = useUser();
   const currentUser = userData?.data;
+  const { status, isLoading: isAuthLoading } = useAuth();
+
+  // Return early if not authenticated or still loading auth
+  if (isAuthLoading) {
+    return {
+      data: undefined,
+      isLoading: true,
+      error: null,
+      isError: false,
+      createThread: async () => {},
+      updateThread: async () => {},
+      deleteThread: async () => {},
+      inviteToThread: async () => {},
+      updateParticipants: async () => {},
+      prefetchThread: async () => {},
+      invalidateThread: async () => {},
+      setThreadData: () => {},
+    };
+  }
+
+  if (status !== "authenticated") {
+    return {
+      data: undefined,
+      isLoading: false,
+      error: null,
+      isError: false,
+      createThread: async () => {},
+      updateThread: async () => {},
+      deleteThread: async () => {},
+      inviteToThread: async () => {},
+      updateParticipants: async () => {},
+      prefetchThread: async () => {},
+      invalidateThread: async () => {},
+      setThreadData: () => {},
+    };
+  }
 
   const isActiveHousehold = currentUser?.activeHouseholdId === householdId;
 
@@ -103,19 +140,32 @@ export const useThreads = ({
         });
         return result.data;
       } catch (error) {
-        logger.error("Failed to fetch thread list", {
-          householdId,
-          params: requestOptions,
-          error,
-        });
+        if (
+          error instanceof ApiError &&
+          error.type === ApiErrorType.UNAUTHORIZED
+        ) {
+          logger.error("Unauthorized to fetch thread list", {
+            householdId,
+            params: requestOptions,
+          });
+        } else {
+          logger.error("Failed to fetch thread list", {
+            householdId,
+            params: requestOptions,
+            error,
+          });
+        }
         throw error;
       }
     },
-    enabled: enabled && isActiveHousehold && !!householdId,
+    enabled:
+      enabled &&
+      isActiveHousehold &&
+      !!householdId &&
+      status === "authenticated",
     staleTime: 30000, // 30 seconds
     gcTime: 5 * 60 * 1000, // 5 minutes
     retry: (failureCount, error) => {
-      // Don't retry on auth errors
       if (
         error instanceof ApiError &&
         error.type === ApiErrorType.UNAUTHORIZED
@@ -127,7 +177,13 @@ export const useThreads = ({
   });
 
   useEffect(() => {
-    if (!isConnected || !enabled || !enableSockets) return;
+    if (
+      !isConnected ||
+      !enabled ||
+      !enableSockets ||
+      status !== "authenticated"
+    )
+      return;
 
     const handleThreadCreate = (newThread: ThreadWithDetails) => {
       if (newThread.householdId !== householdId) return;
@@ -239,7 +295,7 @@ export const useThreads = ({
         householdId,
       });
     };
-  }, [isConnected, enabled, enableSockets]);
+  }, [isConnected, enabled, enableSockets, householdId, queryClient, status]);
 
   const createThread = useMutation<
     ThreadWithDetails,
@@ -248,6 +304,10 @@ export const useThreads = ({
     MutationContext
   >({
     mutationFn: async (data) => {
+      if (!currentUser) {
+        throw new Error("User must be logged in to create threads");
+      }
+
       try {
         const result = await threadApi.threads.create(householdId, data);
         logger.info("Thread created", {
@@ -257,10 +317,19 @@ export const useThreads = ({
         });
         return result;
       } catch (error) {
-        logger.error("Failed to create thread", {
-          householdId,
-          error,
-        });
+        if (
+          error instanceof ApiError &&
+          error.type === ApiErrorType.UNAUTHORIZED
+        ) {
+          logger.error("Unauthorized to create thread", {
+            householdId,
+          });
+        } else {
+          logger.error("Failed to create thread", {
+            householdId,
+            error,
+          });
+        }
         throw error;
       }
     },
@@ -414,6 +483,8 @@ export const useThreads = ({
   });
 
   const prefetchThread = async (threadId: string) => {
+    if (status !== "authenticated") return;
+
     return queryClient.prefetchQuery({
       queryKey: threadKeys.detail(householdId, threadId),
       queryFn: () => threadApi.threads.get(householdId, threadId),
@@ -421,12 +492,16 @@ export const useThreads = ({
   };
 
   const invalidateThread = async (threadId: string) => {
+    if (status !== "authenticated") return;
+
     await queryClient.invalidateQueries({
       queryKey: threadKeys.detail(householdId, threadId),
     });
   };
 
   const setThreadData = (threadId: string, data: ThreadWithDetails) => {
+    if (status !== "authenticated") return;
+
     queryClient.setQueryData(threadKeys.detail(householdId, threadId), data);
   };
 
@@ -462,10 +537,65 @@ export const useThread = (
   threadId: string,
   options?: Omit<UseQueryOptions<ThreadWithDetails>, "queryKey" | "queryFn">
 ) => {
+  const { status, isLoading: isAuthLoading } = useAuth();
+
+  // Return early if not authenticated or still loading auth
+  if (isAuthLoading) {
+    return {
+      data: undefined,
+      isLoading: true,
+      error: null,
+      isError: false,
+    };
+  }
+
+  if (status !== "authenticated") {
+    return {
+      data: undefined,
+      isLoading: false,
+      error: null,
+      isError: false,
+    };
+  }
+
   return useQuery({
     queryKey: threadKeys.detail(householdId, threadId),
     queryFn: async () => {
-      return threadApi.threads.get(householdId, threadId);
+      try {
+        const result = await threadApi.threads.get(householdId, threadId);
+        logger.debug("Thread details fetched", {
+          threadId,
+          householdId,
+        });
+        return result;
+      } catch (error) {
+        if (
+          error instanceof ApiError &&
+          error.type === ApiErrorType.UNAUTHORIZED
+        ) {
+          logger.error("Unauthorized to fetch thread details", {
+            threadId,
+            householdId,
+          });
+        } else {
+          logger.error("Failed to fetch thread details", {
+            threadId,
+            householdId,
+            error,
+          });
+        }
+        throw error;
+      }
+    },
+    enabled: status === "authenticated" && !!householdId && !!threadId,
+    retry: (failureCount, error) => {
+      if (
+        error instanceof ApiError &&
+        error.type === ApiErrorType.UNAUTHORIZED
+      ) {
+        return false;
+      }
+      return failureCount < 3;
     },
     ...options,
   });

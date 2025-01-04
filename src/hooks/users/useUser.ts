@@ -8,8 +8,29 @@ import { authKeys } from "@/lib/api/services/authService";
 import { ApiError, ApiErrorType } from "@/lib/api/errors/apiErrors";
 
 export function useUser() {
-  const { status, user: authUser } = useAuth();
+  const { status, user: authUser, isLoading: isAuthLoading } = useAuth();
   const queryClient = useQueryClient();
+
+  // Return early if not authenticated or still loading auth
+  if (isAuthLoading) {
+    return {
+      data: undefined,
+      isLoading: true,
+      error: null,
+      status: "loading",
+      updateCache: () => {},
+    };
+  }
+
+  if (status !== "authenticated") {
+    return {
+      data: undefined,
+      isLoading: false,
+      error: null,
+      status: "unauthenticated",
+      updateCache: () => {},
+    };
+  }
 
   const query = useQuery({
     queryKey: userKeys.profile(),

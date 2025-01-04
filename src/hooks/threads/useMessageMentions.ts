@@ -18,6 +18,8 @@ import { CACHE_TIMES, STALE_TIMES } from "@/lib/api/utils/apiUtils";
 import { useSocket } from "@/contexts/SocketContext";
 import { useEffect } from "react";
 import { socketClient } from "@/lib/socketClient";
+import { useAuth } from "@/contexts/UserContext";
+import { ApiError, ApiErrorType } from "@/lib/api/errors/apiErrors";
 import { useUser } from "@/hooks/users/useUser";
 
 // Constants
@@ -68,11 +70,37 @@ export const useMessageMentions = (
 ) => {
   const queryClient = useQueryClient();
   const { isConnected } = useSocket();
+  const { status, isLoading: isAuthLoading } = useAuth();
   const { data: userData } = useUser();
   const currentUser = userData?.data;
 
+  // Return early if not authenticated or still loading auth
+  if (isAuthLoading) {
+    return {
+      data: undefined,
+      isLoading: true,
+      error: null,
+      addMention: async () => {},
+      removeMention: async () => {},
+      prefetchMentions: async () => {},
+      invalidateMentions: async () => {},
+    };
+  }
+
+  if (status !== "authenticated") {
+    return {
+      data: undefined,
+      isLoading: false,
+      error: null,
+      addMention: async () => {},
+      removeMention: async () => {},
+      prefetchMentions: async () => {},
+      invalidateMentions: async () => {},
+    };
+  }
+
   useEffect(() => {
-    if (!isConnected || !enabled) return;
+    if (!isConnected || !enabled || status !== "authenticated") return;
 
     const handleMentionsUpdate = (event: MentionUpdateEvent) => {
       queryClient.setQueryData<readonly MentionWithUser[]>(
@@ -114,7 +142,15 @@ export const useMessageMentions = (
         event: eventName,
       });
     };
-  }, [isConnected, messageId, enabled, queryClient, householdId, threadId]);
+  }, [
+    isConnected,
+    messageId,
+    enabled,
+    status,
+    queryClient,
+    householdId,
+    threadId,
+  ]);
 
   const query = useQuery({
     queryKey: threadKeys.messages.mentions(householdId, threadId, messageId),
@@ -133,12 +169,23 @@ export const useMessageMentions = (
         });
         return result.data;
       } catch (error) {
-        logger.error("Failed to fetch mentions", {
-          messageId,
-          threadId,
-          householdId,
-          error,
-        });
+        if (
+          error instanceof ApiError &&
+          error.type === ApiErrorType.UNAUTHORIZED
+        ) {
+          logger.error("Unauthorized to fetch mentions", {
+            messageId,
+            threadId,
+            householdId,
+          });
+        } else {
+          logger.error("Failed to fetch mentions", {
+            messageId,
+            threadId,
+            householdId,
+            error,
+          });
+        }
         throw error;
       }
     },
@@ -146,9 +193,19 @@ export const useMessageMentions = (
     gcTime: CACHE_TIMES.STANDARD,
     enabled:
       enabled &&
+      status === "authenticated" &&
       Boolean(messageId) &&
       Boolean(threadId) &&
       Boolean(householdId),
+    retry: (failureCount, error) => {
+      if (
+        error instanceof ApiError &&
+        error.type === ApiErrorType.UNAUTHORIZED
+      ) {
+        return false;
+      }
+      return failureCount < 3;
+    },
     ...queryOptions,
   });
 
@@ -159,6 +216,10 @@ export const useMessageMentions = (
     MutationContext
   >({
     mutationFn: async (data) => {
+      if (!currentUser) {
+        throw new Error("User must be logged in to add mentions");
+      }
+
       try {
         const result = await threadApi.messages.mentions.createMention(
           householdId,
@@ -174,16 +235,30 @@ export const useMessageMentions = (
         });
         return result.data;
       } catch (error) {
-        logger.error("Failed to add mention", {
-          messageId,
-          threadId,
-          householdId,
-          error,
-        });
+        if (
+          error instanceof ApiError &&
+          error.type === ApiErrorType.UNAUTHORIZED
+        ) {
+          logger.error("Unauthorized to add mention", {
+            messageId,
+            threadId,
+            householdId,
+            userId: data.userId,
+          });
+        } else {
+          logger.error("Failed to add mention", {
+            messageId,
+            threadId,
+            householdId,
+            error,
+          });
+        }
         throw error;
       }
     },
     onMutate: async (data) => {
+      if (!currentUser) return;
+
       await queryClient.cancelQueries({
         queryKey: threadKeys.messages.mentions(
           householdId,
@@ -220,16 +295,29 @@ export const useMessageMentions = (
           threadKeys.messages.mentions(householdId, threadId, messageId),
           (old) => (old ? [...old, optimisticMention] : [optimisticMention])
         );
+
+        logger.debug("Applied optimistic mention update", {
+          messageId,
+          threadId,
+          householdId,
+          mentionId: optimisticMention.id,
+        });
       }
 
       return { previousMentions };
     },
-    onError: (_, __, context) => {
+    onError: (error, __, context) => {
       if (context?.previousMentions) {
         queryClient.setQueryData(
           threadKeys.messages.mentions(householdId, threadId, messageId),
           context.previousMentions
         );
+        logger.debug("Rolled back optimistic mention update", {
+          messageId,
+          threadId,
+          householdId,
+          error,
+        });
       }
     },
     onSettled: () => {
@@ -245,6 +333,10 @@ export const useMessageMentions = (
 
   const removeMention = useMutation<void, Error, string, MutationContext>({
     mutationFn: async (mentionId) => {
+      if (!currentUser) {
+        throw new Error("User must be logged in to remove mentions");
+      }
+
       try {
         await threadApi.messages.mentions.removeMention(
           householdId,
@@ -259,13 +351,25 @@ export const useMessageMentions = (
           mentionId,
         });
       } catch (error) {
-        logger.error("Failed to remove mention", {
-          messageId,
-          threadId,
-          householdId,
-          mentionId,
-          error,
-        });
+        if (
+          error instanceof ApiError &&
+          error.type === ApiErrorType.UNAUTHORIZED
+        ) {
+          logger.error("Unauthorized to remove mention", {
+            messageId,
+            threadId,
+            householdId,
+            mentionId,
+          });
+        } else {
+          logger.error("Failed to remove mention", {
+            messageId,
+            threadId,
+            householdId,
+            mentionId,
+            error,
+          });
+        }
         throw error;
       }
     },
@@ -287,14 +391,28 @@ export const useMessageMentions = (
         (old) => (old ? old.filter((m) => m.id !== mentionId) : [])
       );
 
+      logger.debug("Applied optimistic mention removal", {
+        messageId,
+        threadId,
+        householdId,
+        mentionId,
+      });
+
       return { previousMentions };
     },
-    onError: (_, __, context) => {
+    onError: (error, mentionId, context) => {
       if (context?.previousMentions) {
         queryClient.setQueryData(
           threadKeys.messages.mentions(householdId, threadId, messageId),
           context.previousMentions
         );
+        logger.debug("Rolled back optimistic mention removal", {
+          messageId,
+          threadId,
+          householdId,
+          mentionId,
+          error,
+        });
       }
     },
     onSettled: () => {
@@ -309,6 +427,8 @@ export const useMessageMentions = (
   });
 
   const prefetchMentions = async () => {
+    if (status !== "authenticated") return;
+
     return queryClient.prefetchQuery({
       queryKey: threadKeys.messages.mentions(householdId, threadId, messageId),
       queryFn: () =>
@@ -321,6 +441,8 @@ export const useMessageMentions = (
   };
 
   const invalidateMentions = async () => {
+    if (status !== "authenticated") return;
+
     await queryClient.invalidateQueries({
       queryKey: threadKeys.messages.mentions(householdId, threadId, messageId),
     });

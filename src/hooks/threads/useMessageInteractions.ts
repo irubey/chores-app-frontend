@@ -18,7 +18,9 @@ import {
 import { PollStatus, PollType } from "@shared/enums/poll";
 import { logger } from "@/lib/api/logger";
 import { getThreadById, getMessageById } from "./useThreads";
-import { useUser } from "@/hooks/users/useUser";
+import { useAuth } from "@/contexts/UserContext";
+import { ApiError, ApiErrorType } from "@/lib/api/errors/apiErrors";
+import { useUser } from "../users/useUser";
 
 // Types
 interface MessageOptions {
@@ -36,8 +38,42 @@ export const useMessageInteractions = ({
   messageId,
 }: MessageOptions) => {
   const queryClient = useQueryClient();
+  const { status, isLoading: isAuthLoading } = useAuth();
   const { data: userData } = useUser();
   const currentUser = userData?.data;
+
+  // Return early if not authenticated or still loading auth
+  if (isAuthLoading) {
+    return {
+      createMessage: async () => {},
+      updateMessage: async () => {},
+      deleteMessage: async () => {},
+      addReaction: async () => {},
+      removeReaction: async () => {},
+      markAsRead: async () => {},
+      createPoll: async () => {},
+      addAttachment: async () => {},
+      removeAttachment: async () => {},
+      getReadStatus: async () => {},
+      isPending: false,
+    };
+  }
+
+  if (status !== "authenticated") {
+    return {
+      createMessage: async () => {},
+      updateMessage: async () => {},
+      deleteMessage: async () => {},
+      addReaction: async () => {},
+      removeReaction: async () => {},
+      markAsRead: async () => {},
+      createPoll: async () => {},
+      addAttachment: async () => {},
+      removeAttachment: async () => {},
+      getReadStatus: async () => {},
+      isPending: false,
+    };
+  }
 
   const createMessage = useMutation({
     mutationFn: async (data: CreateMessageDTO) => {
@@ -64,12 +100,23 @@ export const useMessageInteractions = ({
         });
         return result;
       } catch (error) {
-        logger.error("Failed to create message", {
-          threadId,
-          householdId,
-          userId: currentUser.id,
-          error,
-        });
+        if (
+          error instanceof ApiError &&
+          error.type === ApiErrorType.UNAUTHORIZED
+        ) {
+          logger.error("Unauthorized to create message", {
+            threadId,
+            householdId,
+            userId: currentUser.id,
+          });
+        } else {
+          logger.error("Failed to create message", {
+            threadId,
+            householdId,
+            userId: currentUser.id,
+            error,
+          });
+        }
         throw error;
       }
     },
@@ -817,16 +864,16 @@ export const useMessageInteractions = ({
   });
 
   return {
-    createMessage,
-    updateMessage,
-    deleteMessage,
-    addReaction,
-    removeReaction,
-    markAsRead,
-    createPoll,
-    addAttachment,
-    removeAttachment,
-    getReadStatus,
+    createMessage: createMessage.mutate,
+    updateMessage: updateMessage.mutate,
+    deleteMessage: deleteMessage.mutate,
+    addReaction: addReaction.mutate,
+    removeReaction: removeReaction.mutate,
+    markAsRead: markAsRead.mutate,
+    createPoll: createPoll.mutate,
+    addAttachment: addAttachment.mutate,
+    removeAttachment: removeAttachment.mutate,
+    getReadStatus: getReadStatus.mutate,
     isPending:
       createMessage.isPending ||
       updateMessage.isPending ||

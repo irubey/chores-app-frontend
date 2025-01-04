@@ -17,6 +17,8 @@ import { socketClient } from "@/lib/socketClient";
 import { useUser } from "@/hooks/users/useUser";
 import { getThreadById, getMessageById } from "./useThreads";
 import { PollAnalytics } from "@/lib/api/services/threadService";
+import { useAuth } from "@/contexts/UserContext";
+import { ApiError, ApiErrorType } from "@/lib/api/errors/apiErrors";
 
 // Types
 interface PollOptions {
@@ -39,9 +41,41 @@ export const usePoll = ({
   const { isConnected } = useSocket();
   const { data: userData } = useUser();
   const currentUser = userData?.data;
+  const { status, isLoading: isAuthLoading } = useAuth();
+
+  // Return early if not authenticated or still loading auth
+  if (isAuthLoading) {
+    return {
+      updatePoll: async () => {},
+      vote: async () => {},
+      prefetchPollAnalytics: async () => {},
+      invalidatePoll: async () => {},
+      analytics: {
+        data: undefined,
+        isLoading: true,
+        error: null,
+        isError: false,
+      },
+    };
+  }
+
+  if (status !== "authenticated") {
+    return {
+      updatePoll: async () => {},
+      vote: async () => {},
+      prefetchPollAnalytics: async () => {},
+      invalidatePoll: async () => {},
+      analytics: {
+        data: undefined,
+        isLoading: false,
+        error: null,
+        isError: false,
+      },
+    };
+  }
 
   useEffect(() => {
-    if (!isConnected) return;
+    if (!isConnected || status !== "authenticated") return;
 
     const handlePollUpdate = (updatedPoll: PollWithDetails) => {
       const threads = queryClient.getQueryData<readonly ThreadWithDetails[]>(
@@ -134,10 +168,22 @@ export const usePoll = ({
         handleAnalyticsUpdate
       );
     };
-  }, [isConnected, pollId, messageId, threadId, householdId, queryClient]);
+  }, [
+    isConnected,
+    pollId,
+    messageId,
+    threadId,
+    householdId,
+    queryClient,
+    status,
+  ]);
 
   const updatePoll = useMutation({
     mutationFn: async (data: UpdatePollDTO) => {
+      if (!currentUser) {
+        throw new Error("User must be logged in to update polls");
+      }
+
       try {
         const result = await threadApi.messages.polls.update(
           householdId,
@@ -155,13 +201,25 @@ export const usePoll = ({
         });
         return result;
       } catch (error) {
-        logger.error("Failed to update poll", {
-          pollId,
-          messageId,
-          threadId,
-          householdId,
-          error,
-        });
+        if (
+          error instanceof ApiError &&
+          error.type === ApiErrorType.UNAUTHORIZED
+        ) {
+          logger.error("Unauthorized to update poll", {
+            pollId,
+            messageId,
+            threadId,
+            householdId,
+          });
+        } else {
+          logger.error("Failed to update poll", {
+            pollId,
+            messageId,
+            threadId,
+            householdId,
+            error,
+          });
+        }
         throw error;
       }
     },
@@ -197,11 +255,18 @@ export const usePoll = ({
               : t
           )
         );
+
+        logger.debug("Applied optimistic poll update", {
+          pollId,
+          messageId,
+          threadId,
+          householdId,
+        });
       }
 
       return { previousPoll };
     },
-    onError: (_, __, context) => {
+    onError: (error, __, context) => {
       if (context?.previousPoll) {
         const threads = queryClient.getQueryData<readonly ThreadWithDetails[]>(
           threadKeys.list(householdId)
@@ -224,6 +289,13 @@ export const usePoll = ({
             )
           );
         }
+        logger.debug("Rolled back optimistic poll update", {
+          pollId,
+          messageId,
+          threadId,
+          householdId,
+          error,
+        });
       }
     },
     onSettled: () => {
@@ -235,6 +307,10 @@ export const usePoll = ({
 
   const vote = useMutation({
     mutationFn: async (data: CreatePollVoteDTO) => {
+      if (!currentUser) {
+        throw new Error("User must be logged in to vote in polls");
+      }
+
       try {
         const result = await threadApi.messages.polls.vote(
           householdId,
@@ -252,13 +328,25 @@ export const usePoll = ({
         });
         return result;
       } catch (error) {
-        logger.error("Failed to add poll vote", {
-          pollId,
-          messageId,
-          threadId,
-          householdId,
-          error,
-        });
+        if (
+          error instanceof ApiError &&
+          error.type === ApiErrorType.UNAUTHORIZED
+        ) {
+          logger.error("Unauthorized to vote in poll", {
+            pollId,
+            messageId,
+            threadId,
+            householdId,
+          });
+        } else {
+          logger.error("Failed to add poll vote", {
+            pollId,
+            messageId,
+            threadId,
+            householdId,
+            error,
+          });
+        }
         throw error;
       }
     },
@@ -312,11 +400,19 @@ export const usePoll = ({
               : t
           )
         );
+
+        logger.debug("Applied optimistic vote update", {
+          pollId,
+          messageId,
+          threadId,
+          householdId,
+          optionId: data.optionId,
+        });
       }
 
       return { previousPoll };
     },
-    onError: (_, __, context) => {
+    onError: (error, __, context) => {
       if (context?.previousPoll) {
         const threads = queryClient.getQueryData<readonly ThreadWithDetails[]>(
           threadKeys.list(householdId)
@@ -339,6 +435,13 @@ export const usePoll = ({
             )
           );
         }
+        logger.debug("Rolled back optimistic vote update", {
+          pollId,
+          messageId,
+          threadId,
+          householdId,
+          error,
+        });
       }
     },
     onSettled: () => {
@@ -349,6 +452,8 @@ export const usePoll = ({
   });
 
   const prefetchPollAnalytics = async () => {
+    if (status !== "authenticated") return;
+
     return queryClient.prefetchQuery({
       queryKey: threadKeys.messages.polls.analytics(
         householdId,
@@ -367,6 +472,8 @@ export const usePoll = ({
   };
 
   const invalidatePoll = async () => {
+    if (status !== "authenticated") return;
+
     await queryClient.invalidateQueries({
       queryKey: threadKeys.messages.polls.detail(
         householdId,
@@ -385,15 +492,53 @@ export const usePoll = ({
       pollId
     ),
     queryFn: async () => {
-      const result = await threadApi.messages.polls.getAnalytics(
-        householdId,
-        threadId,
-        messageId,
-        pollId
-      );
-      return result.data;
+      try {
+        const result = await threadApi.messages.polls.getAnalytics(
+          householdId,
+          threadId,
+          messageId,
+          pollId
+        );
+        logger.debug("Poll analytics fetched", {
+          pollId,
+          messageId,
+          threadId,
+          householdId,
+        });
+        return result.data;
+      } catch (error) {
+        if (
+          error instanceof ApiError &&
+          error.type === ApiErrorType.UNAUTHORIZED
+        ) {
+          logger.error("Unauthorized to fetch poll analytics", {
+            pollId,
+            messageId,
+            threadId,
+            householdId,
+          });
+        } else {
+          logger.error("Failed to fetch poll analytics", {
+            pollId,
+            messageId,
+            threadId,
+            householdId,
+            error,
+          });
+        }
+        throw error;
+      }
     },
-    enabled: Boolean(pollId),
+    enabled: status === "authenticated" && Boolean(pollId),
+    retry: (failureCount, error) => {
+      if (
+        error instanceof ApiError &&
+        error.type === ApiErrorType.UNAUTHORIZED
+      ) {
+        return false;
+      }
+      return failureCount < 3;
+    },
   });
 
   return {

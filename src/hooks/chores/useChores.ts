@@ -6,18 +6,81 @@ import {
   ChoreWithAssignees,
 } from "@shared/types";
 import { ChoreStatus } from "@shared/enums";
+import { useAuth } from "@/contexts/UserContext";
+import { logger } from "@/lib/api/logger";
+import { ApiError, ApiErrorType } from "@/lib/api/errors/apiErrors";
 
 export function useChores(householdId: string) {
+  const { status, isLoading: isAuthLoading } = useAuth();
   const queryClient = useQueryClient();
+
+  // Return early if not authenticated or still loading auth
+  if (isAuthLoading) {
+    return {
+      chores: [],
+      isLoading: true,
+      isError: false,
+      error: null,
+      createChore: async () => {},
+      updateChore: async () => {},
+      deleteChore: async () => {},
+      isCreating: false,
+      isUpdating: false,
+      isDeleting: false,
+    };
+  }
+
+  if (status !== "authenticated") {
+    return {
+      chores: [],
+      isLoading: false,
+      isError: false,
+      error: null,
+      createChore: async () => {},
+      updateChore: async () => {},
+      deleteChore: async () => {},
+      isCreating: false,
+      isUpdating: false,
+      isDeleting: false,
+    };
+  }
 
   const choresQuery = useQuery({
     queryKey: choreKeys.list(householdId),
-    queryFn: () => choreApi.chores.list(householdId),
+    queryFn: async () => {
+      try {
+        const result = await choreApi.chores.list(householdId);
+        logger.debug("Chores list fetched", { householdId });
+        return result;
+      } catch (error) {
+        logger.error("Failed to fetch chores list", { error, householdId });
+        throw error;
+      }
+    },
+    enabled: status === "authenticated" && !!householdId,
+    retry: (failureCount, error) => {
+      if (
+        error instanceof ApiError &&
+        error.type === ApiErrorType.UNAUTHORIZED
+      ) {
+        return false;
+      }
+      return failureCount < 3;
+    },
+    staleTime: 30000, // 30 seconds
   });
 
   const createChoreMutation = useMutation({
-    mutationFn: (data: CreateChoreDTO) =>
-      choreApi.chores.create(householdId, data),
+    mutationFn: async (data: CreateChoreDTO) => {
+      try {
+        const result = await choreApi.chores.create(householdId, data);
+        logger.debug("Chore created", { householdId, choreData: data });
+        return result;
+      } catch (error) {
+        logger.error("Failed to create chore", { error, householdId, data });
+        throw error;
+      }
+    },
     onMutate: async (newChore) => {
       await queryClient.cancelQueries({ queryKey: choreKeys.lists() });
 
@@ -45,6 +108,11 @@ export function useChores(householdId: string) {
         data: [...(previousChores?.data || []), optimisticChore],
       });
 
+      logger.debug("Optimistic chore update applied", {
+        householdId,
+        choreId: optimisticChore.id,
+      });
+
       return { previousChores };
     },
     onError: (err, newChore, context) => {
@@ -53,6 +121,7 @@ export function useChores(householdId: string) {
           choreKeys.list(householdId),
           context.previousChores
         );
+        logger.debug("Rolled back optimistic chore creation", { householdId });
       }
     },
     onSuccess: () => {
@@ -61,13 +130,31 @@ export function useChores(householdId: string) {
   });
 
   const updateChoreMutation = useMutation({
-    mutationFn: ({
+    mutationFn: async ({
       choreId,
       data,
     }: {
       choreId: string;
       data: UpdateChoreDTO;
-    }) => choreApi.chores.update(householdId, choreId, data),
+    }) => {
+      try {
+        const result = await choreApi.chores.update(householdId, choreId, data);
+        logger.debug("Chore updated", {
+          householdId,
+          choreId,
+          updateData: data,
+        });
+        return result;
+      } catch (error) {
+        logger.error("Failed to update chore", {
+          error,
+          householdId,
+          choreId,
+          data,
+        });
+        throw error;
+      }
+    },
     onMutate: async ({ choreId, data }) => {
       await queryClient.cancelQueries({
         queryKey: choreKeys.detail(householdId, choreId),
@@ -100,6 +187,7 @@ export function useChores(householdId: string) {
         });
       }
 
+      logger.debug("Optimistic chore update applied", { householdId, choreId });
       return { previousChore, previousChores };
     },
     onError: (err, { choreId }, context) => {
@@ -115,6 +203,10 @@ export function useChores(householdId: string) {
           context.previousChores
         );
       }
+      logger.debug("Rolled back optimistic chore update", {
+        householdId,
+        choreId,
+      });
     },
     onSuccess: (_, { choreId }) => {
       queryClient.invalidateQueries({
@@ -125,8 +217,16 @@ export function useChores(householdId: string) {
   });
 
   const deleteChoreMutation = useMutation({
-    mutationFn: (choreId: string) =>
-      choreApi.chores.delete(householdId, choreId),
+    mutationFn: async (choreId: string) => {
+      try {
+        const result = await choreApi.chores.delete(householdId, choreId);
+        logger.debug("Chore deleted", { householdId, choreId });
+        return result;
+      } catch (error) {
+        logger.error("Failed to delete chore", { error, householdId, choreId });
+        throw error;
+      }
+    },
     onMutate: async (choreId) => {
       await queryClient.cancelQueries({ queryKey: choreKeys.lists() });
 
@@ -138,6 +238,10 @@ export function useChores(householdId: string) {
         queryClient.setQueryData(choreKeys.list(householdId), {
           data: previousChores.data.filter((chore) => chore.id !== choreId),
         });
+        logger.debug("Optimistic chore deletion applied", {
+          householdId,
+          choreId,
+        });
       }
 
       return { previousChores };
@@ -148,6 +252,10 @@ export function useChores(householdId: string) {
           choreKeys.list(householdId),
           context.previousChores
         );
+        logger.debug("Rolled back optimistic chore deletion", {
+          householdId,
+          choreId,
+        });
       }
     },
     onSuccess: () => {

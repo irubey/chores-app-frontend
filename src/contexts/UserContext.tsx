@@ -129,6 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const handleAuthError = (event: CustomEvent<ApiError>) => {
       logger.debug("Auth error event received", {
         error: event.detail,
+        timestamp: new Date().toISOString(),
       });
 
       // Clear auth state
@@ -155,11 +156,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    window.addEventListener(AUTH_ERROR_EVENT, handleAuthError as EventListener);
+    window.addEventListener(AUTH_ERROR_EVENT as any, handleAuthError as any);
     return () => {
       window.removeEventListener(
-        AUTH_ERROR_EVENT,
-        handleAuthError as EventListener
+        AUTH_ERROR_EVENT as any,
+        handleAuthError as any
       );
     };
   }, [queryClient, router, updateState]);

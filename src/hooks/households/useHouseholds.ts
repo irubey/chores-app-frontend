@@ -18,10 +18,11 @@ import type {
   UpdateHouseholdDTO,
 } from "@shared/types";
 import { ApiResponse } from "@shared/interfaces/apiResponse";
-import { useIsAuthenticated } from "@/contexts/UserContext";
+import { useAuth } from "@/contexts/UserContext";
 import { HouseholdRole } from "@shared/enums";
 import { CACHE_TIMES, STALE_TIMES } from "@/lib/api/utils/apiUtils";
 import { useSetActiveHousehold, useUser } from "@/hooks/users/useUser";
+import { ApiError, ApiErrorType } from "@/lib/api/errors/apiErrors";
 
 // Types
 interface UpdateHouseholdVars {
@@ -45,7 +46,26 @@ export const useHouseholds = (
     "queryKey" | "queryFn"
   >
 ) => {
-  const isAuthenticated = useIsAuthenticated();
+  const { status, isLoading: isAuthLoading } = useAuth();
+
+  // Return early if not authenticated or still loading auth
+  if (isAuthLoading) {
+    return {
+      data: undefined,
+      isLoading: true,
+      error: null,
+      isError: false,
+    };
+  }
+
+  if (status !== "authenticated") {
+    return {
+      data: undefined,
+      isLoading: false,
+      error: null,
+      isError: false,
+    };
+  }
 
   return useQuery({
     queryKey: householdKeys.userHouseholds(),
@@ -63,7 +83,16 @@ export const useHouseholds = (
     },
     staleTime: STALE_TIMES.STANDARD,
     gcTime: CACHE_TIMES.STANDARD,
-    enabled: isAuthenticated,
+    enabled: status === "authenticated",
+    retry: (failureCount, error) => {
+      if (
+        error instanceof ApiError &&
+        error.type === ApiErrorType.UNAUTHORIZED
+      ) {
+        return false;
+      }
+      return failureCount < 3;
+    },
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -79,7 +108,26 @@ export const useHousehold = (
     "queryKey" | "queryFn"
   >
 ) => {
-  const isAuthenticated = useIsAuthenticated();
+  const { status, isLoading: isAuthLoading } = useAuth();
+
+  // Return early if not authenticated or still loading auth
+  if (isAuthLoading) {
+    return {
+      data: undefined,
+      isLoading: true,
+      error: null,
+      isError: false,
+    };
+  }
+
+  if (status !== "authenticated") {
+    return {
+      data: undefined,
+      isLoading: false,
+      error: null,
+      isError: false,
+    };
+  }
 
   return useQuery({
     queryKey: householdKeys.detail(householdId),
@@ -94,13 +142,22 @@ export const useHousehold = (
         });
         return result;
       } catch (error) {
-        logger.error("Error fetching household data", { error });
+        logger.error("Error fetching household data", { error, householdId });
         throw error;
       }
     },
     staleTime: STALE_TIMES.STANDARD,
     gcTime: CACHE_TIMES.STANDARD,
-    enabled: isAuthenticated && !!householdId,
+    enabled: status === "authenticated" && !!householdId,
+    retry: (failureCount, error) => {
+      if (
+        error instanceof ApiError &&
+        error.type === ApiErrorType.UNAUTHORIZED
+      ) {
+        return false;
+      }
+      return failureCount < 3;
+    },
     ...options,
   });
 };
@@ -118,9 +175,14 @@ export const useCreateHousehold = (
 ) => {
   const queryClient = useQueryClient();
   const setActiveHouseholdMutation = useSetActiveHousehold();
+  const { status } = useAuth();
 
   return useMutation({
     mutationFn: async (data: CreateHouseholdDTO) => {
+      if (status !== "authenticated") {
+        throw new Error("Must be authenticated to create household");
+      }
+
       try {
         const result = await householdApi.households.createHousehold(data);
         logger.info("Household created", {
@@ -129,7 +191,7 @@ export const useCreateHousehold = (
         });
         return result;
       } catch (error) {
-        logger.error("Error creating household", { error });
+        logger.error("Error creating household", { error, data });
         throw error;
       }
     },
@@ -139,6 +201,9 @@ export const useCreateHousehold = (
       });
       // Set as active household after creation using the mutation
       await setActiveHouseholdMutation.mutateAsync(response.data.id);
+      logger.debug("Set new household as active", {
+        householdId: response.data.id,
+      });
     },
     ...options,
   });
@@ -155,9 +220,14 @@ export const useUpdateHousehold = (
   >
 ) => {
   const queryClient = useQueryClient();
+  const { status } = useAuth();
 
   return useMutation({
     mutationFn: async ({ householdId, data }: UpdateHouseholdVars) => {
+      if (status !== "authenticated") {
+        throw new Error("Must be authenticated to update household");
+      }
+
       try {
         const result = await householdApi.households.updateHousehold(
           householdId,
@@ -169,7 +239,7 @@ export const useUpdateHousehold = (
         });
         return result;
       } catch (error) {
-        logger.error("Error updating household", { error });
+        logger.error("Error updating household", { error, householdId, data });
         throw error;
       }
     },
@@ -179,6 +249,9 @@ export const useUpdateHousehold = (
       });
       queryClient.invalidateQueries({
         queryKey: householdKeys.userHouseholds(),
+      });
+      logger.debug("Invalidated household queries after update", {
+        householdId,
       });
     },
     ...options,
@@ -194,9 +267,14 @@ export const useDeleteHousehold = (
   const queryClient = useQueryClient();
   const { data: userData } = useUser();
   const setActiveHouseholdMutation = useSetActiveHousehold();
+  const { status } = useAuth();
 
   return useMutation({
     mutationFn: async (householdId: string) => {
+      if (status !== "authenticated") {
+        throw new Error("Must be authenticated to delete household");
+      }
+
       try {
         const result = await householdApi.households.deleteHousehold(
           householdId
@@ -215,12 +293,18 @@ export const useDeleteHousehold = (
       // If deleted household was active, clear active household
       if (userData?.data?.activeHouseholdId === householdId) {
         await setActiveHouseholdMutation.mutateAsync(null);
+        logger.debug("Cleared active household after deletion", {
+          householdId,
+        });
       }
       queryClient.removeQueries({
         queryKey: householdKeys.detail(householdId),
       });
       queryClient.invalidateQueries({
         queryKey: householdKeys.userHouseholds(),
+      });
+      logger.debug("Invalidated household queries after deletion", {
+        householdId,
       });
     },
     ...options,
@@ -248,9 +332,14 @@ export const useUpdateHouseholdMember = (
   >
 ) => {
   const queryClient = useQueryClient();
+  const { status } = useAuth();
 
   return useMutation({
     mutationFn: async ({ memberId, data }) => {
+      if (status !== "authenticated") {
+        throw new Error("Must be authenticated to update household member");
+      }
+
       try {
         const result = await householdApi.households.updateMember(
           householdId,
@@ -264,13 +353,21 @@ export const useUpdateHouseholdMember = (
         });
         return result;
       } catch (error) {
-        logger.error("Failed to update member", { error });
+        logger.error("Failed to update member", {
+          error,
+          householdId,
+          memberId,
+          data,
+        });
         throw error;
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: householdKeys.detail(householdId),
+      });
+      logger.debug("Invalidated household queries after member update", {
+        householdId,
       });
     },
     ...options,
@@ -285,9 +382,14 @@ export const useSendHouseholdInvitation = (
   >
 ) => {
   const queryClient = useQueryClient();
+  const { status } = useAuth();
 
   return useMutation({
     mutationFn: async ({ email }) => {
+      if (status !== "authenticated") {
+        throw new Error("Must be authenticated to send household invitation");
+      }
+
       try {
         const result = await householdApi.households.sendInvitation(
           householdId,
@@ -299,13 +401,20 @@ export const useSendHouseholdInvitation = (
         });
         return result;
       } catch (error) {
-        logger.error("Failed to send invitation", { error });
+        logger.error("Failed to send invitation", {
+          error,
+          householdId,
+          email,
+        });
         throw error;
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: householdKeys.detail(householdId),
+      });
+      logger.debug("Invalidated household queries after sending invitation", {
+        householdId,
       });
     },
     ...options,
