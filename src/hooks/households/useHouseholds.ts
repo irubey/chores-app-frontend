@@ -48,25 +48,6 @@ export const useHouseholds = (
 ) => {
   const { status, isLoading: isAuthLoading } = useAuth();
 
-  // Return early if not authenticated or still loading auth
-  if (isAuthLoading) {
-    return {
-      data: undefined,
-      isLoading: true,
-      error: null,
-      isError: false,
-    };
-  }
-
-  if (status !== "authenticated") {
-    return {
-      data: undefined,
-      isLoading: false,
-      error: null,
-      isError: false,
-    };
-  }
-
   return useQuery({
     queryKey: householdKeys.userHouseholds(),
     queryFn: async () => {
@@ -83,7 +64,7 @@ export const useHouseholds = (
     },
     staleTime: STALE_TIMES.STANDARD,
     gcTime: CACHE_TIMES.STANDARD,
-    enabled: status === "authenticated",
+    enabled: status === "authenticated" && !isAuthLoading,
     retry: (failureCount, error) => {
       if (
         error instanceof ApiError &&
@@ -110,25 +91,6 @@ export const useHousehold = (
 ) => {
   const { status, isLoading: isAuthLoading } = useAuth();
 
-  // Return early if not authenticated or still loading auth
-  if (isAuthLoading) {
-    return {
-      data: undefined,
-      isLoading: true,
-      error: null,
-      isError: false,
-    };
-  }
-
-  if (status !== "authenticated") {
-    return {
-      data: undefined,
-      isLoading: false,
-      error: null,
-      isError: false,
-    };
-  }
-
   return useQuery({
     queryKey: householdKeys.detail(householdId),
     queryFn: async () => {
@@ -148,7 +110,7 @@ export const useHousehold = (
     },
     staleTime: STALE_TIMES.STANDARD,
     gcTime: CACHE_TIMES.STANDARD,
-    enabled: status === "authenticated" && !!householdId,
+    enabled: status === "authenticated" && !isAuthLoading && !!householdId,
     retry: (failureCount, error) => {
       if (
         error instanceof ApiError &&

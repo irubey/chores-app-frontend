@@ -11,27 +11,6 @@ export function useUser() {
   const { status, user: authUser, isLoading: isAuthLoading } = useAuth();
   const queryClient = useQueryClient();
 
-  // Return early if not authenticated or still loading auth
-  if (isAuthLoading) {
-    return {
-      data: undefined,
-      isLoading: true,
-      error: null,
-      status: "loading",
-      updateCache: () => {},
-    };
-  }
-
-  if (status !== "authenticated") {
-    return {
-      data: undefined,
-      isLoading: false,
-      error: null,
-      status: "unauthenticated",
-      updateCache: () => {},
-    };
-  }
-
   const query = useQuery({
     queryKey: userKeys.profile(),
     queryFn: async () => {
@@ -43,7 +22,6 @@ export function useUser() {
         return result;
       } catch (error) {
         logger.error("Failed to fetch user profile", { error });
-        // Don't retry on auth errors
         if (
           error instanceof ApiError &&
           error.type === ApiErrorType.UNAUTHORIZED
@@ -54,13 +32,12 @@ export function useUser() {
         throw error;
       }
     },
-    enabled: status === "authenticated",
+    enabled: status === "authenticated" && !isAuthLoading,
     initialData: authUser
       ? ({ data: authUser } as ApiResponse<User>)
       : undefined,
-    staleTime: 30000, // 30 seconds
+    staleTime: 30000,
     retry: (failureCount, error) => {
-      // Don't retry on auth errors
       if (
         error instanceof ApiError &&
         error.type === ApiErrorType.UNAUTHORIZED
@@ -70,12 +47,11 @@ export function useUser() {
       return failureCount < 3;
     },
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
-    gcTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 5 * 60 * 1000,
   });
 
   return {
     ...query,
-    // Add helper method to manually update cache
     updateCache: (
       updater: (oldData: ApiResponse<User> | undefined) => ApiResponse<User>
     ) => {

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { logger } from "@/lib/api/logger";
 import { useAuthStatus, useIsAuthenticated } from "@/contexts/UserContext";
@@ -18,17 +18,15 @@ interface AppContentProps {
 }
 
 export default function AppContent({ children }: AppContentProps) {
+  const router = useRouter();
+  const pathname = usePathname();
   const isAuthenticated = useIsAuthenticated();
+  const { status } = useAuthStatus();
   const { data: userData } = useUser();
   const { data: householdsData, isLoading: isLoadingHouseholds } =
     useHouseholds();
-  const { status } = useAuthStatus();
-  const router = useRouter();
-  const pathname = usePathname();
-  const isRedirecting = useRef(false);
-  const hasRedirected = useRef(false);
 
-  // Memoize auth state
+  // Memoize auth state to prevent unnecessary re-renders
   const authState = useMemo(
     () => ({
       isLoading: status === "loading",
@@ -37,6 +35,32 @@ export default function AppContent({ children }: AppContentProps) {
     }),
     [status]
   );
+
+  // Handle auth redirects
+  useEffect(() => {
+    if (!authState.isReady) return;
+
+    const currentIsPublic = isPublicRoute(pathname);
+    const shouldRedirectToLogin = !currentIsPublic && !isAuthenticated;
+    const shouldRedirectToDashboard = currentIsPublic && isAuthenticated;
+
+    if (shouldRedirectToLogin || shouldRedirectToDashboard) {
+      const targetPath = shouldRedirectToLogin ? "/login" : "/dashboard";
+      const redirectType = shouldRedirectToLogin ? "login" : "dashboard";
+
+      logger.debug(`Redirecting to ${redirectType}`, {
+        from: pathname,
+        to: targetPath,
+        status,
+        isAuthenticated,
+      });
+
+      // Use setTimeout to avoid state updates during render
+      setTimeout(() => {
+        router.push(targetPath);
+      }, 0);
+    }
+  }, [authState.isReady, isAuthenticated, pathname, router, status]);
 
   // Memoize content to prevent unnecessary re-renders
   const content = useMemo(
@@ -56,43 +80,12 @@ export default function AppContent({ children }: AppContentProps) {
     ),
     [
       userData?.data,
-      userData?.data?.activeHouseholdId,
       isAuthenticated,
       householdsData?.data,
       isLoadingHouseholds,
       children,
     ]
   );
-
-  // Handle auth redirects
-  useEffect(() => {
-    if (!authState.isReady || isRedirecting.current) return;
-
-    const currentIsPublic = isPublicRoute(pathname);
-    const shouldRedirectToLogin = !currentIsPublic && !isAuthenticated;
-    const shouldRedirectToDashboard = currentIsPublic && isAuthenticated;
-
-    if (shouldRedirectToLogin || shouldRedirectToDashboard) {
-      isRedirecting.current = true;
-      const targetPath = shouldRedirectToLogin ? "/login" : "/dashboard";
-      const redirectType = shouldRedirectToLogin ? "login" : "dashboard";
-
-      logger.debug(`Redirecting to ${redirectType}`, {
-        from: pathname,
-        to: targetPath,
-        status,
-        isAuthenticated,
-        isInitialRedirect: !hasRedirected.current,
-      });
-
-      router.push(targetPath);
-      hasRedirected.current = true;
-
-      setTimeout(() => {
-        isRedirecting.current = false;
-      }, 100);
-    }
-  }, [authState.isReady, isAuthenticated, pathname, router, status]);
 
   // Show loading spinner during auth check
   if (authState.isLoading || (!authState.isReady && !isPublicRoute(pathname))) {
@@ -111,13 +104,7 @@ export default function AppContent({ children }: AppContentProps) {
           Authentication Error
         </p>
         <button
-          onClick={() => {
-            isRedirecting.current = true;
-            router.push("/login");
-            setTimeout(() => {
-              isRedirecting.current = false;
-            }, 100);
-          }}
+          onClick={() => router.push("/login")}
           className="rounded bg-primary px-4 py-2 text-white hover:bg-primary-dark"
         >
           Return to Login
