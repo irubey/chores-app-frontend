@@ -552,12 +552,89 @@ export const usePoll = ({
     },
   });
 
+  const createPoll = useMutation({
+    mutationFn: async (data: CreatePollDTO) => {
+      if (!currentUser) {
+        throw new Error("User must be logged in to create polls");
+      }
+
+      const thread = await threadApi.threads.get(householdId, threadId);
+      const message = thread.messages.find((m) => m.id === messageId);
+      if (!message || message.authorId !== currentUser.id) {
+        throw new Error("Only message author can create polls");
+      }
+
+      try {
+        const result = await threadApi.messages.polls.create(
+          householdId,
+          threadId,
+          messageId,
+          data
+        );
+        logger.info("Poll created", {
+          messageId,
+          threadId,
+          householdId,
+          pollId: result.id,
+        });
+        return result;
+      } catch (error) {
+        if (error instanceof ApiError) {
+          if (error.type === ApiErrorType.UNAUTHORIZED) {
+            logger.error("Unauthorized to create poll", {
+              messageId,
+              threadId,
+              householdId,
+            });
+          } else if (error.type === ApiErrorType.NOT_FOUND) {
+            logger.error("Message not found for poll creation", {
+              messageId,
+              threadId,
+              householdId,
+            });
+          }
+        }
+        logger.error("Failed to create poll", {
+          messageId,
+          threadId,
+          householdId,
+          error,
+        });
+        throw error;
+      }
+    },
+    onSuccess: (poll) => {
+      // Invalidate both thread list and detail queries
+      queryClient.invalidateQueries({
+        queryKey: threadKeys.list(householdId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: threadKeys.detail(householdId, threadId),
+      });
+      logger.debug("Cache invalidated after poll creation", {
+        messageId,
+        threadId,
+        householdId,
+        pollId: poll.id,
+      });
+    },
+    onError: (error) => {
+      logger.error("Poll creation failed", {
+        messageId,
+        threadId,
+        householdId,
+        error,
+      });
+    },
+  });
+
   return {
     updatePoll,
     vote,
     prefetchPollAnalytics,
     invalidatePoll,
     analytics,
+    createPoll,
   };
 };
 
@@ -641,4 +718,5 @@ export interface UsePollResult {
   analytics: ReturnType<typeof usePoll>["analytics"];
   prefetchPollAnalytics: () => Promise<void>;
   invalidatePoll: () => Promise<void>;
+  createPoll: ReturnType<typeof usePoll>["createPoll"];
 }

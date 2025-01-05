@@ -203,11 +203,9 @@ export const Message = memo<MessageProps>(
           )}
 
           {/* Reactions */}
-          {message.reactions && message.reactions.length > 0 && (
-            <div className={cn("mt-2", isOwnMessage && "flex justify-end")}>
-              <ReactionList reactions={message.reactions} />
-            </div>
-          )}
+          <div className={cn("mt-2", isOwnMessage && "flex justify-end")}>
+            <ReactionList reactions={message.reactions || []} />
+          </div>
         </div>
 
         {/* Message Actions */}
