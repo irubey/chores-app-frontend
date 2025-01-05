@@ -507,24 +507,34 @@ export const usePoll = ({
         });
         return result.data;
       } catch (error) {
-        if (
-          error instanceof ApiError &&
-          error.type === ApiErrorType.UNAUTHORIZED
-        ) {
-          logger.error("Unauthorized to fetch poll analytics", {
-            pollId,
-            messageId,
-            threadId,
-            householdId,
-          });
-        } else {
-          logger.error("Failed to fetch poll analytics", {
-            pollId,
-            messageId,
-            threadId,
-            householdId,
-            error,
-          });
+        if (error instanceof ApiError) {
+          if (error.type === ApiErrorType.UNAUTHORIZED) {
+            logger.error("Unauthorized to fetch poll analytics", {
+              pollId,
+              messageId,
+              threadId,
+              householdId,
+            });
+          } else if (error.type === ApiErrorType.NOT_FOUND) {
+            // If poll is not found, invalidate thread cache to force a refresh
+            logger.warn("Poll not found, invalidating thread cache", {
+              pollId,
+              messageId,
+              threadId,
+              householdId,
+            });
+            await queryClient.invalidateQueries({
+              queryKey: threadKeys.list(householdId),
+            });
+          } else {
+            logger.error("Failed to fetch poll analytics", {
+              pollId,
+              messageId,
+              threadId,
+              householdId,
+              error,
+            });
+          }
         }
         throw error;
       }
@@ -533,7 +543,8 @@ export const usePoll = ({
     retry: (failureCount, error) => {
       if (
         error instanceof ApiError &&
-        error.type === ApiErrorType.UNAUTHORIZED
+        (error.type === ApiErrorType.UNAUTHORIZED ||
+          error.type === ApiErrorType.NOT_FOUND)
       ) {
         return false;
       }

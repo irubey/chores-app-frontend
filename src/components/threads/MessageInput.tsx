@@ -88,7 +88,7 @@ const MessageInput: React.FC<MessageInputProps> = ({ thread }) => {
     if (!canSendMessage) return;
 
     try {
-      await createMessage.mutateAsync({
+      createMessage({
         threadId: thread.id,
         content: state.content.trim(),
         mentions: state.mentions,

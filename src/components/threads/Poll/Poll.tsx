@@ -11,6 +11,7 @@ import {
   ClockIcon,
 } from "@heroicons/react/24/outline";
 import { PollOptions } from "./PollOptions";
+import { ApiError, ApiErrorType } from "@/lib/api/errors/apiErrors";
 
 interface PollProps {
   readonly poll: PollWithDetails;
@@ -30,12 +31,27 @@ export const Poll: React.FC<PollProps> = ({
   const { data: userData } = useUser();
   const currentUser = userData?.data;
 
-  const { updatePoll, vote } = usePoll({
+  const { updatePoll, vote, analytics } = usePoll({
     householdId,
     threadId,
     messageId,
     pollId: poll.id,
   });
+
+  if (
+    analytics.isError &&
+    analytics.error instanceof ApiError &&
+    analytics.error.type === ApiErrorType.NOT_FOUND
+  ) {
+    return (
+      <div className="mt-4 p-4 bg-neutral-100 dark:bg-neutral-800 rounded-md">
+        <div className="flex items-center space-x-2 text-text-secondary">
+          <XCircleIcon className="h-5 w-5" />
+          <span>This poll is no longer available</span>
+        </div>
+      </div>
+    );
+  }
 
   const hasVoted = useMemo(
     () => currentUser && pollUtils.hasVoted(poll, currentUser.id),
@@ -47,22 +63,16 @@ export const Poll: React.FC<PollProps> = ({
     [poll, currentUser]
   );
 
-  const handleVote = async (optionId: string, rank?: number) => {
-    if (!currentUser) return;
+  const handleVote = (optionId: string, rank?: number) => {
+    if (!currentUser || !("mutate" in vote)) return;
 
-    try {
-      await vote.mutateAsync({ optionId, rank });
-    } catch (error) {
-      // Error is already logged in the hook
-    }
+    vote.mutate({ optionId, rank });
   };
 
-  const handleStatusChange = async (status: PollStatus) => {
-    try {
-      await updatePoll.mutateAsync({ status });
-    } catch (error) {
-      // Error is already logged in the hook
-    }
+  const handleStatusChange = (status: PollStatus) => {
+    if (!("mutate" in updatePoll)) return;
+
+    updatePoll.mutate({ status });
   };
 
   return (

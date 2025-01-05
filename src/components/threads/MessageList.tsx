@@ -38,8 +38,13 @@ export function MessageList({ thread, isLoading = false }: MessageListProps) {
   }
 
   // Group messages by date
-  const messageGroups = thread.messages.reduce<MessageGroup[]>(
-    (groups, message) => {
+  const messageGroups = thread.messages
+    .slice() // Create a copy to avoid mutating the original array
+    .sort(
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    ) // Sort oldest to newest
+    .reduce<MessageGroup[]>((groups, message) => {
       const messageDate = new Date(message.createdAt);
       const lastGroup = groups[groups.length - 1];
 
@@ -53,9 +58,8 @@ export function MessageList({ thread, isLoading = false }: MessageListProps) {
       }
 
       return groups;
-    },
-    []
-  );
+    }, [])
+    .reverse(); // Reverse the groups to show newest first
 
   const getDateLabel = (date: Date) => {
     if (isToday(date)) {

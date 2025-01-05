@@ -400,16 +400,24 @@ export const useMessageInteractions = ({
     onMutate: async () => {
       if (!messageId || !currentUser) return;
 
-      await queryClient.cancelQueries({
-        queryKey: threadKeys.list(householdId),
-      });
+      // Cancel any outgoing refetches
+      await Promise.all([
+        queryClient.cancelQueries({
+          queryKey: threadKeys.list(householdId),
+        }),
+        queryClient.cancelQueries({
+          queryKey: threadKeys.detail(householdId, threadId),
+        }),
+      ]);
 
+      // Snapshot the previous value
       const threads = queryClient.getQueryData<readonly ThreadWithDetails[]>(
         threadKeys.list(householdId)
       );
       const thread = getThreadById(threads, threadId);
       const message = thread ? getMessageById(thread, messageId) : undefined;
 
+      // Optimistically update the cache
       if (threads) {
         queryClient.setQueryData<readonly ThreadWithDetails[]>(
           threadKeys.list(householdId),
@@ -424,32 +432,26 @@ export const useMessageInteractions = ({
         );
       }
 
-      return { previousMessage: message };
+      return { previousMessage: message, previousThreads: threads };
     },
     onError: (_, __, context) => {
-      if (context?.previousMessage) {
-        const threads = queryClient.getQueryData<readonly ThreadWithDetails[]>(
-          threadKeys.list(householdId)
+      if (context?.previousThreads) {
+        queryClient.setQueryData(
+          threadKeys.list(householdId),
+          context.previousThreads
         );
-        if (threads) {
-          queryClient.setQueryData<readonly ThreadWithDetails[]>(
-            threadKeys.list(householdId),
-            threads.map((t) =>
-              t.id === threadId
-                ? {
-                    ...t,
-                    messages: [...t.messages, context.previousMessage],
-                  }
-                : t
-            )
-          );
-        }
       }
     },
-    onSettled: () => {
-      queryClient.invalidateQueries({
-        queryKey: threadKeys.list(householdId),
-      });
+    onSettled: async () => {
+      // Invalidate and refetch
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: threadKeys.list(householdId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: threadKeys.detail(householdId, threadId),
+        }),
+      ]);
     },
   });
 
@@ -479,6 +481,21 @@ export const useMessageInteractions = ({
         });
         return result.data;
       } catch (error) {
+        // Check if error is due to duplicate reaction
+        if (
+          error instanceof Error &&
+          error.message.includes("already reacted with this reaction type")
+        ) {
+          logger.warn("Attempted to add duplicate reaction", {
+            messageId,
+            threadId,
+            householdId,
+            userId: currentUser.id,
+            type: data.type,
+          });
+          return;
+        }
+
         logger.error("Failed to add reaction", {
           messageId,
           threadId,
@@ -490,40 +507,39 @@ export const useMessageInteractions = ({
       }
     },
     onMutate: async (data) => {
-      if (!messageId || !currentUser) return;
+      if (!currentUser) return;
 
-      await queryClient.cancelQueries({
-        queryKey: threadKeys.list(householdId),
-      });
+      // Cancel any outgoing refetches
+      await Promise.all([
+        queryClient.cancelQueries({
+          queryKey: threadKeys.list(householdId),
+        }),
+        queryClient.cancelQueries({
+          queryKey: threadKeys.detail(householdId, threadId),
+        }),
+      ]);
 
-      const threads = queryClient.getQueryData<readonly ThreadWithDetails[]>(
-        threadKeys.list(householdId)
-      );
-      const thread = getThreadById(threads, threadId);
-      const message = thread ? getMessageById(thread, messageId) : undefined;
+      // Snapshot the previous value
+      const previousThreads = queryClient.getQueryData<
+        readonly ThreadWithDetails[]
+      >(threadKeys.list(householdId));
 
-      if (threads && message) {
-        const optimisticReaction: ReactionWithUser = {
-          id: `temp-reaction-${Date.now()}`,
-          messageId,
-          userId: currentUser.id,
-          emoji: data.emoji,
-          type: data.type,
-          createdAt: new Date(),
-          user: {
-            id: currentUser.id,
-            name: currentUser.name,
-            email: currentUser.email,
-            profileImageURL: currentUser.profileImageURL,
-            activeHouseholdId: currentUser.activeHouseholdId,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          },
-        };
+      // Create optimistic reaction
+      const optimisticReaction = {
+        id: `temp-${Date.now()}`,
+        messageId,
+        userId: currentUser.id,
+        emoji: data.emoji,
+        type: data.type,
+        createdAt: new Date(),
+        user: currentUser,
+      };
 
+      // Optimistically update threads
+      if (previousThreads) {
         queryClient.setQueryData<readonly ThreadWithDetails[]>(
           threadKeys.list(householdId),
-          threads.map((t) =>
+          previousThreads.map((t) =>
             t.id === threadId
               ? {
                   ...t,
@@ -541,7 +557,7 @@ export const useMessageInteractions = ({
         );
       }
 
-      return { previousThreads: threads };
+      return { previousThreads };
     },
     onError: (_, __, context) => {
       if (context?.previousThreads) {
@@ -551,10 +567,18 @@ export const useMessageInteractions = ({
         );
       }
     },
-    onSettled: () => {
-      queryClient.invalidateQueries({
-        queryKey: threadKeys.list(householdId),
-      });
+    onSettled: async () => {
+      // Invalidate and refetch both queries immediately
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: threadKeys.list(householdId),
+          refetchType: "all",
+        }),
+        queryClient.invalidateQueries({
+          queryKey: threadKeys.detail(householdId, threadId),
+          refetchType: "all",
+        }),
+      ]);
     },
   });
 
@@ -594,55 +618,15 @@ export const useMessageInteractions = ({
         throw error;
       }
     },
-    onMutate: async (reactionId) => {
-      if (!messageId || !currentUser) return;
-
-      await queryClient.cancelQueries({
+    onSettled: async () => {
+      // Invalidate and refetch both queries immediately
+      await queryClient.invalidateQueries({
         queryKey: threadKeys.list(householdId),
+        refetchType: "all",
       });
-
-      const threads = queryClient.getQueryData<readonly ThreadWithDetails[]>(
-        threadKeys.list(householdId)
-      );
-      const thread = getThreadById(threads, threadId);
-      const message = thread ? getMessageById(thread, messageId) : undefined;
-
-      if (threads && message) {
-        queryClient.setQueryData<readonly ThreadWithDetails[]>(
-          threadKeys.list(householdId),
-          threads.map((t) =>
-            t.id === threadId
-              ? {
-                  ...t,
-                  messages: t.messages.map((m) =>
-                    m.id === messageId
-                      ? {
-                          ...m,
-                          reactions: m.reactions.filter(
-                            (r) => r.id !== reactionId
-                          ),
-                        }
-                      : m
-                  ),
-                }
-              : t
-          )
-        );
-      }
-
-      return { previousThreads: threads };
-    },
-    onError: (_, __, context) => {
-      if (context?.previousThreads) {
-        queryClient.setQueryData(
-          threadKeys.list(householdId),
-          context.previousThreads
-        );
-      }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({
-        queryKey: threadKeys.list(householdId),
+      await queryClient.invalidateQueries({
+        queryKey: threadKeys.detail(householdId, threadId),
+        refetchType: "all",
       });
     },
   });

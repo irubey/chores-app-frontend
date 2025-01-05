@@ -15,7 +15,9 @@ import {
   Household,
   MessageWithDetails,
   UpdateThreadDTO,
+  ReactionUpdateEvent,
 } from "@shared/types";
+import { MessageAction } from "@shared/enums/messages";
 import { logger } from "@/lib/api/logger";
 import { CACHE_TIMES, STALE_TIMES } from "@/lib/api/utils/apiUtils";
 import { useSocket } from "@/contexts/SocketContext";
@@ -265,7 +267,38 @@ export const useThreads = ({
       );
     };
 
+    const handleReactionUpdate = (data: ReactionUpdateEvent) => {
+      queryClient.setQueryData<readonly ThreadWithDetails[]>(
+        threadKeys.list(householdId),
+        (old) =>
+          old?.map((thread) =>
+            thread.messages.some((m) => m.id === data.messageId)
+              ? {
+                  ...thread,
+                  messages: thread.messages.map((m) =>
+                    m.id === data.messageId
+                      ? {
+                          ...m,
+                          reactions:
+                            data.action === MessageAction.REACTION_ADDED &&
+                            data.reaction
+                              ? [...m.reactions, data.reaction]
+                              : data.action === MessageAction.REACTION_REMOVED
+                              ? m.reactions.filter(
+                                  (r) => r.id !== data.reactionId
+                                )
+                              : m.reactions,
+                        }
+                      : m
+                  ),
+                }
+              : thread
+          )
+      );
+    };
+
     // Subscribe to socket events
+    socketClient.on("reaction_update", handleReactionUpdate);
     socketClient.on("thread:create", handleThreadCreate);
     socketClient.on("thread:update", handleThreadUpdate);
     socketClient.on("thread:delete", handleThreadDelete);
@@ -285,6 +318,7 @@ export const useThreads = ({
 
     return () => {
       // Cleanup socket subscriptions
+      socketClient.off("reaction_update", handleReactionUpdate);
       socketClient.off("thread:create", handleThreadCreate);
       socketClient.off("thread:update", handleThreadUpdate);
       socketClient.off("thread:delete", handleThreadDelete);

@@ -25,7 +25,7 @@ export const ThreadModal: React.FC<ThreadModalProps> = ({
 
   React.useEffect(() => {
     if (isOpen) {
-      markAsRead.mutate();
+      markAsRead();
     }
   }, [isOpen, markAsRead]);
 

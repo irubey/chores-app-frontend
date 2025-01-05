@@ -8,12 +8,14 @@ import { ReactionType } from "@shared/enums/messages";
 
 interface ReactionPickerProps {
   readonly messageId: string;
+  readonly threadId: string;
   readonly onClose: () => void;
   readonly position?: "left" | "right";
 }
 
 export const ReactionPicker: React.FC<ReactionPickerProps> = ({
   messageId,
+  threadId,
   onClose,
   position = "right",
 }) => {
@@ -23,7 +25,7 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
 
   const { addReaction } = useMessageInteractions({
     householdId: user?.activeHouseholdId ?? "",
-    threadId: "", // This will be handled in the hook
+    threadId,
     messageId,
   });
 
@@ -49,7 +51,7 @@ export const ReactionPicker: React.FC<ReactionPickerProps> = ({
     }
 
     try {
-      await addReaction.mutateAsync({ type, emoji: REACTION_EMOJIS[type] });
+      addReaction({ type, emoji: REACTION_EMOJIS[type] });
       onClose();
       logger.info("Reaction added", {
         messageId,

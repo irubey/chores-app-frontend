@@ -10,9 +10,11 @@ import {
   PencilIcon,
   TrashIcon,
   FaceSmileIcon,
+  XCircleIcon,
 } from "@heroicons/react/24/outline";
 import { ReactionPicker } from "./reactions/ReactionPicker";
 import { ReactionList } from "./reactions/ReactionList";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 interface MessageProps {
   readonly message: MessageWithDetails;
@@ -39,12 +41,12 @@ export const Message = memo<MessageProps>(
 
     const isOwnMessage = currentUser?.id === message.authorId;
 
-    const handleDelete = async () => {
+    const handleDelete = () => {
       if (!window.confirm("Are you sure you want to delete this message?"))
         return;
 
       try {
-        await deleteMessage.mutateAsync();
+        deleteMessage();
       } catch (err) {
         logger.error("Failed to delete message", {
           messageId: message.id,
@@ -55,14 +57,14 @@ export const Message = memo<MessageProps>(
       }
     };
 
-    const handleUpdate = async () => {
+    const handleUpdate = () => {
       if (editContent.trim() === message.content) {
         setIsEditing(false);
         return;
       }
 
       try {
-        await updateMessage.mutateAsync({ content: editContent.trim() });
+        updateMessage({ content: editContent.trim() });
         setIsEditing(false);
       } catch (err) {
         logger.error("Failed to update message", {
@@ -188,13 +190,15 @@ export const Message = memo<MessageProps>(
           {/* Poll (if exists) */}
           {message.poll && (
             <div className={cn(isOwnMessage && "flex justify-end")}>
-              <Poll
-                poll={message.poll}
-                householdId={householdId}
-                threadId={threadId}
-                messageId={message.id}
-                isAuthor={isAuthor}
-              />
+              <ErrorBoundary>
+                <Poll
+                  poll={message.poll}
+                  householdId={householdId}
+                  threadId={threadId}
+                  messageId={message.id}
+                  isAuthor={isAuthor}
+                />
+              </ErrorBoundary>
             </div>
           )}
 
@@ -247,6 +251,7 @@ export const Message = memo<MessageProps>(
         {showReactionPicker && (
           <ReactionPicker
             messageId={message.id}
+            threadId={threadId}
             onClose={() => setShowReactionPicker(false)}
             position={isOwnMessage ? "left" : "right"}
           />
@@ -255,11 +260,21 @@ export const Message = memo<MessageProps>(
     );
   },
   (prevProps, nextProps) => {
+    // Deep compare reactions arrays
+    const areReactionsEqual =
+      prevProps.message.reactions?.length ===
+        nextProps.message.reactions?.length &&
+      prevProps.message.reactions?.every(
+        (prevReaction, index) =>
+          prevReaction.id === nextProps.message.reactions?.[index].id
+      );
+
     return (
       prevProps.message.id === nextProps.message.id &&
       prevProps.message.content === nextProps.message.content &&
       prevProps.message.updatedAt === nextProps.message.updatedAt &&
-      prevProps.showAvatar === nextProps.showAvatar
+      prevProps.showAvatar === nextProps.showAvatar &&
+      areReactionsEqual
     );
   }
 );

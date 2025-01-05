@@ -5,6 +5,7 @@ import axios, {
 } from "axios";
 import { setupInterceptors } from "./interceptors";
 import { logger } from "./logger";
+import { isPublicRoute } from "../constants/routes";
 
 interface ExtendedAxiosRequestConfig extends InternalAxiosRequestConfig {
   _isRefreshRequest?: boolean;
@@ -21,7 +22,11 @@ let lastTokenRefresh = 0;
 const MIN_REFRESH_INTERVAL = 5000; // Minimum 5s between refresh attempts
 
 // Function to check if we should attempt preemptive refresh
-const shouldAttemptPreemptiveRefresh = () => {
+const shouldAttemptPreemptiveRefresh = (config: InternalAxiosRequestConfig) => {
+  if (config.url?.startsWith("/auth/") || isPublicRoute(config.url || "")) {
+    return false;
+  }
+
   const now = Date.now();
   if (now - lastTokenRefresh < MIN_REFRESH_INTERVAL) {
     return false;
@@ -33,11 +38,16 @@ const preemptiveRefreshInterceptor = async (
   config: InternalAxiosRequestConfig
 ): Promise<InternalAxiosRequestConfig> => {
   const extendedConfig = config as ExtendedAxiosRequestConfig;
+
   if (extendedConfig._isRefreshRequest || config.url?.startsWith("/auth/")) {
+    logger.debug("Skipping preemptive refresh for auth request", {
+      url: config.url,
+      isRefreshRequest: extendedConfig._isRefreshRequest,
+    });
     return config;
   }
 
-  if (shouldAttemptPreemptiveRefresh()) {
+  if (shouldAttemptPreemptiveRefresh(config)) {
     try {
       await refreshInstance.post("/auth/refresh-token");
       lastTokenRefresh = Date.now();
