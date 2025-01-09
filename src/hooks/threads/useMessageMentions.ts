@@ -15,9 +15,9 @@ import {
 import { MessageAction } from "@shared/enums/messages";
 import { logger } from "@/lib/api/logger";
 import { CACHE_TIMES, STALE_TIMES } from "@/lib/api/utils/apiUtils";
-import { useSocket } from "@/contexts/SocketContext";
+// import { useSocket } from "@/contexts/SocketContext";
 import { useEffect } from "react";
-import { socketClient } from "@/lib/socketClient";
+// import { socketClient } from "@/lib/socketClient";
 import { useAuth } from "@/contexts/UserContext";
 import { ApiError, ApiErrorType } from "@/lib/api/errors/apiErrors";
 import { useUser } from "@/hooks/users/useUser";
@@ -69,7 +69,7 @@ export const useMessageMentions = (
   >
 ) => {
   const queryClient = useQueryClient();
-  const { isConnected } = useSocket();
+  // const { isConnected } = useSocket();
   const { status, isLoading: isAuthLoading } = useAuth();
   const { data: userData } = useUser();
   const currentUser = userData?.data;
@@ -100,7 +100,7 @@ export const useMessageMentions = (
   }
 
   useEffect(() => {
-    if (!isConnected || !enabled || status !== "authenticated") return;
+    if (!enabled || status !== "authenticated") return;
 
     const handleMentionsUpdate = (event: MentionUpdateEvent) => {
       queryClient.setQueryData<readonly MentionWithUser[]>(
@@ -125,7 +125,7 @@ export const useMessageMentions = (
     };
 
     const eventName = SOCKET_EVENT.MENTIONS_UPDATE(messageId);
-    socketClient.on(eventName, handleMentionsUpdate);
+    // socketClient.on(eventName, handleMentionsUpdate);
     logger.debug("Subscribed to mentions updates", {
       messageId,
       threadId,
@@ -134,7 +134,7 @@ export const useMessageMentions = (
     });
 
     return () => {
-      socketClient.off(eventName, handleMentionsUpdate);
+      // socketClient.off(eventName, handleMentionsUpdate);
       logger.debug("Unsubscribed from mentions updates", {
         messageId,
         threadId,
@@ -143,7 +143,7 @@ export const useMessageMentions = (
       });
     };
   }, [
-    isConnected,
+    // isConnected,
     messageId,
     enabled,
     status,

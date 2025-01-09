@@ -4,8 +4,8 @@ import RootProviders from "../components/providers/RootProviders";
 import "../styles/globals.css";
 
 export const metadata = {
-  title: "Chores App",
-  description: "Manage your household chores",
+  title: "Hearth",
+  description: "Communal living, simplified.",
 };
 
 export default function RootLayout({

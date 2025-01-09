@@ -12,8 +12,8 @@ import {
 } from "@shared/types";
 import { PollStatus } from "@shared/enums/poll";
 import { logger } from "@/lib/api/logger";
-import { useSocket } from "@/contexts/SocketContext";
-import { socketClient } from "@/lib/socketClient";
+// import { useSocket } from "@/contexts/SocketContext";
+// import { socketClient } from "@/lib/socketClient";
 import { useUser } from "@/hooks/users/useUser";
 import { getThreadById, getMessageById } from "./useThreads";
 import { PollAnalytics } from "@/lib/api/services/threadService";
@@ -38,7 +38,7 @@ export const usePoll = ({
   pollId,
 }: PollOptions) => {
   const queryClient = useQueryClient();
-  const { isConnected } = useSocket();
+  // const { isConnected } = useSocket();
   const { data: userData } = useUser();
   const currentUser = userData?.data;
   const { status, isLoading: isAuthLoading } = useAuth();
@@ -75,7 +75,7 @@ export const usePoll = ({
   }
 
   useEffect(() => {
-    if (!isConnected || status !== "authenticated") return;
+    if (status !== "authenticated") return;
 
     const handlePollUpdate = (updatedPoll: PollWithDetails) => {
       const threads = queryClient.getQueryData<readonly ThreadWithDetails[]>(
@@ -156,20 +156,20 @@ export const usePoll = ({
       );
     };
 
-    socketClient.on(`poll:${pollId}:update`, handlePollUpdate);
-    socketClient.on(`poll:${pollId}:vote:add`, handlePollVote);
-    socketClient.on(`poll:${pollId}:analytics:update`, handleAnalyticsUpdate);
+    // socketClient.on(`poll:${pollId}:update`, handlePollUpdate);
+    // socketClient.on(`poll:${pollId}:vote:add`, handlePollVote);
+    // socketClient.on(`poll:${pollId}:analytics:update`, handleAnalyticsUpdate);
 
     return () => {
-      socketClient.off(`poll:${pollId}:update`, handlePollUpdate);
-      socketClient.off(`poll:${pollId}:vote:add`, handlePollVote);
-      socketClient.off(
-        `poll:${pollId}:analytics:update`,
-        handleAnalyticsUpdate
-      );
+      // socketClient.off(`poll:${pollId}:update`, handlePollUpdate);
+      // socketClient.off(`poll:${pollId}:vote:add`, handlePollVote);
+      // socketClient.off(
+      //   `poll:${pollId}:analytics:update`,
+      //   handleAnalyticsUpdate
+      // );
     };
   }, [
-    isConnected,
+    // isConnected,
     pollId,
     messageId,
     threadId,

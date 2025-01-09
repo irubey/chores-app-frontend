@@ -1,12 +1,11 @@
 "use client";
 
-import React, { useEffect, useMemo } from "react";
+import React from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { logger } from "@/lib/api/logger";
 import { useAuthStatus, useIsAuthenticated } from "@/contexts/UserContext";
 import { useUser } from "@/hooks/users/useUser";
 import { useHouseholds } from "@/hooks/households/useHouseholds";
-import { SocketProvider } from "@/contexts/SocketContext";
 import Header from "./Header";
 import HouseholdSelector from "../household/HouseholdSelector";
 import Footer from "./Footer";
@@ -17,7 +16,9 @@ interface AppContentProps {
   children: React.ReactNode;
 }
 
-export default function AppContent({ children }: AppContentProps) {
+export default function AppContent({
+  children,
+}: AppContentProps): React.JSX.Element {
   const router = useRouter();
   const pathname = usePathname();
   const isAuthenticated = useIsAuthenticated();
@@ -27,7 +28,7 @@ export default function AppContent({ children }: AppContentProps) {
     useHouseholds();
 
   // Memoize auth state to prevent unnecessary re-renders
-  const authState = useMemo(
+  const authState = React.useMemo(
     () => ({
       isLoading: status === "loading",
       isError: status === "error",
@@ -37,7 +38,7 @@ export default function AppContent({ children }: AppContentProps) {
   );
 
   // Handle auth redirects
-  useEffect(() => {
+  React.useEffect(() => {
     if (!authState.isReady) return;
 
     const currentIsPublic = isPublicRoute(pathname);
@@ -63,7 +64,7 @@ export default function AppContent({ children }: AppContentProps) {
   }, [authState.isReady, isAuthenticated, pathname, router, status]);
 
   // Memoize content to prevent unnecessary re-renders
-  const content = useMemo(
+  const content = React.useMemo(
     () => (
       <div className="flex min-h-screen flex-col">
         <Header user={userData?.data} />
@@ -113,12 +114,6 @@ export default function AppContent({ children }: AppContentProps) {
     );
   }
 
-  // Return wrapped content based on auth state
-  return isAuthenticated ? (
-    <SocketProvider isAuthenticated={isAuthenticated} user={userData?.data}>
-      {content}
-    </SocketProvider>
-  ) : (
-    content
-  );
+  // Return content
+  return content;
 }

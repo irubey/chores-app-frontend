@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { useUser } from "@/hooks/users/useUser";
 import { useThreads } from "@/hooks/threads/useThreads";
 import { useQueryClient } from "@tanstack/react-query";
-import { threadKeys } from "@/lib/api/services/threadService";
 import { logger } from "@/lib/api/logger";
 import Modal from "@/components/common/Modal";
 import Button from "@/components/common/Button";
@@ -14,8 +13,6 @@ import {
   getHouseholdMembers,
 } from "@/hooks/households/useHouseholds";
 import { CreateThreadDTO } from "@shared/types";
-import { useSocket } from "@/contexts/SocketContext";
-import { ChartBarIcon, PaperClipIcon } from "@heroicons/react/24/outline";
 
 interface ThreadCreatorProps {
   isOpen: boolean;
@@ -67,10 +64,10 @@ export function ThreadCreator({
   );
 
   // Initialize threads hook with proper options
-  const { mutateAsync: createThread } = useThreads({
+  const { createThread } = useThreads({
     householdId: activeHouseholdId ?? "",
     enabled: !!activeHouseholdId,
-  }).createThread;
+  });
 
   const resetForm = useCallback(() => {
     setTitle("");

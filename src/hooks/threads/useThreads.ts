@@ -20,8 +20,8 @@ import {
 import { MessageAction } from "@shared/enums/messages";
 import { logger } from "@/lib/api/logger";
 import { CACHE_TIMES, STALE_TIMES } from "@/lib/api/utils/apiUtils";
-import { useSocket } from "@/contexts/SocketContext";
-import { socketClient } from "@/lib/socketClient";
+// import { useSocket } from "@/contexts/SocketContext";
+// import { socketClient } from "@/lib/socketClient";
 import { ApiRequestOptions } from "@/lib/api/utils/apiUtils";
 import { useUser } from "@/hooks/users/useUser";
 import { ApiError, ApiErrorType } from "@/lib/api/errors/apiErrors";
@@ -85,7 +85,7 @@ export const useThreads = ({
   enableSockets = false,
 }: ThreadsOptions) => {
   const queryClient = useQueryClient();
-  const { isConnected } = useSocket();
+  // const { isConnected } = useSocket();
   const { data: userData } = useUser();
   const currentUser = userData?.data;
   const { status, isLoading: isAuthLoading } = useAuth();
@@ -179,13 +179,7 @@ export const useThreads = ({
   });
 
   useEffect(() => {
-    if (
-      !isConnected ||
-      !enabled ||
-      !enableSockets ||
-      status !== "authenticated"
-    )
-      return;
+    if (!enabled || !enableSockets || status !== "authenticated") return;
 
     const handleThreadCreate = (newThread: ThreadWithDetails) => {
       if (newThread.householdId !== householdId) return;
@@ -298,12 +292,12 @@ export const useThreads = ({
     };
 
     // Subscribe to socket events
-    socketClient.on("reaction_update", handleReactionUpdate);
-    socketClient.on("thread:create", handleThreadCreate);
-    socketClient.on("thread:update", handleThreadUpdate);
-    socketClient.on("thread:delete", handleThreadDelete);
-    socketClient.on("thread:participant:add", handleParticipantAdd);
-    socketClient.on("thread:participant:remove", handleParticipantRemove);
+    // socketClient.on("reaction_update", handleReactionUpdate);
+    // socketClient.on("thread:create", handleThreadCreate);
+    // socketClient.on("thread:update", handleThreadUpdate);
+    // socketClient.on("thread:delete", handleThreadDelete);
+    // socketClient.on("thread:participant:add", handleParticipantAdd);
+    // socketClient.on("thread:participant:remove", handleParticipantRemove);
 
     logger.debug("Subscribed to thread list socket events", {
       householdId,
@@ -318,18 +312,18 @@ export const useThreads = ({
 
     return () => {
       // Cleanup socket subscriptions
-      socketClient.off("reaction_update", handleReactionUpdate);
-      socketClient.off("thread:create", handleThreadCreate);
-      socketClient.off("thread:update", handleThreadUpdate);
-      socketClient.off("thread:delete", handleThreadDelete);
-      socketClient.off("thread:participant:add", handleParticipantAdd);
-      socketClient.off("thread:participant:remove", handleParticipantRemove);
+      // socketClient.off("reaction_update", handleReactionUpdate);
+      // socketClient.off("thread:create", handleThreadCreate);
+      // socketClient.off("thread:update", handleThreadUpdate);
+      // socketClient.off("thread:delete", handleThreadDelete);
+      // socketClient.off("thread:participant:add", handleParticipantAdd);
+      // socketClient.off("thread:participant:remove", handleParticipantRemove);
 
       logger.debug("Unsubscribed from thread list socket events", {
         householdId,
       });
     };
-  }, [isConnected, enabled, enableSockets, householdId, queryClient, status]);
+  }, [enabled, enableSockets, householdId, queryClient, status]);
 
   const createThread = useMutation<
     ThreadWithDetails,
@@ -541,11 +535,11 @@ export const useThreads = ({
 
   return {
     ...query,
-    createThread,
-    updateThread,
-    deleteThread,
-    inviteToThread,
-    updateParticipants,
+    createThread: createThread.mutateAsync,
+    updateThread: updateThread.mutateAsync,
+    deleteThread: deleteThread.mutateAsync,
+    inviteToThread: inviteToThread.mutateAsync,
+    updateParticipants: updateParticipants.mutateAsync,
     prefetchThread,
     invalidateThread,
     setThreadData,
@@ -556,14 +550,23 @@ export interface UseThreadsResult {
   data: readonly ThreadWithDetails[] | undefined;
   isLoading: boolean;
   error: Error | null;
-  createThread: ReturnType<typeof useThreads>["createThread"];
-  updateThread: ReturnType<typeof useThreads>["updateThread"];
-  deleteThread: ReturnType<typeof useThreads>["deleteThread"];
-  inviteToThread: ReturnType<typeof useThreads>["inviteToThread"];
-  updateParticipants: ReturnType<typeof useThreads>["updateParticipants"];
-  prefetchThread: ReturnType<typeof useThreads>["prefetchThread"];
-  invalidateThread: ReturnType<typeof useThreads>["invalidateThread"];
-  setThreadData: ReturnType<typeof useThreads>["setThreadData"];
+  createThread: (data: CreateThreadDTO) => Promise<ThreadWithDetails>;
+  updateThread: (
+    data: UpdateThreadDTO & { threadId: string }
+  ) => Promise<ThreadWithDetails>;
+  deleteThread: (threadId: string) => Promise<void>;
+  inviteToThread: (data: {
+    threadId: string;
+    userIds: string[];
+  }) => Promise<ThreadWithDetails>;
+  updateParticipants: (data: {
+    threadId: string;
+    add?: string[];
+    remove?: string[];
+  }) => Promise<ThreadWithDetails>;
+  prefetchThread: (threadId: string) => Promise<void>;
+  invalidateThread: (threadId: string) => Promise<void>;
+  setThreadData: (threadId: string, data: ThreadWithDetails) => void;
 }
 
 export const useThread = (

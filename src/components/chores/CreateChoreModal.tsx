@@ -65,7 +65,9 @@ export function CreateChoreModal({
 
       if (form.recurrenceRule) {
         const rule = await createRule(form.recurrenceRule);
-        recurrenceRuleId = rule.id;
+        if (rule && "id" in rule) {
+          recurrenceRuleId = rule.id;
+        }
       }
 
       await createChore({
